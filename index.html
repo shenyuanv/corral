@@ -852,19 +852,25 @@ function mapState(agent) {
   if (!agent) return 'idle';
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
+  if (status.includes('merged')) return 'dead';
   if (status.includes('dead') || status.includes('exited') || activity.includes('exited') || activity.includes('dead')) return 'dead';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
-  if (status.includes('pr_open') || status.includes('ci') || status.includes('merged') || activity.includes('stale')) return 'waiting';
+  if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
   if (status.includes('working') || activity.includes('active')) return 'coding';
   return 'idle';
 }
 
-function stateLabel(state) {
+function stateLabel(state, agent) {
   switch(state) {
     case 'coding': return '⌨️ coding';
     case 'reading': return '📖 review';
     case 'waiting': return '⏳ waiting';
-    case 'dead': return '💀 done';
+    case 'dead': {
+      const s = (agent && agent.status || '').toLowerCase();
+      if (s.includes('merged')) return '🎉 merged';
+      if (s.includes('exited')) return '💀 exited';
+      return '💀 done';
+    }
     default: return '💤 idle';
   }
 }
@@ -1128,7 +1134,7 @@ function updateAgentsList() {
     return `<div class="agent-row">
       <span class="agent-name">${a.id || a.label || 'agent-' + i}</span>
       <span class="agent-repo">${repo}${issueId ? '#' + issueId : ''}</span>
-      <span class="agent-status">${stateLabel(state)}</span>
+      <span class="agent-status">${stateLabel(state, a)}</span>
     </div>`;
   }).join('');
   document.getElementById('info').textContent = `${agents.length} agents loaded`;
