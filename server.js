@@ -615,26 +615,18 @@ async function getClaudeUsage() {
         if (data.five_hour || data.seven_day) {
           const metrics = [];
           if (data.five_hour) {
-            const utilization = Number(data.five_hour.utilization);
-            const percent = Number.isFinite(utilization) ? Math.round(utilization * 100) : 0;
             metrics.push({
               id: 'five_hour',
               label: '5h window',
-              used: percent,
-              limit: 100,
-              unit: '%',
+              utilization: Number(data.five_hour.utilization) || 0,
               resetAt: data.five_hour.resets_at || null,
             });
           }
           if (data.seven_day) {
-            const utilization = Number(data.seven_day.utilization);
-            const percent = Number.isFinite(utilization) ? Math.round(utilization * 100) : 0;
             metrics.push({
               id: 'seven_day',
               label: '7d window',
-              used: percent,
-              limit: 100,
-              unit: '%',
+              utilization: Number(data.seven_day.utilization) || 0,
               resetAt: data.seven_day.resets_at || null,
             });
           }

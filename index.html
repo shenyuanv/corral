@@ -315,7 +315,6 @@ const celebrations = [];
 const celebrationByKey = new Map();
 let soundEnabled = false;
 let audioCtx = null;
-let usageData = null;
 let usageLastFetch = 0;
 
 // === DRAWING HELPERS ===
@@ -953,6 +952,10 @@ function formatUsageValue(value) {
 
 function formatUsageRange(metric) {
   if (!metric) return '—';
+  // Anthropic format: utilization is a percentage directly
+  if (metric.utilization !== null && metric.utilization !== undefined) {
+    return `${Number(metric.utilization).toFixed(1)}%`;
+  }
   const used = formatUsageValue(metric.used);
   const limit = formatUsageValue(metric.limit);
   const unit = metric.unit ? ` ${metric.unit}` : '';
@@ -969,7 +972,12 @@ function formatUsageRange(metric) {
 }
 
 function usagePercent(metric) {
-  if (!metric || metric.used === null || metric.used === undefined) return null;
+  if (!metric) return null;
+  // Anthropic format: utilization is already a percentage (0-100)
+  if (metric.utilization !== null && metric.utilization !== undefined) {
+    return clamp(Number(metric.utilization) / 100, 0, 1);
+  }
+  if (metric.used === null || metric.used === undefined) return null;
   if (metric.limit === null || metric.limit === undefined || metric.limit === 0) return null;
   return clamp(metric.used / metric.limit, 0, 1);
 }
