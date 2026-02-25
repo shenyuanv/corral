@@ -297,13 +297,14 @@ function applyLivenessOverlay(session, now) {
   const pid = normalizePid(session.agentPid || session.pid);
   const lastSeen = pickLastSeenAlive(session);
   const lastSeenAlive = lastSeen ? new Date(lastSeen).toISOString() : null;
+  const alive = pid ? isPidAlive(pid) : null;
 
   if (!pid) {
     return { ...session, lastSeenAlive };
   }
 
-  if (isPidAlive(pid)) {
-    return { ...session, lastSeenAlive: new Date(now).toISOString() };
+  if (alive) {
+    return { ...session, lastSeenAlive: new Date(now).toISOString(), alive };
   }
 
   let status = session.status;
@@ -325,7 +326,7 @@ function applyLivenessOverlay(session, now) {
     activity = 'archived';
   }
 
-  return { ...session, status, activity, lastSeenAlive };
+  return { ...session, status, activity, lastSeenAlive, alive: false };
 }
 
 function getWorkspacePath(session) {
