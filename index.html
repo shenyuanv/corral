@@ -19,6 +19,49 @@
   button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; }
   button:hover { background: #444; }
   button.active { background: #4a4a4a; border-color: #7a7a7a; color: #f0c040; }
+  #usage-panel {
+    margin-top: 12px;
+    width: 640px;
+    max-width: 92vw;
+    background: #141424;
+    border: 1px solid #2a2a45;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  #usage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    color: #f0c040;
+    font-weight: bold;
+  }
+  #usage-updated { color: #7b8096; font-weight: normal; font-size: 10px; }
+  #usage-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+  .usage-card {
+    flex: 1 1 300px;
+    min-width: 260px;
+    background: #0f0f1a;
+    border: 1px solid #2a2a3f;
+    padding: 8px;
+  }
+  .usage-card.warn { border-color: #d1a128; }
+  .usage-card.alert { border-color: #c13c3c; }
+  .usage-title { display: flex; justify-content: space-between; align-items: center; color: #e6e6e6; font-weight: bold; }
+  .usage-pill { font-size: 9px; padding: 1px 6px; border-radius: 10px; border: 1px solid #2a2a3f; color: #c9cedf; text-transform: uppercase; letter-spacing: 0.3px; }
+  .usage-pill.ok { border-color: #2f9a3d; color: #bfe6c7; }
+  .usage-pill.warn { border-color: #d1a128; color: #f3e2a2; }
+  .usage-pill.alert { border-color: #c13c3c; color: #f5b3b3; }
+  .usage-pill.error { border-color: #7b8096; color: #b1b6c9; }
+  .usage-metric { margin-top: 6px; }
+  .usage-row { display: flex; justify-content: space-between; color: #c9cedf; font-size: 10px; }
+  .usage-bar { height: 6px; background: #1b1b2b; border: 1px solid #2a2a3f; margin-top: 3px; }
+  .usage-fill { height: 100%; width: 0%; background: #2f9a3d; }
+  .usage-fill.warn { background: #d1a128; }
+  .usage-fill.alert { background: #c13c3c; }
+  .usage-fill.unknown { background: #4a4a62; }
+  .usage-meta { margin-top: 6px; color: #7b8096; font-size: 10px; }
+  .usage-note { margin-top: 4px; color: #8b8fa3; font-size: 10px; }
   #tooltip {
     position: fixed;
     z-index: 10;
@@ -60,6 +103,13 @@
   <button onclick="stopPolling()">⏹ Stop</button>
   <button id="soundToggle" onclick="toggleSound()">🔇 Sound</button>
 </div>
+<div id="usage-panel" aria-live="polite">
+  <div id="usage-header">
+    <span>Subscription Usage</span>
+    <span id="usage-updated">—</span>
+  </div>
+  <div id="usage-cards"></div>
+</div>
 <div id="agents-list"></div>
 
 <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFile(event)">
@@ -89,7 +139,12 @@ const TIMELINE_PADDING = 8;
 const TIMELINE_LABEL_WIDTH = 150;
 const TIMELINE_HEIGHT = TIMELINE_HEADER_HEIGHT + TIMELINE_PADDING * 2 + TIMELINE_ROW_HEIGHT * TIMELINE_MAX_ROWS;
 const TIMELINE_Y = OFFICE_H;
-const CANVAS_H = OFFICE_H + TIMELINE_HEIGHT + S; // office + timeline + status bar
+const USAGE_PANEL_HEIGHT = 48;
+const USAGE_PANEL_Y = OFFICE_H + TIMELINE_HEIGHT;
+const CANVAS_H = OFFICE_H + TIMELINE_HEIGHT + USAGE_PANEL_HEIGHT + S; // office + timeline + usage + status bar
+const USAGE_BAR_WIDTH = 120;
+const USAGE_BAR_HEIGHT = 8;
+const USAGE_FETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const DOOR_TILE = { x: 0, y: 6 };
 const WALK_SPEED = 2; // tiles per second
 const ENTER_STAGGER = 0.5; // seconds
@@ -260,6 +315,7 @@ let timelineEntries = [];
 let timelineLayout = null;
 let timelineScroll = 0;
 let timelineHover = null;
+let usageData = null;
 const mergedAgents = new Set();
 const confettiPool = [];
 const confettiActive = [];
@@ -267,6 +323,7 @@ const celebrations = [];
 const celebrationByKey = new Map();
 let soundEnabled = false;
 let audioCtx = null;
+let usageLastFetch = 0;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -1023,6 +1080,139 @@ function formatTokenCount(value) {
 function formatTokenDetail(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   return Math.round(value).toLocaleString();
+}
+
+function formatUsageValue(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return Math.round(value).toLocaleString();
+}
+
+function formatUsageRange(metric) {
+  if (!metric) return '—';
+  // Anthropic format: utilization is a percentage directly
+  if (metric.utilization !== null && metric.utilization !== undefined) {
+    return `${Number(metric.utilization).toFixed(1)}%`;
+  }
+  const used = formatUsageValue(metric.used);
+  const limit = formatUsageValue(metric.limit);
+  const unit = metric.unit ? ` ${metric.unit}` : '';
+  if (metric.unit === '%' && metric.limit === 100 && metric.used !== null && metric.used !== undefined) {
+    return `${used}%`;
+  }
+  if (metric.limit !== null && metric.limit !== undefined) {
+    return `${used} / ${limit}${unit}`;
+  }
+  if (metric.used !== null && metric.used !== undefined) {
+    return `${used}${unit}`;
+  }
+  return '—';
+}
+
+function usagePercent(metric) {
+  if (!metric) return null;
+  // Anthropic format: utilization is already a percentage (0-100)
+  if (metric.utilization !== null && metric.utilization !== undefined) {
+    return clamp(Number(metric.utilization) / 100, 0, 1);
+  }
+  if (metric.used === null || metric.used === undefined) return null;
+  if (metric.limit === null || metric.limit === undefined || metric.limit === 0) return null;
+  return clamp(metric.used / metric.limit, 0, 1);
+}
+
+function usageLevelFromPercent(percent) {
+  if (percent === null || percent === undefined) return 'unknown';
+  if (percent >= 0.95) return 'alert';
+  if (percent >= 0.8) return 'warn';
+  return 'ok';
+}
+
+function formatResetAt(value) {
+  if (!value) return '—';
+  const ts = Date.parse(value);
+  if (Number.isNaN(ts)) return '—';
+  return new Date(ts).toLocaleString();
+}
+
+function renderUsagePanel() {
+  const panel = document.getElementById('usage-panel');
+  const cards = document.getElementById('usage-cards');
+  const updatedEl = document.getElementById('usage-updated');
+  if (!panel || !cards || !updatedEl) return;
+
+  if (!usageData || (!Array.isArray(usageData.providers) && !Array.isArray(usageData.usage))) {
+    cards.innerHTML = '<div class="usage-meta">Usage unavailable.</div>';
+    updatedEl.textContent = '—';
+    return;
+  }
+
+  const providers = Array.isArray(usageData.providers) ? usageData.providers : usageData.usage;
+  if (!providers || providers.length === 0) {
+    const errorText = usageData.error ? `Usage unavailable — ${usageData.error}` : 'Usage unavailable.';
+    cards.innerHTML = `<div class="usage-meta">${escapeHtml(errorText)}</div>`;
+    updatedEl.textContent = usageData.fetchedAt ? `Updated ${formatResetAt(usageData.fetchedAt)}` : '—';
+    return;
+  }
+
+  const updatedLabel = usageData.fetchedAt ? `Updated ${formatResetAt(usageData.fetchedAt)}` : '—';
+  updatedEl.textContent = updatedLabel;
+
+  cards.innerHTML = providers.map((provider) => {
+    const name = escapeHtml(provider.name || provider.id || 'Usage');
+    const status = (provider.status || 'ok').toLowerCase();
+    const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
+    const percents = metrics.map(usagePercent).filter(p => p !== null);
+    const highest = percents.length ? Math.max(...percents) : null;
+    const level = usageLevelFromPercent(highest);
+    const cardClass = level === 'warn' ? 'usage-card warn' : level === 'alert' ? 'usage-card alert' : 'usage-card';
+    const pillClass = status === 'ok' ? (level === 'alert' ? 'usage-pill alert' : level === 'warn' ? 'usage-pill warn' : 'usage-pill ok') : 'usage-pill error';
+    const pillLabel = status === 'ok' ? (level === 'alert' ? 'alert' : level === 'warn' ? 'warn' : 'ok') : 'error';
+    const resetLabel = provider.resetAt ? `Reset ${formatResetAt(provider.resetAt)}` : 'Reset —';
+    const note = provider.note ? `<div class="usage-note">${escapeHtml(provider.note)}</div>` : '';
+    const error = provider.error ? `<div class="usage-note">${escapeHtml(provider.error)}</div>` : '';
+
+    const metricsHtml = metrics.map((metric) => {
+      const percent = usagePercent(metric);
+      const levelClass = usageLevelFromPercent(percent);
+      const fillWidth = percent === null ? 100 : Math.round(percent * 100);
+      const fillClass = percent === null ? 'usage-fill unknown' : levelClass === 'alert' ? 'usage-fill alert' : levelClass === 'warn' ? 'usage-fill warn' : 'usage-fill';
+      const label = escapeHtml(metric.label || metric.id || 'Metric');
+      const valueLabel = escapeHtml(formatUsageRange(metric) + (metric.estimated ? ' (est.)' : ''));
+      return `
+        <div class="usage-metric">
+          <div class="usage-row"><span>${label}</span><span>${valueLabel}</span></div>
+          <div class="usage-bar"><div class="${fillClass}" style="width:${fillWidth}%"></div></div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="${cardClass}">
+        <div class="usage-title">
+          <span>${name}</span>
+          <span class="${pillClass}">${pillLabel}</span>
+        </div>
+        ${metricsHtml || '<div class="usage-meta">No usage data available.</div>'}
+        <div class="usage-meta">${escapeHtml(resetLabel)}</div>
+        ${note || error}
+      </div>
+    `;
+  }).join('');
+}
+
+function setUsageData(data) {
+  usageData = data;
+  renderUsagePanel();
+}
+
+async function refreshUsage() {
+  try {
+    const resp = await fetch('/api/usage');
+    if (!resp.ok) throw new Error(`Usage fetch failed (${resp.status})`);
+    const data = await resp.json();
+    setUsageData(data);
+  } catch (err) {
+    setUsageData({ error: err.message, providers: [] });
+  }
 }
 
 function formatCiState(agent) {
@@ -2031,9 +2221,196 @@ function isAgentActive(agent) {
   return isWorkingState(agent);
 }
 
+// === USAGE PANEL ===
+function usageBarColor(pct) {
+  if (pct >= 95) return PAL.tokenRed;
+  if (pct >= 80) return PAL.tokenYellow;
+  return PAL.tokenGreen;
+}
+
+function formatResetTime(isoString) {
+  if (!isoString) return '';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '';
+    const now = new Date();
+    const diffMs = d.getTime() - now.getTime();
+    if (diffMs <= 0) return 'now';
+    const diffH = Math.floor(diffMs / 3600000);
+    const diffM = Math.floor((diffMs % 3600000) / 60000);
+    if (diffH >= 24) {
+      const days = Math.floor(diffH / 24);
+      return `${days}d ${diffH % 24}h`;
+    }
+    if (diffH > 0) return `${diffH}h ${diffM}m`;
+    return `${diffM}m`;
+  } catch (e) {
+    return '';
+  }
+}
+
+function drawUsageBar(x, y, width, height, pct, flashing) {
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(x, y, width, height);
+  const fillW = Math.max(0, Math.min(width, Math.round(width * pct / 100)));
+  const color = usageBarColor(pct);
+  if (flashing && pct >= 95 && frame % 30 < 15) {
+    ctx.fillStyle = '#ff1a1a';
+  } else {
+    ctx.fillStyle = color;
+  }
+  ctx.fillRect(x, y, fillW, height);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, width, height);
+}
+
+function findProvider(data, id) {
+  if (!data || !Array.isArray(data.providers)) return null;
+  return data.providers.find(p => p.id === id) || null;
+}
+
+function getAnthropicMetrics(provider) {
+  if (!provider || provider.status !== 'ok' || !Array.isArray(provider.metrics)) return [];
+  if (provider.format === 'anthropic') {
+    return provider.metrics.map(m => ({
+      id: m.id, label: m.label,
+      pct: Number(m.utilization) || 0,
+      resetAt: m.resetAt,
+    }));
+  }
+  return provider.metrics.map(m => {
+    const pct = usagePercent(m);
+    return { id: m.id, label: m.label || m.id, pct: pct !== null ? pct * 100 : null, resetAt: provider.resetAt };
+  }).filter(m => m.pct !== null);
+}
+
+function drawUsagePanel() {
+  const y = USAGE_PANEL_Y;
+  ctx.fillStyle = '#0d0d18';
+  ctx.fillRect(0, y, CANVAS_W, USAGE_PANEL_HEIGHT);
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, y, CANVAS_W, 1);
+
+  const providers = usageData && Array.isArray(usageData.providers) ? usageData.providers : [];
+  if (!usageData || (providers.length === 0 && !usageData.error)) {
+    ctx.fillStyle = '#555';
+    ctx.font = '10px Courier New';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Usage: waiting for data...', 10, y + USAGE_PANEL_HEIGHT / 2);
+    return;
+  }
+  if (providers.length === 0 && usageData.error) {
+    ctx.fillStyle = '#555';
+    ctx.font = '10px Courier New';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Usage: ' + usageData.error, 10, y + USAGE_PANEL_HEIGHT / 2);
+    return;
+  }
+
+  const leftX = 10;
+  const barX = 80;
+  const row1Y = y + 12;
+  const row2Y = y + 30;
+  ctx.font = '10px Courier New';
+  ctx.textBaseline = 'middle';
+
+  const claude = findProvider(usageData, 'claude-max');
+  const claudeMetrics = claude ? getAnthropicMetrics(claude) : [];
+  const fiveHour = claudeMetrics.find(m => m.id === 'five_hour');
+  const sevenDay = claudeMetrics.find(m => m.id === 'seven_day');
+
+  // Row 1: 5h window or first metric
+  const m1 = fiveHour || claudeMetrics[0];
+  if (m1) {
+    const pct = m1.pct;
+    const resetLabel = formatResetTime(m1.resetAt);
+    ctx.fillStyle = pct >= 95 ? '#ff5c5c' : (pct >= 80 ? '#d1a128' : '#9aa0b5');
+    ctx.fillText(m1.label || 'Claude', leftX, row1Y);
+    drawUsageBar(barX, row1Y - USAGE_BAR_HEIGHT / 2, USAGE_BAR_WIDTH, USAGE_BAR_HEIGHT, pct, true);
+    ctx.fillStyle = pct >= 95 ? '#ff5c5c' : (pct >= 80 ? '#d1a128' : '#c9cedf');
+    ctx.fillText(pct.toFixed(1) + '%', barX + USAGE_BAR_WIDTH + 6, row1Y);
+    if (resetLabel) {
+      ctx.fillStyle = '#7b8096';
+      ctx.fillText('resets ' + resetLabel, barX + USAGE_BAR_WIDTH + 50, row1Y);
+    }
+  } else if (claude && claude.error) {
+    ctx.fillStyle = '#666';
+    ctx.fillText('Claude: ' + claude.error, leftX, row1Y);
+  }
+
+  // Row 2: 7d window or second metric
+  const m2 = sevenDay || (claudeMetrics.length > 1 ? claudeMetrics[1] : null);
+  if (m2 && m2 !== m1) {
+    const pct = m2.pct;
+    const resetLabel = formatResetTime(m2.resetAt);
+    ctx.fillStyle = pct >= 95 ? '#ff5c5c' : (pct >= 80 ? '#d1a128' : '#9aa0b5');
+    ctx.fillText(m2.label || 'Claude', leftX, row2Y);
+    drawUsageBar(barX, row2Y - USAGE_BAR_HEIGHT / 2, USAGE_BAR_WIDTH, USAGE_BAR_HEIGHT, pct, true);
+    ctx.fillStyle = pct >= 95 ? '#ff5c5c' : (pct >= 80 ? '#d1a128' : '#c9cedf');
+    ctx.fillText(pct.toFixed(1) + '%', barX + USAGE_BAR_WIDTH + 6, row2Y);
+    if (resetLabel) {
+      ctx.fillStyle = '#7b8096';
+      ctx.fillText('resets ' + resetLabel, barX + USAGE_BAR_WIDTH + 50, row2Y);
+    }
+  }
+
+  // Extra usage (right side, row 1)
+  if (claude && claude.extraUsage && claude.extraUsage.is_enabled) {
+    const limitCents = Number(claude.extraUsage.monthly_limit) || 0;
+    const usedCents = Number(claude.extraUsage.used_credits) || 0;
+    const limitUsd = (limitCents / 100).toFixed(2);
+    const usedUsd = (usedCents / 100).toFixed(2);
+    const extraPct = limitCents > 0 ? (usedCents / limitCents) * 100 : 0;
+    const extraX = 370;
+    ctx.fillStyle = '#9aa0b5';
+    ctx.fillText('Extra', extraX, row1Y);
+    drawUsageBar(extraX + 42, row1Y - USAGE_BAR_HEIGHT / 2, 80, USAGE_BAR_HEIGHT, extraPct, false);
+    ctx.fillStyle = '#c9cedf';
+    ctx.fillText('$' + usedUsd + '/$' + limitUsd, extraX + 42 + 80 + 6, row1Y);
+  }
+
+  // Codex provider (right side, row 2)
+  const codex = findProvider(usageData, 'codex');
+  if (codex && codex.status === 'ok' && Array.isArray(codex.metrics)) {
+    const tokenMetric = codex.metrics.find(m => m.id === 'tokens');
+    const codexX = 370;
+    ctx.fillStyle = '#9aa0b5';
+    ctx.fillText('Codex', codexX, row2Y);
+    ctx.fillStyle = '#c9cedf';
+    if (tokenMetric && tokenMetric.used !== null) {
+      const label = tokenMetric.limit
+        ? formatTokenCount(tokenMetric.used) + '/' + formatTokenCount(tokenMetric.limit)
+        : formatTokenCount(tokenMetric.used) + ' tokens';
+      ctx.fillText(label + (tokenMetric.estimated ? ' (est.)' : ''), codexX + 42, row2Y);
+    } else if (codex.note) {
+      ctx.fillText(codex.note, codexX + 42, row2Y);
+    }
+  }
+
+  // Warning indicators
+  const maxPct = claudeMetrics.length ? Math.max(...claudeMetrics.map(m => m.pct)) : 0;
+  if (maxPct >= 95) {
+    const warnX = CANVAS_W - 70;
+    const warnY = y + USAGE_PANEL_HEIGHT / 2;
+    const blink = frame % 30 < 15;
+    ctx.fillStyle = blink ? '#ff1a1a' : '#cc0000';
+    ctx.font = 'bold 11px Courier New';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('LIMIT!', warnX, warnY);
+  } else if (maxPct >= 80) {
+    const warnX = CANVAS_W - 60;
+    const warnY = y + USAGE_PANEL_HEIGHT / 2;
+    ctx.fillStyle = '#d1a128';
+    ctx.font = 'bold 11px Courier New';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('WARN', warnX, warnY);
+  }
+}
+
 // === STATUS BAR ===
 function drawStatusBar() {
-  const y = OFFICE_H + TIMELINE_HEIGHT;
+  const y = USAGE_PANEL_Y + USAGE_PANEL_HEIGHT;
   ctx.fillStyle = '#111';
   ctx.fillRect(0, y, CANVAS_W, S);
   ctx.fillStyle = '#888';
@@ -2286,6 +2663,7 @@ function render(now) {
   drawConfetti();
   drawCelebrationText(now);
   drawTimeline(Date.now());
+  drawUsagePanel();
   drawStatusBar();
   requestAnimationFrame(render);
 }
@@ -2399,6 +2777,35 @@ function loadDemo() {
   });
   setAgents(demoAgents);
   setHistoryEntries(demoHistory);
+  const demoUsage = {
+    fetchedAt: new Date(now).toISOString(),
+    providers: [
+      {
+        id: 'claude-max',
+        name: 'Claude Max',
+        status: 'ok',
+        format: 'anthropic',
+        resetAt: new Date(now + 3 * 60 * 60 * 1000).toISOString(),
+        metrics: [
+          { id: 'five_hour', label: '5h window', utilization: 42.3, resetAt: new Date(now + 3 * 60 * 60 * 1000).toISOString() },
+          { id: 'seven_day', label: '7d window', utilization: 68.7, resetAt: new Date(now + 4 * 24 * 60 * 60 * 1000).toISOString() },
+        ],
+        extraUsage: { is_enabled: true, monthly_limit: 10000, used_credits: 2750 },
+      },
+      {
+        id: 'codex',
+        name: 'Codex',
+        status: 'ok',
+        source: 'local',
+        estimated: true,
+        note: 'Estimated from active agent logs',
+        metrics: [
+          { id: 'tokens', label: 'Tokens', used: 340000, limit: null, unit: 'tokens', estimated: true },
+        ],
+      },
+    ],
+  };
+  setUsageData(demoUsage);
 }
 
 function loadAgentsFile() {
@@ -2434,6 +2841,7 @@ async function refreshFromLasso() {
       const historyList = Array.isArray(historyData) ? historyData : (historyData.history || []);
       setHistoryEntries(historyList);
     }
+    refreshUsage();
     return true;
   } catch(e) {
     document.getElementById('info').textContent = 'Server not running — start with: node server.js';
@@ -2548,6 +2956,7 @@ canvas.addEventListener('wheel', e => {
 
 // start
 updateSoundButton();
+renderUsagePanel();
 requestAnimationFrame(render);
 // auto-connect to live server if available
 refreshFromLasso().then(ok => { if (ok) startPolling(); });
