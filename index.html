@@ -18,6 +18,7 @@
   #controls { margin-top: 10px; display: flex; gap: 8px; }
   button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; }
   button:hover { background: #444; }
+  button.active { background: #4a4a4a; border-color: #7a7a7a; color: #f0c040; }
   #tooltip {
     position: fixed;
     z-index: 10;
@@ -55,6 +56,7 @@
   <button onclick="refreshFromLasso()">Refresh</button>
   <button onclick="startPolling()">▶ Live</button>
   <button onclick="stopPolling()">⏹ Stop</button>
+  <button id="soundToggle" onclick="toggleSound()">🔇 Sound</button>
 </div>
 <div id="agents-list"></div>
 
@@ -78,6 +80,15 @@ const CANVAS_H = ROWS * S + S; // extra row for status bar
 const DOOR_TILE = { x: 0, y: 6 };
 const WALK_SPEED = 2; // tiles per second
 const ENTER_STAGGER = 0.5; // seconds
+const CONFETTI_COUNT_MIN = 20;
+const CONFETTI_COUNT_MAX = 30;
+const CONFETTI_SIZE = 2; // base pixels
+const CONFETTI_LIFE = 2.0; // seconds
+const CONFETTI_GRAVITY = 70; // px/s^2
+const CONFETTI_COLORS = ['#f0c040', '#4ae04a', '#ffffff', '#d1a128'];
+const CELEBRATION_TEXT_DURATION = 900; // ms
+const CELEBRATION_FLASH_DURATION = 450; // ms
+const CELEBRATION_TOTAL_DURATION = 2000; // ms
 
 const canvas = document.getElementById('office');
 canvas.width = CANVAS_W;
@@ -155,6 +166,14 @@ let hoveredSignature = '';
 let transitions = [];
 let hasInitialized = false;
 let lastRenderTime = null;
+let previousAgentsByKey = new Map();
+const mergedAgents = new Set();
+const confettiPool = [];
+const confettiActive = [];
+const celebrations = [];
+const celebrationByKey = new Map();
+let soundEnabled = false;
+let audioCtx = null;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -165,6 +184,49 @@ function fillTile(x, y, color) {
 function drawRect(px, py, w, h, color) {
   ctx.fillStyle = color;
   ctx.fillRect(px * SCALE, py * SCALE, w * SCALE, h * SCALE);
+}
+
+function updateSoundButton() {
+  const btn = document.getElementById('soundToggle');
+  if (!btn) return;
+  btn.textContent = soundEnabled ? '🔊 Sound' : '🔇 Sound';
+  btn.classList.toggle('active', soundEnabled);
+}
+
+function initAudio() {
+  if (!audioCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = AudioContext ? new AudioContext() : null;
+  }
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  updateSoundButton();
+  if (soundEnabled) {
+    initAudio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+}
+
+function playDing() {
+  if (!soundEnabled) return;
+  initAudio();
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(880, t);
+  osc.frequency.exponentialRampToValueAtTime(440, t + 0.12);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.08, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.32);
 }
 
 // === DATA HELPERS ===
@@ -206,6 +268,13 @@ function getTokensUsed(agent) {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function isMergedStatus(agent) {
+  if (!agent) return false;
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  return status.includes('merged') || activity.includes('merged');
 }
 
 function getAgentUrl(agent) {
@@ -315,6 +384,14 @@ function mapSlotsByKey(layout) {
   return map;
 }
 
+function storePreviousAgents(list) {
+  const map = new Map();
+  list.forEach((agent, index) => {
+    map.set(agentKey(agent, index), agent);
+  });
+  previousAgentsByKey = map;
+}
+
 function updateTransitions(now, dt) {
   if (!transitions.length) return;
   transitions = transitions.filter(transition => {
@@ -334,12 +411,25 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   const prevSlotsByKey = mapSlotsByKey(prevLayout);
   const nextSlotsByKey = mapSlotsByKey(nextLayout);
   const now = performance.now();
+  if (hasInitialized && previousAgentsByKey.size > 0) {
+    nextLayout.slots.forEach(slot => {
+      const key = slot.key;
+      const prevAgent = previousAgentsByKey.get(key);
+      if (!prevAgent) return;
+      if (mergedAgents.has(key)) return;
+      if (!isMergedStatus(prevAgent) && isMergedStatus(slot.agent)) {
+        mergedAgents.add(key);
+        startCelebration(slot, now);
+      }
+    });
+  }
 
   if (!hasInitialized || skipAnimation) {
     agents = nextAgents;
     transitions = [];
     hasInitialized = true;
     updateAgentsList();
+    storePreviousAgents(nextAgents);
     return;
   }
 
@@ -403,6 +493,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   agents = nextAgents;
   hasInitialized = true;
   updateAgentsList();
+  storePreviousAgents(nextAgents);
 }
 
 function runtimeLabel(agent) {
@@ -607,7 +698,18 @@ function drawMonitor(dx, dy, agent, state, frame) {
   }
 }
 
-function drawDesk(dx, dy, agent, state, frame) {
+function drawDeskFlash(dx, dy, intensity) {
+  const alpha = Math.min(0.6, 0.15 + intensity * 0.45);
+  const baseX = dx * TILE + 4;
+  const baseY = dy * TILE;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  drawRect(dx * TILE + 2, dy * TILE + 4, 14, 8, PAL.badgeGold);
+  drawRect(baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, PAL.badgeGold);
+  ctx.restore();
+}
+
+function drawDesk(dx, dy, agent, state, frame, flash = 0) {
   // desk surface
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 8, PAL.desk);
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 3, PAL.deskTop);
@@ -619,6 +721,10 @@ function drawDesk(dx, dy, agent, state, frame) {
   const count = coffeeCount(agent);
   if (count > 0) {
     drawCoffeeCups(dx, dy, count, frame);
+  }
+
+  if (flash > 0) {
+    drawDeskFlash(dx, dy, flash);
   }
 }
 
@@ -823,6 +929,127 @@ function drawBubble(tileX, tileY, text, color = '#fff') {
   ctx.textAlign = 'left';
 }
 
+function getCelebrationOrigin(slot) {
+  if (!slot) return { x: 0, y: 0 };
+  const x = slot.desk.x * TILE + 8;
+  const y = (slot.desk.y + 1) * TILE + 6;
+  return { x, y };
+}
+
+function getConfettiParticle() {
+  return confettiPool.pop() || {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    color: '#fff',
+    life: 0,
+    maxLife: 0,
+    size: CONFETTI_SIZE,
+  };
+}
+
+function emitConfetti(x, y) {
+  const count = CONFETTI_COUNT_MIN + Math.floor(Math.random() * (CONFETTI_COUNT_MAX - CONFETTI_COUNT_MIN + 1));
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI / 2);
+    const speed = 30 + Math.random() * 50;
+    const particle = getConfettiParticle();
+    particle.x = x + (Math.random() - 0.5) * 6;
+    particle.y = y + (Math.random() - 0.5) * 4;
+    particle.vx = Math.cos(angle) * speed;
+    particle.vy = Math.sin(angle) * speed;
+    particle.color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+    particle.life = CONFETTI_LIFE;
+    particle.maxLife = CONFETTI_LIFE;
+    particle.size = CONFETTI_SIZE;
+    confettiActive.push(particle);
+  }
+}
+
+function updateConfetti(dt) {
+  for (let i = confettiActive.length - 1; i >= 0; i--) {
+    const p = confettiActive[i];
+    p.life -= dt;
+    if (p.life <= 0) {
+      confettiActive[i] = confettiActive[confettiActive.length - 1];
+      confettiActive.pop();
+      confettiPool.push(p);
+      continue;
+    }
+    p.vy += CONFETTI_GRAVITY * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+}
+
+function drawConfetti() {
+  if (!confettiActive.length) return;
+  ctx.save();
+  for (const p of confettiActive) {
+    const alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+    ctx.globalAlpha = alpha;
+    drawRect(p.x, p.y, p.size, p.size, p.color);
+  }
+  ctx.restore();
+}
+
+function startCelebration(slot, now) {
+  if (!slot) return;
+  const origin = getCelebrationOrigin(slot);
+  emitConfetti(origin.x, origin.y);
+  const text = Math.random() < 0.5 ? '🎉' : '✓';
+  const celebration = {
+    key: slot.key,
+    x: origin.x,
+    y: origin.y,
+    text,
+    startAt: now,
+  };
+  celebrations.push(celebration);
+  celebrationByKey.set(slot.key, celebration);
+  playDing();
+}
+
+function updateCelebrations(now, dt) {
+  updateConfetti(dt);
+  for (let i = celebrations.length - 1; i >= 0; i--) {
+    const c = celebrations[i];
+    if (now - c.startAt > CELEBRATION_TOTAL_DURATION) {
+      celebrations[i] = celebrations[celebrations.length - 1];
+      celebrations.pop();
+      if (celebrationByKey.get(c.key) === c) celebrationByKey.delete(c.key);
+    }
+  }
+}
+
+function celebrationFlashIntensity(key, now) {
+  const c = celebrationByKey.get(key);
+  if (!c) return 0;
+  const elapsed = now - c.startAt;
+  if (elapsed < 0 || elapsed > CELEBRATION_FLASH_DURATION) return 0;
+  return 1 - elapsed / CELEBRATION_FLASH_DURATION;
+}
+
+function drawCelebrationText(now) {
+  if (!celebrations.length) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.font = `${8 * SCALE}px Courier New`;
+  ctx.fillStyle = '#f0c040';
+  for (const c of celebrations) {
+    const elapsed = now - c.startAt;
+    if (elapsed < 0) continue;
+    const progress = Math.min(1, elapsed / CELEBRATION_TEXT_DURATION);
+    const alpha = progress < 0.2 ? progress / 0.2 : (progress > 0.8 ? (1 - progress) / 0.2 : 1);
+    const rise = 10 * progress;
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.fillText(c.text, c.x * SCALE, (c.y - 6 - rise) * SCALE);
+  }
+  ctx.restore();
+}
+
 // === STATUS BAR ===
 function drawStatusBar() {
   const y = ROWS * S;
@@ -953,6 +1180,7 @@ function render(now) {
   lastRenderTime = now;
   frame++;
   updateTransitions(now, dt);
+  updateCelebrations(now, dt);
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawFloor();
   drawDoor();
@@ -970,7 +1198,8 @@ function render(now) {
     const transition = slot ? transitionByKey.get(slot.key) : null;
     const deskAgent = transition ? null : agent;
     const state = deskAgent ? mapState(deskAgent) : 'idle';
-    drawDesk(d.x, d.y, deskAgent, state, frame);
+    const flash = slot ? celebrationFlashIntensity(slot.key, now) : 0;
+    drawDesk(d.x, d.y, deskAgent, state, frame, flash);
   });
 
   // decorative plants
@@ -1009,6 +1238,8 @@ function render(now) {
     drawCharacter(pos.x, pos.y, transition.colorIdx, 'walking', frame, resolveAgentType(transition.agent));
   });
 
+  drawConfetti();
+  drawCelebrationText(now);
   drawStatusBar();
   requestAnimationFrame(render);
 }
@@ -1190,6 +1421,7 @@ canvas.addEventListener('click', e => {
 });
 
 // start
+updateSoundButton();
 requestAnimationFrame(render);
 // auto-connect to live server if available
 refreshFromLasso().then(ok => { if (ok) startPolling(); });
