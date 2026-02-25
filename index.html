@@ -18,11 +18,36 @@
   #controls { margin-top: 10px; display: flex; gap: 8px; }
   button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; }
   button:hover { background: #444; }
+  #tooltip {
+    position: fixed;
+    z-index: 10;
+    display: none;
+    max-width: 320px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #e6e6e6;
+    background: #15151f;
+    border: 2px solid #4a4a62;
+    box-shadow: 0 0 0 2px #0b0b12, 4px 4px 0 #0b0b12;
+    pointer-events: none;
+  }
+  .tooltip-title { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-weight: bold; color: #f0c040; }
+  .tooltip-row { display: flex; gap: 6px; margin: 2px 0; }
+  .tooltip-label { min-width: 70px; color: #9aa0b5; }
+  .tooltip-value { color: #e6e6e6; word-break: break-word; }
+  .tooltip-muted { color: #8b8fa3; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 1px #0b0b12; }
+  .status-active { background: #2f9a3d; }
+  .status-waiting { background: #d1a128; }
+  .status-ci { background: #c13c3c; }
+  .status-dead { background: #6c6c6c; }
 </style>
 </head>
 <body>
 <h1>🤠 Corral</h1>
 <canvas id="office" width="640" height="400"></canvas>
+<div id="tooltip" role="tooltip" aria-hidden="true"></div>
 <div id="info">Click "Load Agents" or drop agents.json to populate</div>
 <div id="controls">
   <button onclick="loadAgentsFile()">Load agents.json</button>
@@ -56,6 +81,7 @@ canvas.width = CANVAS_W;
 canvas.height = CANVAS_H;
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
+const tooltip = document.getElementById('tooltip');
 
 // === COLORS (pixel art palette) ===
 const PAL = {
@@ -117,6 +143,8 @@ for (let row = 0; row < DESK_ROWS; row++) {
 // === AGENT STATE ===
 let agents = [];
 let currentLayout = null;
+let hoveredDeskIndex = null;
+let hoveredSignature = '';
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -168,6 +196,107 @@ function getAgentUrl(agent) {
   const issueIdStr = issueId !== null && issueId !== undefined ? String(issueId).trim() : '';
   if (repo && issueIdStr) return `https://github.com/${repo}/issues/${issueIdStr}`;
   return '';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => {
+    switch (char) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return char;
+    }
+  });
+}
+
+function formatDuration(ms) {
+  const totalMins = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function runtimeLabel(agent) {
+  if (!agent || !agent.createdAt) return 'Unknown';
+  const ts = Date.parse(agent.createdAt);
+  if (Number.isNaN(ts)) return 'Unknown';
+  const diff = Math.max(0, Date.now() - ts);
+  const isDone = mapState(agent) === 'dead';
+  const verb = isDone ? 'Ran for' : 'Running for';
+  return `${verb} ${formatDuration(diff)}`;
+}
+
+function formatRepoIssue(agent) {
+  if (!agent) return 'Unknown';
+  const repo = agent.repo || '';
+  const issueId = getIssueId(agent);
+  const title = (agent.issueTitle || '').toString().trim();
+  if (repo && issueId) {
+    return title ? `${repo} #${issueId} — ${title}` : `${repo} #${issueId}`;
+  }
+  if (repo) return title ? `${repo} — ${title}` : repo;
+  return title || agent.id || 'Unknown';
+}
+
+function formatStatus(agent) {
+  if (!agent) return 'unknown';
+  const status = (agent.status || '').toString().trim();
+  const activity = (agent.activity || '').toString().trim();
+  if (status && activity && status !== activity) return `${status} (${activity})`;
+  return status || activity || 'unknown';
+}
+
+function formatCiState(agent) {
+  const reaction = getReaction(agent);
+  const retries = Number(reaction.ciRetries || 0);
+  const status = (agent && agent.status ? agent.status : '').toLowerCase();
+  const failing = !!reaction.ciEscalated || status.includes('ci_failed') || status.includes('failed');
+  const state = failing ? 'failing' : 'passing';
+  return `${state} (retries: ${retries})`;
+}
+
+function statusDotClass(agent) {
+  if (!agent) return 'status-dead';
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  const reaction = getReaction(agent);
+  if (mapState(agent) === 'dead') return 'status-dead';
+  if (reaction.ciEscalated || status.includes('ci_failed') || status.includes('failed')) return 'status-ci';
+  if (status.includes('pr_open') || status.includes('merged') || status.includes('ci') || activity.includes('stale') || mapState(agent) === 'waiting') {
+    return 'status-waiting';
+  }
+  return 'status-active';
+}
+
+function buildTooltip(agent) {
+  if (!agent) return '';
+  const agentId = escapeHtml(agent.id || agent.label || 'agent');
+  const agentType = escapeHtml(resolveAgentType(agent) || 'unknown');
+  const repoIssue = escapeHtml(formatRepoIssue(agent));
+  const status = escapeHtml(formatStatus(agent));
+  const runtime = escapeHtml(runtimeLabel(agent));
+  const branch = escapeHtml(agent.branch || 'unknown');
+  const prNumber = agent.prNumber ?? '';
+  const prUrl = agent.prUrl || '';
+  const prLabel = prNumber !== '' && prNumber !== null ? `PR #${prNumber}` : (prUrl ? 'PR link' : '—');
+  const prValue = escapeHtml(prLabel + (prUrl ? ` — ${prUrl}` : ''));
+  const ciState = escapeHtml(formatCiState(agent));
+  return `
+    <div class="tooltip-title">
+      <span class="status-dot ${statusDotClass(agent)}"></span>
+      <span>${agentId}</span>
+    </div>
+    <div class="tooltip-row"><span class="tooltip-label">Type</span><span class="tooltip-value">${agentType}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Repo/Issue</span><span class="tooltip-value">${repoIssue}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Status</span><span class="tooltip-value">${status}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Runtime</span><span class="tooltip-value">${runtime}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">PR</span><span class="tooltip-value">${prValue}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">CI</span><span class="tooltip-value">${ciState}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Branch</span><span class="tooltip-value">${branch}</span></div>
+  `;
 }
 
 function hoursRunning(agent) {
@@ -500,42 +629,79 @@ function stateLabel(state) {
   }
 }
 
-function getTileFromEvent(event) {
+function getCanvasPoint(e) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
-  return { tileX: Math.floor(x / S), tileY: Math.floor(y / S) };
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY,
+  };
 }
 
-function getSlotAtTile(tileX, tileY) {
-  if (!currentLayout) return null;
-  if (tileX < 0 || tileX >= COLS || tileY < 0 || tileY >= ROWS) return null;
-  for (const slot of currentLayout.slots) {
-    const dx = slot.desk.x;
-    const dy = slot.desk.y;
-    if (tileX === dx && (tileY === dy || tileY === dy + 1)) return slot;
+function deskIndexAt(x, y) {
+  for (let i = 0; i < DESKS.length; i++) {
+    const desk = DESKS[i];
+    const left = desk.x * S;
+    const top = desk.y * S;
+    const width = S;
+    const height = S * 2;
+    if (x >= left && x <= left + width && y >= top && y <= top + height) {
+      return i;
+    }
   }
   return null;
 }
 
-function handleCanvasClick(event) {
-  const { tileX, tileY } = getTileFromEvent(event);
-  const slot = getSlotAtTile(tileX, tileY);
-  if (!slot) return;
-  const url = getAgentUrl(slot.agent);
-  if (url) window.open(url, '_blank');
+function tooltipSignature(agent) {
+  if (!agent) return '';
+  const reaction = getReaction(agent);
+  return [
+    agent.id,
+    agent.status,
+    agent.activity,
+    agent.prNumber,
+    agent.prUrl,
+    agent.branch,
+    agent.issueId,
+    agent.issueTitle,
+    agent.repo,
+    agent.agentType,
+    agent.createdAt,
+    reaction.ciRetries,
+    reaction.ciEscalated,
+  ].join('|');
 }
 
-function handleCanvasMove(event) {
-  const { tileX, tileY } = getTileFromEvent(event);
-  const slot = getSlotAtTile(tileX, tileY);
-  canvas.style.cursor = slot ? 'pointer' : 'default';
+function positionTooltip(clientX, clientY) {
+  const padding = 12;
+  const maxX = window.innerWidth - 8;
+  const maxY = window.innerHeight - 8;
+  let left = clientX + padding;
+  let top = clientY + padding;
+  const { offsetWidth: w, offsetHeight: h } = tooltip;
+  if (left + w > maxX) left = clientX - w - padding;
+  if (top + h > maxY) top = clientY - h - padding;
+  tooltip.style.left = `${Math.max(8, left)}px`;
+  tooltip.style.top = `${Math.max(8, top)}px`;
 }
 
-function handleCanvasLeave() {
-  canvas.style.cursor = 'default';
+function showTooltip(agent, clientX, clientY) {
+  const signature = tooltipSignature(agent);
+  if (signature !== hoveredSignature) {
+    tooltip.innerHTML = buildTooltip(agent);
+    hoveredSignature = signature;
+  }
+  tooltip.style.display = 'block';
+  tooltip.setAttribute('aria-hidden', 'false');
+  positionTooltip(clientX, clientY);
+}
+
+function hideTooltip() {
+  hoveredDeskIndex = null;
+  hoveredSignature = '';
+  tooltip.style.display = 'none';
+  tooltip.setAttribute('aria-hidden', 'true');
 }
 
 // === MAIN RENDER LOOP ===
@@ -704,10 +870,6 @@ function updateAgentsList() {
   document.getElementById('info').textContent = `${agents.length} agents loaded`;
 }
 
-canvas.addEventListener('click', handleCanvasClick);
-canvas.addEventListener('mousemove', handleCanvasMove);
-canvas.addEventListener('mouseleave', handleCanvasLeave);
-
 // drag & drop
 document.addEventListener('dragover', e => e.preventDefault());
 document.addEventListener('drop', e => {
@@ -724,6 +886,35 @@ document.addEventListener('drop', e => {
     };
     reader.readAsText(file);
   }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!currentLayout) return;
+  const { x, y } = getCanvasPoint(e);
+  const idx = deskIndexAt(x, y);
+  if (idx === null) {
+    hideTooltip();
+    return;
+  }
+  const slot = currentLayout.deskAgents[idx];
+  if (!slot || !slot.agent) {
+    hideTooltip();
+    return;
+  }
+  hoveredDeskIndex = idx;
+  showTooltip(slot.agent, e.clientX, e.clientY);
+});
+
+canvas.addEventListener('mouseleave', () => hideTooltip());
+
+canvas.addEventListener('click', e => {
+  const pt = getCanvasPoint(e);
+  const idx = deskIndexAt(pt.x, pt.y);
+  if (idx === null || idx === undefined) return;
+  const agent = agents[idx];
+  if (!agent) return;
+  const url = getAgentUrl(agent);
+  if (url) window.open(url, '_blank');
 });
 
 // start
