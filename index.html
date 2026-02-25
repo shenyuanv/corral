@@ -1432,16 +1432,19 @@ function drawMonitor(dx, dy, agent, state, frame) {
   const reaction = getReaction(agent);
   const ciRetries = Number(reaction.ciRetries || 0);
   const ciEscalated = !!reaction.ciEscalated;
-  const active = state === 'coding';
+  const reviewWaiting = state === 'review_waiting';
+  const active = state === 'coding' || reviewWaiting;
   const merged = state === 'merged';
   const exited = state === 'exited';
   const screenColor = merged
     ? PAL.badgeGold
     : (exited
       ? PAL.monitorScreenCiDark
-      : (ciEscalated
-        ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
-        : (active ? PAL.monitorScreenActive : PAL.monitorScreen)));
+      : (reviewWaiting
+        ? PAL.monitorScreenActive
+        : (ciEscalated
+          ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
+          : (active ? PAL.monitorScreenActive : PAL.monitorScreen))));
 
   if (timeState && timeState.monitorGlow > 0 && agent && state !== 'dead') {
     drawMonitorGlow(dx, dy, timeState.monitorGlow);
@@ -1689,7 +1692,7 @@ function drawCharacter(tileX, tileY, colorIdx, state, frame, agentType) {
   const slumped = state === 'exited';
 
   // body offset (sitting = higher up to align with chair)
-  const sitting = state === 'coding' || state === 'reading' || state === 'waiting' || celebrating || slumped;
+  const sitting = state === 'coding' || state === 'reading' || state === 'waiting' || state === 'review_waiting' || celebrating || slumped;
   const oy = sitting ? (celebrating ? -3 : (slumped ? -1 : -2)) : bob;
   const ox = celebrating ? -1 : 0;
   const headDrop = slumped ? 1 : 0;
@@ -1730,6 +1733,13 @@ function drawCharacter(tileX, tileY, colorIdx, state, frame, agentType) {
     drawRect(px + 2 + ox, py + 7 + oy, 2, 4, c.shirt);
     drawRect(px + 12 + ox, py + 7 + oy, 2, 2, c.shirt);
     drawRect(px + 12 + ox, py + 5 + oy, 2, 2, c.skin); // hand near face
+  } else if (state === 'review_waiting') {
+    // one arm raised with a slow wave
+    const wave = frame % 40 < 20 ? 0 : 1;
+    drawRect(px + 2 + ox, py + 6 + oy, 2, 4, c.shirt);
+    const armY = py + oy - 1 + wave;
+    drawRect(px + 12 + ox, armY, 2, 6, c.shirt);
+    drawRect(px + 12 + ox, armY - 1, 2, 1, c.skin);
   } else if (celebrating) {
     // arms up (celebration pose)
     drawRect(px + 2 + ox, py + 1 + oy, 2, 4, c.shirt);
@@ -2442,6 +2452,7 @@ function mapState(agent) {
   if (status.includes('exited') || activity.includes('exited') || status.includes('archived') || activity.includes('archived')) return 'exited';
   if (status.includes('dead') || activity.includes('dead')) return 'dead';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
+  if (status.includes('pr_open') && agent.alive === false) return 'review_waiting';
   if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
   if (status.includes('working') || activity.includes('active')) return 'coding';
   return 'idle';
@@ -2455,6 +2466,7 @@ function stateLabel(state, agent) {
   switch(state) {
     case 'coding': return '⌨️ coding';
     case 'reading': return '📖 review';
+    case 'review_waiting': return '🙋 needs review';
     case 'waiting': return '⏳ waiting';
     case 'merged': return '🎉 merged';
     case 'exited': return '💀 exited';
@@ -2650,7 +2662,8 @@ function render(now) {
     const repo = getRepoName(agent);
     const issueId = getIssueId(agent);
     const label = issueId ? `${repo}#${issueId}` : (repo || agent.id || `agent-${i}`);
-    drawBubble(desk.x, desk.y, label, state === 'waiting' ? '#ff0' : '#fff');
+    const bubbleColor = state === 'review_waiting' ? '#8f8' : (state === 'waiting' ? '#ff0' : '#fff');
+    drawBubble(desk.x, desk.y, label, bubbleColor);
   });
 
   // draw transitions
@@ -2695,6 +2708,7 @@ function loadDemo() {
       status: 'pr_open',
       agentType: 'codex',
       prNumber: 42,
+      alive: false,
       tokensUsed: 61200,
       createdAt: new Date(now - 2.5 * 60 * 60 * 1000).toISOString(),
     },
