@@ -8,6 +8,29 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Courier New', monospace; color: #e0e0e0; }
   h1 { font-size: 18px; margin-bottom: 8px; color: #f0c040; }
+  #desktop-view,
+  #mobile-view {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: opacity 0.25s ease, max-height 0.25s ease;
+    overflow: hidden;
+  }
+  #desktop-view { max-height: 2200px; opacity: 1; }
+  #mobile-view { max-height: 0; opacity: 0; pointer-events: none; }
+  body.mode-mobile #desktop-view { max-height: 0; opacity: 0; pointer-events: none; }
+  body.mode-mobile #mobile-view { max-height: 2200px; opacity: 1; pointer-events: auto; }
+  body.mode-mobile { align-items: stretch; justify-content: flex-start; padding: 16px 12px 32px; background: #141424; }
+  body.mode-mobile h1 { font-size: 20px; margin-bottom: 10px; text-align: center; }
+  body.mode-mobile #controls { flex-wrap: wrap; justify-content: center; width: 100%; max-width: 720px; gap: 10px; }
+  body.mode-mobile button { padding: 10px 14px; font-size: 12px; border-radius: 6px; }
+  body.mode-mobile #info { font-size: 12px; margin-top: 10px; text-align: center; }
+  body.mode-mobile #agents-list,
+  body.mode-mobile #queue-list { display: none; }
+  body.mode-mobile #usage-panel { width: 100%; max-width: 720px; }
+  body.mode-mobile #tooltip { display: none; }
   canvas { border: 2px solid #333; image-rendering: pixelated; image-rendering: crisp-edges; cursor: default; }
   #info { margin-top: 8px; font-size: 12px; color: #888; }
   #agents-list { margin-top: 12px; font-size: 11px; max-width: 640px; }
@@ -93,12 +116,70 @@
   .queue-title { margin-top: 8px; color: #f0c040; font-weight: bold; }
   .queue-row { display: flex; gap: 8px; padding: 2px 0; }
   .queue-label { color: #d1a128; min-width: 80px; }
+  #mobile-view { gap: 12px; margin-top: 6px; }
+  .mobile-section {
+    width: 100%;
+    background: #141424;
+    border: 1px solid #2a2a45;
+    padding: 10px 12px;
+  }
+  .mobile-title {
+    font-size: 12px;
+    color: #f0c040;
+    font-weight: bold;
+    margin-bottom: 8px;
+    letter-spacing: 0.2px;
+  }
+  .mobile-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--mobile-cols, 2), minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mobile-card {
+    background: #0f0f1a;
+    border: 1px solid #2a2a3f;
+    border-radius: 8px;
+    padding: 10px 10px 12px;
+    color: #e6e6e6;
+    text-align: left;
+    min-height: 76px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+  button.mobile-card {
+    appearance: none;
+    cursor: pointer;
+  }
+  button.mobile-card:disabled {
+    cursor: default;
+    opacity: 0.7;
+  }
+  .mobile-card.empty { opacity: 0.5; }
+  .mobile-name { font-weight: bold; color: #f0c040; }
+  .mobile-meta { color: #c9cedf; font-size: 11px; }
+  .mobile-status { color: #8b8fa3; font-size: 11px; }
+  .mobile-hint { color: #7b8096; font-size: 10px; }
+  .mobile-card.status-coding { border-color: #3b7cff; }
+  .mobile-card.status-reading { border-color: #3adf7a; }
+  .mobile-card.status-review_waiting { border-color: #d1a128; }
+  .mobile-card.status-waiting { border-color: #d1a128; }
+  .mobile-card.status-merged { border-color: #f0c040; }
+  .mobile-card.status-exited { border-color: #6c6c6c; }
+  .mobile-card.status-dead { border-color: #6c6c6c; }
+  .mobile-card.status-idle { border-color: #4a4a62; }
 </style>
 </head>
 <body>
 <h1>🤠 Corral</h1>
-<canvas id="office" width="640" height="400"></canvas>
-<div id="tooltip" role="tooltip" aria-hidden="true"></div>
+<div id="desktop-view" aria-hidden="false">
+  <canvas id="office" width="640" height="400"></canvas>
+  <div id="tooltip" role="tooltip" aria-hidden="true"></div>
+</div>
+<div id="mobile-view" aria-live="polite" aria-hidden="true"></div>
 <div id="info">Click "Load Agents" or drop agents.json to populate</div>
 <div id="controls">
   <button onclick="loadAgentsFile()">Load agents.json</button>
@@ -127,10 +208,14 @@
 const TILE = 16;
 const SCALE = 2;
 const S = TILE * SCALE; // rendered tile size
+const MOBILE_BREAKPOINT = 900;
+const MOBILE_UA_REGEX = /Mobi|Android|iPhone|iPad|iPod|Mobile/i;
 const COLS = 20;
 const ROWS = 12; // 640x384 at scale 2
 const DESK_COLS = 4;
 const DESK_ROWS = 3;
+const MOBILE_DESK_COLS = 2;
+const MOBILE_DESK_ROWS = 3;
 const DESK_START_X = 2;
 const DESK_START_Y = 2;
 const DESK_GAP_X = 5;
@@ -246,12 +331,22 @@ const MONITOR = {
 };
 
 // === DESK POSITIONS ===
-const DESKS = [];
-for (let row = 0; row < DESK_ROWS; row++) {
-  for (let col = 0; col < DESK_COLS; col++) {
-    DESKS.push({ x: DESK_START_X + col * DESK_GAP_X, y: DESK_START_Y + row * DESK_GAP_Y });
+function buildDeskPositions(cols, rows, startX, startY, gapX, gapY) {
+  const desks = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      desks.push({ x: startX + col * gapX, y: startY + row * gapY });
+    }
   }
+  return desks;
 }
+
+const DESKS = buildDeskPositions(DESK_COLS, DESK_ROWS, DESK_START_X, DESK_START_Y, DESK_GAP_X, DESK_GAP_Y);
+const MOBILE_DESKS = buildDeskPositions(MOBILE_DESK_COLS, MOBILE_DESK_ROWS, 0, 0, 1, 1);
+const DESK_LAYOUTS = {
+  desktop: { desks: DESKS, deskCols: DESK_COLS },
+  mobile: { desks: MOBILE_DESKS, deskCols: MOBILE_DESK_COLS },
+};
 
 // === TIME + WINDOW SETTINGS ===
 const WINDOW = { x: Math.floor(COLS / 2) - 2, y: 0, w: 4, h: 1 };
@@ -334,6 +429,8 @@ let audioCtx = null;
 let usageLastFetch = 0;
 let showCompleted = true;
 let cleaning = false;
+let viewMode = null;
+let viewModeTimer = null;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -598,6 +695,48 @@ async function cleanCompleted() {
     cleaning = false;
     setCleanButtonState(false);
   }
+}
+
+function detectViewMode() {
+  const ua = navigator.userAgent || '';
+  const isMobileUa = MOBILE_UA_REGEX.test(ua);
+  const isNarrow = window.innerWidth <= MOBILE_BREAKPOINT;
+  return (isMobileUa || isNarrow) ? 'mobile' : 'desktop';
+}
+
+function applyViewMode(nextMode) {
+  if (viewMode === nextMode) return;
+  viewMode = nextMode;
+  document.body.classList.toggle('mode-mobile', viewMode === 'mobile');
+  document.body.classList.toggle('mode-desktop', viewMode === 'desktop');
+  const desktopView = document.getElementById('desktop-view');
+  const mobileView = document.getElementById('mobile-view');
+  if (desktopView) desktopView.setAttribute('aria-hidden', viewMode === 'mobile' ? 'true' : 'false');
+  if (mobileView) mobileView.setAttribute('aria-hidden', viewMode === 'mobile' ? 'false' : 'true');
+  updateAgentsList();
+}
+
+function scheduleViewModeUpdate() {
+  if (viewModeTimer) window.clearTimeout(viewModeTimer);
+  viewModeTimer = window.setTimeout(() => applyViewMode(detectViewMode()), 150);
+}
+
+function initViewMode() {
+  applyViewMode(detectViewMode());
+  window.addEventListener('resize', scheduleViewModeUpdate);
+  window.addEventListener('orientationchange', scheduleViewModeUpdate);
+  if (window.matchMedia) {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+    if (mq.addEventListener) {
+      mq.addEventListener('change', scheduleViewModeUpdate);
+    } else if (mq.addListener) {
+      mq.addListener(scheduleViewModeUpdate);
+    }
+  }
+}
+
+function getListDeskLayout() {
+  return viewMode === 'mobile' ? DESK_LAYOUTS.mobile : DESK_LAYOUTS.desktop;
 }
 
 // === DATA HELPERS ===
@@ -1396,7 +1535,9 @@ function coffeeCount(agent) {
   return 3;
 }
 
-function buildLayout(list) {
+function buildLayout(list, config = DESK_LAYOUTS.desktop) {
+  const desks = config.desks || DESKS;
+  const deskCols = config.deskCols || DESK_COLS;
   const items = list.map((agent, index) => {
     const repo = getRepoName(agent) || 'unknown';
     const state = mapState(agent);
@@ -1454,14 +1595,14 @@ function buildLayout(list) {
   groups.forEach(group => group.agents.forEach(item => ordered.push(item)));
 
   const slots = [];
-  const deskAgents = new Array(DESKS.length).fill(null);
+  const deskAgents = new Array(desks.length).fill(null);
   const firstIndex = new Map();
-  const maxCount = Math.min(ordered.length, DESKS.length);
+  const maxCount = Math.min(ordered.length, desks.length);
   for (let i = 0; i < maxCount; i++) {
     const item = ordered[i];
-    const desk = DESKS[i];
-    const row = Math.floor(i / DESK_COLS);
-    const col = i % DESK_COLS;
+    const desk = desks[i];
+    const row = Math.floor(i / deskCols);
+    const col = i % deskCols;
     const key = item.key;
     const slot = { ...item, idx: i, desk, row, col, key };
     slots.push(slot);
@@ -1482,9 +1623,9 @@ function buildLayout(list) {
     }
   }
 
-  const overflow = ordered.slice(DESKS.length);
+  const overflow = ordered.slice(desks.length);
 
-  return { slots, deskAgents, labels, dividers, overflow };
+  return { slots, deskAgents, labels, dividers, overflow, deskCols };
 }
 
 // === DRAW OFFICE ===
@@ -3029,10 +3170,83 @@ async function startPolling() {
 }
 function stopPolling() { polling = false; }
 
+function renderMobileView(layout) {
+  const container = document.getElementById('mobile-view');
+  if (!container) return;
+  if (viewMode !== 'mobile') {
+    container.innerHTML = '';
+    return;
+  }
+  const activeLayout = layout || buildLayout(agents, DESK_LAYOUTS.mobile);
+  const deskAgents = activeLayout.deskAgents || [];
+  const deskCols = activeLayout.deskCols || MOBILE_DESK_COLS;
+  const cards = deskAgents.map((slot, i) => {
+    if (!slot || !slot.agent) {
+      return `<div class="mobile-card empty"><span class="mobile-name">Empty desk</span><span class="mobile-meta">—</span></div>`;
+    }
+    const agent = slot.agent;
+    const state = mapState(agent);
+    const name = agent.id || agent.label || `agent-${i}`;
+    const repo = getRepoName(agent);
+    const issueId = getIssueId(agent);
+    const repoLabel = repo ? `${repo}${issueId ? '#' + issueId : ''}` : 'unknown';
+    const status = stateLabel(state, agent);
+    const url = getAgentUrl(agent);
+    const urlAttr = url ? ` data-url="${escapeHtml(url)}"` : '';
+    const hint = url ? '<span class="mobile-hint">Tap to open</span>' : '';
+    return `<button type="button" class="mobile-card status-${state}"${urlAttr}>
+      <span class="mobile-name">${escapeHtml(name)}</span>
+      <span class="mobile-meta">${escapeHtml(repoLabel)}</span>
+      <span class="mobile-status">${escapeHtml(status)}</span>
+      ${hint}
+    </button>`;
+  }).join('');
+
+  const queued = activeLayout.overflow || [];
+  const queueCards = queued.map((item, i) => {
+    const agent = item.agent;
+    if (!agent) return '';
+    const state = mapState(agent);
+    const name = agent.id || agent.label || `agent-${i}`;
+    const repo = getRepoName(agent);
+    const issueId = getIssueId(agent);
+    const repoLabel = repo ? `${repo}${issueId ? '#' + issueId : ''}` : 'unknown';
+    const status = stateLabel(state, agent);
+    const url = getAgentUrl(agent);
+    const urlAttr = url ? ` data-url="${escapeHtml(url)}"` : '';
+    const hint = url ? '<span class="mobile-hint">Tap to open</span>' : '';
+    return `<button type="button" class="mobile-card status-${state}"${urlAttr}>
+      <span class="mobile-name">${escapeHtml(name)}</span>
+      <span class="mobile-meta">${escapeHtml(repoLabel)}</span>
+      <span class="mobile-status">${escapeHtml(status)}</span>
+      ${hint}
+    </button>`;
+  }).join('');
+
+  const queueSection = queued.length ? `
+    <div class="mobile-section">
+      <div class="mobile-title">Queue (${queued.length})</div>
+      <div class="mobile-grid" style="--mobile-cols: 1;">
+        ${queueCards}
+      </div>
+    </div>
+  ` : '';
+
+  container.innerHTML = `
+    <div class="mobile-section">
+      <div class="mobile-title">Desks</div>
+      <div class="mobile-grid" style="--mobile-cols: ${deskCols};">
+        ${cards || ''}
+      </div>
+    </div>
+    ${queueSection}
+  `;
+}
+
 function updateAgentsList() {
   const el = document.getElementById('agents-list');
   const queueEl = document.getElementById('queue-list');
-  const layout = buildLayout(agents);
+  const layout = buildLayout(agents, getListDeskLayout());
   const deskAgents = layout.slots.map(slot => slot.agent);
   const queued = (layout.overflow || []).map(item => item.agent);
   el.innerHTML = deskAgents.map((a, i) => {
@@ -3068,6 +3282,7 @@ function updateAgentsList() {
     info += showCompleted ? ` — ${hiddenCount} completed evicted` : ` — ${hiddenCount} completed hidden`;
   }
   document.getElementById('info').textContent = info;
+  renderMobileView(layout);
 }
 
 // drag & drop
@@ -3088,6 +3303,16 @@ document.addEventListener('drop', e => {
     reader.readAsText(file);
   }
 });
+
+const mobileView = document.getElementById('mobile-view');
+if (mobileView) {
+  mobileView.addEventListener('click', e => {
+    const target = e.target.closest('[data-url]');
+    if (!target) return;
+    const url = target.getAttribute('data-url');
+    if (url) window.open(url, '_blank');
+  });
+}
 
 canvas.addEventListener('mousemove', e => {
   const { x, y } = getCanvasPoint(e);
@@ -3146,6 +3371,7 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 // start
+initViewMode();
 updateSoundButton();
 updateCompletedToggle();
 setCleanButtonState(false);
