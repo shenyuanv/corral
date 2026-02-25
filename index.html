@@ -116,6 +116,7 @@ for (let row = 0; row < DESK_ROWS; row++) {
 
 // === AGENT STATE ===
 let agents = [];
+let currentLayout = null;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -156,6 +157,17 @@ function getMonitorText(agent) {
 
 function getReaction(agent) {
   return agent && agent.reactionState ? agent.reactionState : {};
+}
+
+function getAgentUrl(agent) {
+  if (!agent) return '';
+  const prUrl = agent.prUrl || agent.prURL || agent.pullRequestUrl || agent.pull_request_url;
+  if (typeof prUrl === 'string' && prUrl.trim()) return prUrl.trim();
+  const repo = typeof agent.repo === 'string' ? agent.repo.trim() : '';
+  const issueId = getIssueId(agent);
+  const issueIdStr = issueId !== null && issueId !== undefined ? String(issueId).trim() : '';
+  if (repo && issueIdStr) return `https://github.com/${repo}/issues/${issueIdStr}`;
+  return '';
 }
 
 function hoursRunning(agent) {
@@ -488,6 +500,44 @@ function stateLabel(state) {
   }
 }
 
+function getTileFromEvent(event) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
+  return { tileX: Math.floor(x / S), tileY: Math.floor(y / S) };
+}
+
+function getSlotAtTile(tileX, tileY) {
+  if (!currentLayout) return null;
+  if (tileX < 0 || tileX >= COLS || tileY < 0 || tileY >= ROWS) return null;
+  for (const slot of currentLayout.slots) {
+    const dx = slot.desk.x;
+    const dy = slot.desk.y;
+    if (tileX === dx && (tileY === dy || tileY === dy + 1)) return slot;
+  }
+  return null;
+}
+
+function handleCanvasClick(event) {
+  const { tileX, tileY } = getTileFromEvent(event);
+  const slot = getSlotAtTile(tileX, tileY);
+  if (!slot) return;
+  const url = getAgentUrl(slot.agent);
+  if (url) window.open(url, '_blank');
+}
+
+function handleCanvasMove(event) {
+  const { tileX, tileY } = getTileFromEvent(event);
+  const slot = getSlotAtTile(tileX, tileY);
+  canvas.style.cursor = slot ? 'pointer' : 'default';
+}
+
+function handleCanvasLeave() {
+  canvas.style.cursor = 'default';
+}
+
 // === MAIN RENDER LOOP ===
 let frame = 0;
 function render() {
@@ -496,6 +546,7 @@ function render() {
   drawFloor();
 
   const layout = buildLayout(agents);
+  currentLayout = layout;
 
   layout.dividers.forEach(divider => drawGroupDivider(divider.left.desk, divider.right.desk));
 
@@ -652,6 +703,10 @@ function updateAgentsList() {
   }).join('');
   document.getElementById('info').textContent = `${agents.length} agents loaded`;
 }
+
+canvas.addEventListener('click', handleCanvasClick);
+canvas.addEventListener('mousemove', handleCanvasMove);
+canvas.addEventListener('mouseleave', handleCanvasLeave);
 
 // drag & drop
 document.addEventListener('dragover', e => e.preventDefault());
