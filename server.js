@@ -6,13 +6,17 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const PORT = process.env.PORT || 3377;
-const LASSO = process.env.LASSO_BIN || 'lasso';
+const SESSIONS_FILE = process.env.LASSO_SESSIONS || path.join(process.env.HOME, 'clawd/lasso/sessions.json');
 
 function getLassoStatus(cb) {
-  execFile(LASSO, ['status', '--json'], { timeout: 5000 }, (err, stdout) => {
-    if (err) return cb(err, null);
+  fs.readFile(SESSIONS_FILE, 'utf8', (err, raw) => {
+    if (err) return cb(null, { sessions: [] });
     try {
-      cb(null, JSON.parse(stdout));
+      const data = JSON.parse(raw);
+      // sessions.json has { sessions: { id: {...}, id: {...} } } — flatten to array
+      const obj = data.sessions || {};
+      const list = Object.entries(obj).map(([id, s]) => ({ id, ...s }));
+      cb(null, { sessions: list });
     } catch (e) {
       cb(e, null);
     }

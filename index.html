@@ -218,11 +218,12 @@ function drawStatusBar() {
 // === MAP LASSO STATE → ANIMATION STATE ===
 function mapState(agent) {
   if (!agent) return 'idle';
-  const s = (agent.status || agent.state || '').toLowerCase();
-  if (s.includes('dead') || s.includes('exited') || s.includes('killed')) return 'dead';
-  if (s.includes('review') || s.includes('pr_open') || s.includes('pr_review')) return 'reading';
-  if (s.includes('wait') || s.includes('ci') || s.includes('pending')) return 'waiting';
-  if (s.includes('running') || s.includes('coding') || s.includes('active')) return 'coding';
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  if (status.includes('dead') || status.includes('exited') || activity.includes('exited') || activity.includes('dead')) return 'dead';
+  if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
+  if (status.includes('pr_open') || status.includes('ci') || status.includes('merged') || activity.includes('stale')) return 'waiting';
+  if (status.includes('working') || activity.includes('active')) return 'coding';
   return 'idle';
 }
 
@@ -263,7 +264,8 @@ function render() {
     if (state === 'dead') return; // ghost desk
     drawCharacter(desk.x, desk.y + 1, i, state, frame);
     // bubble with repo/issue
-    const label = agent.issue ? `#${agent.issue}` : (agent.repo || agent.label || `agent-${i}`);
+    const repo = (agent.repo || '').split('/').pop();
+    const label = agent.issueId ? `${repo}#${agent.issueId}` : (repo || agent.id || `agent-${i}`);
     drawBubble(desk.x, desk.y, label, state === 'waiting' ? '#ff0' : '#fff');
   });
 
@@ -331,9 +333,10 @@ function updateAgentsList() {
   const el = document.getElementById('agents-list');
   el.innerHTML = agents.map((a, i) => {
     const state = mapState(a);
+    const repo = (a.repo || '').split('/').pop();
     return `<div class="agent-row">
-      <span class="agent-name">${a.label || 'agent-' + i}</span>
-      <span class="agent-repo">${a.repo || ''}${a.issue ? '#' + a.issue : ''}</span>
+      <span class="agent-name">${a.id || 'agent-' + i}</span>
+      <span class="agent-repo">${repo}${a.issueId ? '#' + a.issueId : ''}</span>
       <span class="agent-status">${stateLabel(state)}</span>
     </div>`;
   }).join('');
