@@ -109,6 +109,10 @@ const PAL = {
   fire1: '#f04',
   fire2: '#f80',
   fire3: '#ff0',
+  tokenGreen: '#2f9a3d',
+  tokenYellow: '#d1a128',
+  tokenRed: '#c13c3c',
+  tokenBg: '#0b0b12',
 };
 
 // === CHARACTER COLORS ===
@@ -187,6 +191,17 @@ function getReaction(agent) {
   return agent && agent.reactionState ? agent.reactionState : {};
 }
 
+function getTokensUsed(agent) {
+  if (!agent) return null;
+  const value = agent.tokensUsed ?? agent.tokens_used ?? agent.tokenUsage ?? agent.token_usage;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function getAgentUrl(agent) {
   if (!agent) return '';
   const prUrl = agent.prUrl || agent.prURL || agent.pullRequestUrl || agent.pull_request_url;
@@ -249,6 +264,18 @@ function formatStatus(agent) {
   return status || activity || 'unknown';
 }
 
+function formatTokenCount(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `${Math.round(value)}`;
+}
+
+function formatTokenDetail(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return Math.round(value).toLocaleString();
+}
+
 function formatCiState(agent) {
   const reaction = getReaction(agent);
   const retries = Number(reaction.ciRetries || 0);
@@ -279,6 +306,8 @@ function buildTooltip(agent) {
   const status = escapeHtml(formatStatus(agent));
   const runtime = escapeHtml(runtimeLabel(agent));
   const branch = escapeHtml(agent.branch || 'unknown');
+  const tokensUsed = getTokensUsed(agent);
+  const tokensLabel = escapeHtml(formatTokenDetail(tokensUsed));
   const prNumber = agent.prNumber ?? '';
   const prUrl = agent.prUrl || '';
   const prLabel = prNumber !== '' && prNumber !== null ? `PR #${prNumber}` : (prUrl ? 'PR link' : '—');
@@ -293,6 +322,7 @@ function buildTooltip(agent) {
     <div class="tooltip-row"><span class="tooltip-label">Repo/Issue</span><span class="tooltip-value">${repoIssue}</span></div>
     <div class="tooltip-row"><span class="tooltip-label">Status</span><span class="tooltip-value">${status}</span></div>
     <div class="tooltip-row"><span class="tooltip-label">Runtime</span><span class="tooltip-value">${runtime}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Tokens</span><span class="tooltip-value">${tokensLabel}</span></div>
     <div class="tooltip-row"><span class="tooltip-label">PR</span><span class="tooltip-value">${prValue}</span></div>
     <div class="tooltip-row"><span class="tooltip-label">CI</span><span class="tooltip-value">${ciState}</span></div>
     <div class="tooltip-row"><span class="tooltip-label">Branch</span><span class="tooltip-value">${branch}</span></div>
@@ -450,6 +480,26 @@ function drawFire(screenX, screenY, frame) {
   frames[idx].forEach(p => drawRect(screenX + p.x, screenY + p.y, 1, 1, p.c));
 }
 
+function tokenBarColor(tokens) {
+  if (tokens >= 100000) return PAL.tokenRed;
+  if (tokens >= 50000) return PAL.tokenYellow;
+  return PAL.tokenGreen;
+}
+
+function drawTokenBar(tileX, tileY, tokensUsed) {
+  if (tokensUsed === null || tokensUsed === undefined) return;
+  const tokens = Number(tokensUsed);
+  if (!Number.isFinite(tokens)) return;
+  const maxTokens = 100000;
+  const barWidth = 12;
+  const barHeight = 2;
+  const px = tileX * TILE + 2;
+  const py = tileY * TILE - 4;
+  drawRect(px, py, barWidth, barHeight, PAL.tokenBg);
+  const fill = Math.max(1, Math.round(barWidth * Math.min(tokens / maxTokens, 1)));
+  drawRect(px, py, fill, barHeight, tokenBarColor(tokens));
+}
+
 function drawMonitorText(text, screenX, screenY, screenW, screenH, frame, color) {
   if (!text) return;
   ctx.save();
@@ -603,8 +653,19 @@ function drawStatusBar() {
   ctx.font = '11px Courier New';
   const running = agents.filter(a => mapState(a) !== 'dead').length;
   ctx.fillText(`🤠 Corral | ${agents.length} agents | ${running} active`, 8, y + 20);
+  const totalTokens = agents.reduce((sum, agent) => {
+    const tokens = getTokensUsed(agent);
+    return tokens === null ? sum : sum + tokens;
+  }, 0);
+  const hasTokens = agents.some(agent => getTokensUsed(agent) !== null);
+  const tokensLabel = hasTokens ? `Tokens ${formatTokenCount(totalTokens)}` : 'Tokens —';
   const now = new Date().toLocaleTimeString();
-  ctx.fillText(now, CANVAS_W - 80, y + 20);
+  const timeWidth = ctx.measureText(now).width;
+  const tokensWidth = ctx.measureText(tokensLabel).width;
+  const timeX = CANVAS_W - timeWidth - 8;
+  const tokensX = Math.max(8, timeX - tokensWidth - 16);
+  ctx.fillText(tokensLabel, tokensX, y + 20);
+  ctx.fillText(now, timeX, y + 20);
 }
 
 // === MAP LASSO STATE → ANIMATION STATE ===
@@ -668,6 +729,7 @@ function tooltipSignature(agent) {
     agent.repo,
     agent.agentType,
     agent.createdAt,
+    agent.tokensUsed,
     reaction.ciRetries,
     reaction.ciEscalated,
   ].join('|');
@@ -738,6 +800,7 @@ function render() {
     const state = mapState(agent);
     if (state === 'dead') return; // ghost desk
     drawCharacter(desk.x, desk.y + 1, i, state, frame, resolveAgentType(agent));
+    drawTokenBar(desk.x, desk.y + 1, getTokensUsed(agent));
     const prNumber = agent ? agent.prNumber : null;
     const status = (agent.status || '').toLowerCase();
     if (prNumber !== null && prNumber !== undefined) {
@@ -765,6 +828,7 @@ function loadDemo() {
       issueTitle: 'Tighten input validation',
       status: 'running',
       agentType: 'codex',
+      tokensUsed: 24350,
       createdAt: new Date(now - 30 * 60 * 1000).toISOString(),
     },
     {
@@ -775,6 +839,7 @@ function loadDemo() {
       status: 'pr_open',
       agentType: 'codex',
       prNumber: 42,
+      tokensUsed: 61200,
       createdAt: new Date(now - 2.5 * 60 * 60 * 1000).toISOString(),
     },
     {
@@ -784,6 +849,7 @@ function loadDemo() {
       issueTitle: 'Refine lasso ingestion',
       status: 'running',
       agentType: 'claude',
+      tokensUsed: 128400,
       createdAt: new Date(now - 5.5 * 60 * 60 * 1000).toISOString(),
       reactionState: { ciRetries: 2 },
     },
@@ -796,6 +862,7 @@ function loadDemo() {
       agentType: 'codex',
       reactionState: { ciRetries: 3, ciEscalated: true },
       prNumber: 88,
+      tokensUsed: 85400,
       createdAt: new Date(now - 4.5 * 60 * 60 * 1000).toISOString(),
     },
     {
@@ -805,6 +872,7 @@ function loadDemo() {
       status: 'merged',
       agentType: 'codex',
       prNumber: 61,
+      tokensUsed: 3220,
       createdAt: new Date(now - 90 * 60 * 1000).toISOString(),
     },
   ];
