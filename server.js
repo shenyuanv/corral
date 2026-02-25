@@ -178,10 +178,12 @@ function isCompletedStatus(status, activity) {
   const s = (status || '').toLowerCase();
   const a = (activity || '').toLowerCase();
   return (
+    s.includes('pr_closed') ||
     s.includes('merged') ||
     s.includes('dead') ||
     s.includes('exited') ||
     s.includes('archived') ||
+    a.includes('pr_closed') ||
     a.includes('merged') ||
     a.includes('dead') ||
     a.includes('exited') ||

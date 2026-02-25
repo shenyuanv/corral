@@ -860,6 +860,8 @@ function completionCategory(agent) {
     activity.includes('exited') ||
     status.includes('archived') ||
     activity.includes('archived') ||
+    status.includes('pr_closed') ||
+    activity.includes('pr_closed') ||
     status.includes('dead') ||
     activity.includes('dead')
   ) {
@@ -2267,6 +2269,7 @@ function timelineStatusLabel(status, activity) {
   if (s.includes('ci_failed') || s.includes('failed')) return 'CI Failed';
   if (s.includes('ci_passed') || s.includes('passed')) return 'CI Passed';
   if (s.includes('pr_open') || s.includes('pr_review') || s.includes('changes_requested')) return 'PR Open';
+  if (s.includes('pr_closed') || a.includes('pr_closed')) return 'PR Closed';
   if (s.includes('dead') || s.includes('exited') || s.includes('archived')) return 'Exited';
   if (s.includes('working') || s.includes('running') || a.includes('active')) return 'Working';
   return status || activity || 'Unknown';
@@ -2276,7 +2279,15 @@ function timelineColorForStatus(status, activity) {
   const s = (status || '').toLowerCase();
   const a = (activity || '').toLowerCase();
   if (s.includes('merged') || a.includes('merged')) return TIMELINE_COLORS.merged;
-  if (s.includes('dead') || s.includes('exited') || s.includes('archived') || a.includes('dead') || a.includes('exited')) return TIMELINE_COLORS.dead;
+  if (
+    s.includes('dead') ||
+    s.includes('exited') ||
+    s.includes('archived') ||
+    s.includes('pr_closed') ||
+    a.includes('dead') ||
+    a.includes('exited') ||
+    a.includes('pr_closed')
+  ) return TIMELINE_COLORS.dead;
   if (s.includes('ci_failed') || s.includes('failed')) return TIMELINE_COLORS.ciFailed;
   if (s.includes('pr_open') || s.includes('pr_review') || s.includes('changes_requested') || s.includes('ci')) return TIMELINE_COLORS.pr;
   if (s.includes('working') || s.includes('running') || a.includes('active')) return TIMELINE_COLORS.working;
@@ -2835,7 +2846,14 @@ function mapState(agent) {
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
   if (status.includes('merged') || activity.includes('merged')) return 'merged';
-  if (status.includes('exited') || activity.includes('exited') || status.includes('archived') || activity.includes('archived')) return 'exited';
+  if (
+    status.includes('exited') ||
+    activity.includes('exited') ||
+    status.includes('archived') ||
+    activity.includes('archived') ||
+    status.includes('pr_closed') ||
+    activity.includes('pr_closed')
+  ) return 'exited';
   if (status.includes('dead') || activity.includes('dead')) return 'dead';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
   if (status.includes('pr_open') && agent.alive === false) return 'review_waiting';
