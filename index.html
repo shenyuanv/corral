@@ -6,26 +6,109 @@
 <title>Corral 🤠</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Courier New', monospace; color: #e0e0e0; }
-  h1 { font-size: 18px; margin-bottom: 8px; color: #f0c040; }
-  canvas { border: 2px solid #333; image-rendering: pixelated; image-rendering: crisp-edges; cursor: default; }
-  #info { margin-top: 8px; font-size: 12px; color: #888; }
-  #agents-list { margin-top: 12px; font-size: 11px; max-width: 640px; }
-  .agent-row { display: flex; gap: 8px; padding: 2px 0; }
-  .agent-name { color: #f0c040; min-width: 80px; }
-  .agent-status { color: #8f8; }
-  .agent-repo { color: #88f; }
-  #controls { margin-top: 10px; display: flex; gap: 8px; }
-  button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; }
-  button:hover { background: #444; }
-  button.active { background: #4a4a4a; border-color: #7a7a7a; color: #f0c040; }
+  :root {
+    --bg: #0e1020;
+    --panel: #141424;
+    --panel-border: #2a2a45;
+    --panel-shadow: #0b0b12;
+    --text: #e0e0e0;
+    --muted: #7b8096;
+    --accent: #f0c040;
+    --pixel-border: #2a2a3f;
+  }
+  body {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 18px 12px 32px;
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+  }
+  #app {
+    width: min(96vw, 980px);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .canvas-shell {
+    position: relative;
+    width: 100%;
+    background: #0b0b12;
+    border: 2px solid var(--pixel-border);
+    box-shadow: 0 0 0 2px var(--panel-shadow), 6px 6px 0 var(--panel-shadow);
+  }
+  canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: default;
+  }
+  .canvas-title {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.3px;
+    text-shadow: 1px 1px 0 #0b0b12;
+    pointer-events: none;
+  }
+  .canvas-hud {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  button.icon-btn {
+    background: #1b1b2b;
+    color: var(--text);
+    border: 1px solid #3a3a5c;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px var(--panel-shadow);
+  }
+  button.icon-btn:hover { background: #24243a; }
+  button.icon-btn.active { background: #2b2b45; border-color: #6d6d8f; color: var(--accent); }
+  button.icon-btn:disabled { opacity: 0.6; cursor: default; }
+  .connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid #0b0b12;
+    box-shadow: 0 0 0 1px #0b0b12;
+  }
+  .connection-dot.connected { background: #2f9a3d; }
+  .connection-dot.connecting { background: #d1a128; }
+  .connection-dot.disconnected { background: #6c6c6c; }
+  .action-bar { display: flex; gap: 8px; }
+  button {
+    background: #1b1b2b;
+    color: var(--text);
+    border: 1px solid #3a3a5c;
+    padding: 4px 10px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px var(--panel-shadow);
+  }
+  button:hover { background: #24243a; }
+  button.active { background: #2b2b45; border-color: #6d6d8f; color: var(--accent); }
   button:disabled { opacity: 0.6; cursor: default; }
   #usage-panel {
-    margin-top: 12px;
-    width: 640px;
-    max-width: 92vw;
-    background: #141424;
-    border: 1px solid #2a2a45;
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 0 0 2px var(--panel-shadow), 4px 4px 0 var(--panel-shadow);
     padding: 8px 10px;
     font-size: 11px;
   }
@@ -89,38 +172,107 @@
   .status-merged { background: #d1a128; }
   .status-exited { background: #6c6c6c; }
   .status-dead { background: #6c6c6c; }
-  #queue-list { margin-top: 8px; font-size: 11px; max-width: 640px; color: #9aa0b5; }
-  .queue-title { margin-top: 8px; color: #f0c040; font-weight: bold; }
-  .queue-row { display: flex; gap: 8px; padding: 2px 0; }
-  .queue-label { color: #d1a128; min-width: 80px; }
+  #agents-panel {
+    background: #121222;
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 0 0 2px var(--panel-shadow), 4px 4px 0 var(--panel-shadow);
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  #agents-panel summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--accent);
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  #agents-panel summary::-webkit-details-marker { display: none; }
+  #agents-panel summary::before {
+    content: '▾';
+    margin-right: 6px;
+    color: var(--muted);
+  }
+  #agents-panel:not([open]) summary::before { content: '▸'; }
+  #agents-summary {
+    color: var(--muted);
+    font-weight: normal;
+    font-size: 10px;
+  }
+  #agents-list,
+  #queue-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #queue-list { margin-top: 6px; }
+  .queue-title {
+    width: 100%;
+    color: var(--accent);
+    font-weight: bold;
+  }
+  .agent-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    background: #0f0f1a;
+    border: 1px solid var(--pixel-border);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .agent-pill-name { color: var(--accent); }
+  .agent-pill-repo { color: #88f; }
+  .agent-pill-state { color: #9aa0b5; }
+  .agent-pill.state-coding { border-color: #2f9a3d; }
+  .agent-pill.state-waiting { border-color: #d1a128; }
+  .agent-pill.state-review_waiting { border-color: #d1a128; }
+  .agent-pill.state-reading { border-color: #3b7cff; }
+  .agent-pill.state-merged { border-color: #d1a128; opacity: 0.8; }
+  .agent-pill.state-exited,
+  .agent-pill.state-dead { border-color: #6c6c6c; opacity: 0.7; }
+  .agent-pill.state-idle { border-color: #4a4a62; }
+  .agent-pill.queued { border-style: dashed; }
+  .agents-empty {
+    color: var(--muted);
+    font-size: 10px;
+    padding: 2px 0;
+  }
 </style>
 </head>
 <body>
-<h1>🤠 Corral</h1>
-<canvas id="office" width="640" height="400"></canvas>
-<div id="tooltip" role="tooltip" aria-hidden="true"></div>
-<div id="info">Click "Load Agents" or drop agents.json to populate</div>
-<div id="controls">
-  <button onclick="loadAgentsFile()">Load agents.json</button>
-  <button onclick="loadDemo()">Demo Mode</button>
-  <button onclick="refreshFromLasso()">Refresh</button>
-  <button onclick="startPolling()">▶ Live</button>
-  <button onclick="stopPolling()">⏹ Stop</button>
-  <button id="cleanButton" onclick="cleanCompleted()">🧹 Clean</button>
-  <button id="completedToggle" onclick="toggleCompleted()">✅ Show completed</button>
-  <button id="soundToggle" onclick="toggleSound()">🔇 Sound</button>
-</div>
-<div id="usage-panel" aria-live="polite">
-  <div id="usage-header">
-    <span>Subscription Usage</span>
-    <span id="usage-updated">—</span>
+<div id="app">
+  <div class="canvas-shell">
+    <canvas id="office" width="640" height="400"></canvas>
+    <div class="canvas-title">🤠 Corral</div>
+    <div class="canvas-hud">
+      <div id="connectionIndicator" class="connection-dot connecting" title="Connecting"></div>
+      <button id="soundToggle" class="icon-btn" type="button" onclick="toggleSound()" aria-label="Sound off">🔇</button>
+    </div>
   </div>
-  <div id="usage-cards"></div>
+  <div class="action-bar">
+    <button id="cleanButton" type="button" onclick="cleanCompleted()">🧹 Clean</button>
+    <button id="completedToggle" type="button" onclick="toggleCompleted()">✅ Show completed</button>
+  </div>
+  <div id="usage-panel" aria-live="polite">
+    <div id="usage-header">
+      <span>Subscription Usage</span>
+      <span id="usage-updated">—</span>
+    </div>
+    <div id="usage-cards"></div>
+  </div>
+  <details id="agents-panel" open>
+    <summary>
+      <span>Agents</span>
+      <span id="agents-summary">0</span>
+    </summary>
+    <div id="agents-list"></div>
+    <div id="queue-list"></div>
+  </details>
 </div>
-<div id="agents-list"></div>
-<div id="queue-list"></div>
-
-<input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFile(event)">
+<div id="tooltip" role="tooltip" aria-hidden="true"></div>
 
 <script>
 // === CONSTANTS ===
@@ -334,6 +486,11 @@ let audioCtx = null;
 let usageLastFetch = 0;
 let showCompleted = true;
 let cleaning = false;
+let connectionState = 'connecting';
+let connectionNote = '';
+let lastUpdateAt = null;
+let statusMessage = '';
+let statusMessageUntil = 0;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -520,8 +677,43 @@ function getTimeState(hour, minute) {
 function updateSoundButton() {
   const btn = document.getElementById('soundToggle');
   if (!btn) return;
-  btn.textContent = soundEnabled ? '🔊 Sound' : '🔇 Sound';
+  btn.textContent = soundEnabled ? '🔊' : '🔇';
+  btn.setAttribute('aria-label', soundEnabled ? 'Sound on' : 'Sound off');
+  btn.title = soundEnabled ? 'Sound on (S)' : 'Sound off (S)';
   btn.classList.toggle('active', soundEnabled);
+}
+
+function updateConnectionIndicator() {
+  const el = document.getElementById('connectionIndicator');
+  if (!el) return;
+  el.classList.remove('connected', 'connecting', 'disconnected');
+  el.classList.add(connectionState);
+  const label = connectionState === 'connected'
+    ? 'Connected'
+    : connectionState === 'connecting'
+      ? 'Connecting'
+      : 'Disconnected';
+  el.title = connectionNote ? `${label} — ${connectionNote}` : label;
+}
+
+function setConnectionState(state, note = '') {
+  connectionState = state;
+  connectionNote = note;
+  updateConnectionIndicator();
+}
+
+function setStatusMessage(message, durationMs = 4000) {
+  statusMessage = message;
+  statusMessageUntil = Date.now() + durationMs;
+}
+
+function getStatusMessage() {
+  if (!statusMessage) return '';
+  if (Date.now() > statusMessageUntil) {
+    statusMessage = '';
+    return '';
+  }
+  return statusMessage;
 }
 
 function updateCompletedToggle() {
@@ -560,6 +752,16 @@ function toggleSound() {
   }
 }
 
+function toggleFullscreen() {
+  const shell = document.querySelector('.canvas-shell');
+  if (!shell) return;
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  } else if (shell.requestFullscreen) {
+    shell.requestFullscreen().catch(() => {});
+  }
+}
+
 function playDing() {
   if (!soundEnabled) return;
   initAudio();
@@ -592,8 +794,7 @@ async function cleanCompleted() {
     if (!resp.ok) throw new Error(`Clean failed (${resp.status})`);
     await refreshFromLasso();
   } catch (err) {
-    const info = document.getElementById('info');
-    if (info) info.textContent = `Clean failed — ${err.message}`;
+    setStatusMessage(`Clean failed — ${err.message}`);
   } finally {
     cleaning = false;
     setCleanButtonState(false);
@@ -2574,25 +2775,56 @@ function drawUsagePanel() {
 // === STATUS BAR ===
 function drawStatusBar() {
   const y = USAGE_PANEL_Y + USAGE_PANEL_HEIGHT;
-  ctx.fillStyle = '#111';
+  ctx.fillStyle = '#0b0b12';
   ctx.fillRect(0, y, CANVAS_W, S);
-  ctx.fillStyle = '#888';
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, y, CANVAS_W, 1);
   ctx.font = '11px Courier New';
+  ctx.textBaseline = 'middle';
+  let x = 8;
+  ctx.fillStyle = '#c9cedf';
+  const title = '🤠 Corral';
+  ctx.fillText(title, x, y + S / 2);
+  x += ctx.measureText(title).width + 12;
   const activeCount = agents.filter(isAgentActive).length;
-  ctx.fillText(`🤠 Corral | ${agents.length} agents | ${activeCount} active`, 8, y + 20);
-  const totalTokens = agents.reduce((sum, agent) => {
-    const tokens = getTokensUsed(agent);
-    return tokens === null ? sum : sum + tokens;
-  }, 0);
-  const hasTokens = agents.some(agent => getTokensUsed(agent) !== null);
-  const tokensLabel = hasTokens ? `Tokens ${formatTokenCount(totalTokens)}` : 'Tokens —';
-  const now = new Date().toLocaleTimeString();
-  const timeWidth = ctx.measureText(now).width;
-  const tokensWidth = ctx.measureText(tokensLabel).width;
-  const timeX = CANVAS_W - timeWidth - 8;
-  const tokensX = Math.max(8, timeX - tokensWidth - 16);
-  ctx.fillText(tokensLabel, tokensX, y + 20);
-  ctx.fillText(now, timeX, y + 20);
+  const agentLabel = `${agents.length} agents`;
+  ctx.fillText(agentLabel, x, y + S / 2);
+  x += ctx.measureText(agentLabel).width + 12;
+  const activeLabel = `${activeCount} active`;
+  ctx.fillText(activeLabel, x, y + S / 2);
+  x += ctx.measureText(activeLabel).width + 12;
+  const dotColor = connectionState === 'connected'
+    ? '#2f9a3d'
+    : connectionState === 'connecting'
+      ? '#d1a128'
+      : '#6c6c6c';
+  ctx.fillStyle = dotColor;
+  ctx.fillRect(x, y + S / 2 - 3, 6, 6);
+  x += 10;
+  ctx.fillStyle = '#c9cedf';
+  const connLabel = connectionState === 'connected'
+    ? 'connected'
+    : connectionState === 'connecting'
+      ? 'connecting'
+      : 'offline';
+  ctx.fillText(connLabel, x, y + S / 2);
+  x += ctx.measureText(connLabel).width + 12;
+  const message = getStatusMessage();
+
+  const lastUpdateLabel = lastUpdateAt ? lastUpdateAt.toLocaleTimeString() : '—';
+  const rightText = `Updated ${lastUpdateLabel}`;
+  const rightWidth = ctx.measureText(rightText).width;
+  const rightX = CANVAS_W - rightWidth - 8;
+  if (message) {
+    const messageWidth = ctx.measureText(message).width;
+    const available = rightX - x - 8;
+    if (available > messageWidth) {
+      ctx.fillStyle = '#d1a128';
+      ctx.fillText(message, x, y + S / 2);
+    }
+  }
+  ctx.fillStyle = '#9aa0b5';
+  ctx.fillText(rightText, rightX, y + S / 2);
 }
 
 // === MAP LASSO STATE → ANIMATION STATE ===
@@ -2975,31 +3207,16 @@ function loadDemo() {
   setUsageData(demoUsage);
 }
 
-function loadAgentsFile() {
-  document.getElementById('fileInput').click();
-}
-
-function handleFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const data = JSON.parse(ev.target.result);
-      const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
-      setAgents(nextAgents);
-      setHistoryEntries([]);
-    } catch(err) { alert('Invalid JSON'); }
-  };
-  reader.readAsText(file);
-}
-
 async function refreshFromLasso() {
+  if (connectionState !== 'connected') {
+    setConnectionState('connecting', 'Connecting');
+  }
   try {
     const [agentsResp, historyResp] = await Promise.all([
       fetch('/api/agents'),
       fetch('/api/history'),
     ]);
+    if (!agentsResp.ok) throw new Error(`Agents fetch failed (${agentsResp.status})`);
     const data = await agentsResp.json();
     const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
     setAgents(nextAgents);
@@ -3009,9 +3226,11 @@ async function refreshFromLasso() {
       setHistoryEntries(historyList);
     }
     refreshUsage();
+    lastUpdateAt = new Date();
+    setConnectionState('connected', '');
     return true;
   } catch(e) {
-    document.getElementById('info').textContent = 'Server not running — start with: node server.js';
+    setConnectionState('disconnected', 'Server not running — start with: node server.js');
     return false;
   }
 }
@@ -3021,73 +3240,61 @@ let polling = false;
 async function startPolling() {
   if (polling) return;
   polling = true;
-  document.getElementById('info').textContent = '🔄 Live mode — polling every 5s';
+  setConnectionState('connecting', 'Connecting');
   while (polling) {
     await refreshFromLasso();
     await new Promise(r => setTimeout(r, 5000));
   }
 }
-function stopPolling() { polling = false; }
+
+function renderAgentPill(agent, index, extraClass = '') {
+  if (!agent) return '';
+  const name = escapeHtml(agent.id || agent.label || `agent-${index}`);
+  const repo = getRepoName(agent);
+  const issueId = getIssueId(agent);
+  const repoLabel = escapeHtml(`${repo}${issueId ? '#' + issueId : ''}`);
+  const state = mapState(agent);
+  const stateText = escapeHtml(stateLabel(state, agent));
+  const classes = ['agent-pill', `state-${state}`];
+  if (extraClass) classes.push(extraClass);
+  return `<div class="${classes.join(' ')}">
+    <span class="agent-pill-name">${name}</span>
+    <span class="agent-pill-repo">${repoLabel || '—'}</span>
+    <span class="agent-pill-state">${stateText}</span>
+  </div>`;
+}
 
 function updateAgentsList() {
   const el = document.getElementById('agents-list');
   const queueEl = document.getElementById('queue-list');
+  const summaryEl = document.getElementById('agents-summary');
   const layout = buildLayout(agents);
   const deskAgents = layout.slots.map(slot => slot.agent);
   const queued = (layout.overflow || []).map(item => item.agent);
-  el.innerHTML = deskAgents.map((a, i) => {
-    const state = mapState(a);
-    const repo = getRepoName(a);
-    const issueId = getIssueId(a);
-    return `<div class="agent-row">
-      <span class="agent-name">${a.id || a.label || 'agent-' + i}</span>
-      <span class="agent-repo">${repo}${issueId ? '#' + issueId : ''}</span>
-      <span class="agent-status">${stateLabel(state, a)}</span>
-    </div>`;
-  }).join('');
+  if (el) {
+    const pills = deskAgents.map((a, i) => renderAgentPill(a, i)).join('');
+    el.innerHTML = pills || '<div class="agents-empty">No active agents on desks.</div>';
+  }
   if (queueEl) {
-    queueEl.innerHTML = queued.length ? [
-      `<div class="queue-title">Queue (${queued.length})</div>`,
-      ...queued.map((a, i) => {
-        const state = mapState(a);
-        const repo = getRepoName(a);
-        const issueId = getIssueId(a);
-        return `<div class="queue-row">
-          <span class="queue-label">${a.id || a.label || 'agent-' + i}</span>
-          <span class="agent-repo">${repo}${issueId ? '#' + issueId : ''}</span>
-          <span class="agent-status">${stateLabel(state, a)}</span>
-        </div>`;
-      }),
-    ].join('') : '';
+    queueEl.innerHTML = queued.length
+      ? [
+        `<div class="queue-title">Queue (${queued.length})</div>`,
+        queued.map((a, i) => renderAgentPill(a, i, 'queued')).join(''),
+      ].join('')
+      : '';
   }
   const visibleCount = deskAgents.length + queued.length;
   const hiddenCount = Math.max(0, agents.length - visibleCount);
-  let info = `${visibleCount} agents visible`;
-  if (queued.length) info += ` (${queued.length} queued)`;
-  if (hiddenCount > 0) {
-    info += showCompleted ? ` — ${hiddenCount} completed evicted` : ` — ${hiddenCount} completed hidden`;
+  if (summaryEl) {
+    const summaryParts = [`${agents.length} total`];
+    if (queued.length) summaryParts.push(`${queued.length} queued`);
+    if (hiddenCount > 0) {
+      summaryParts.push(showCompleted ? `${hiddenCount} evicted` : `${hiddenCount} hidden`);
+    }
+    summaryEl.textContent = summaryParts.join(' • ');
   }
-  document.getElementById('info').textContent = info;
 }
 
-// drag & drop
-document.addEventListener('dragover', e => e.preventDefault());
-document.addEventListener('drop', e => {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
-        setAgents(nextAgents);
-        setHistoryEntries([]);
-      } catch(err) { alert('Invalid JSON'); }
-    };
-    reader.readAsText(file);
-  }
-});
 
 canvas.addEventListener('mousemove', e => {
   const { x, y } = getCanvasPoint(e);
@@ -3145,14 +3352,29 @@ canvas.addEventListener('wheel', e => {
   timelineScroll = clamp(timelineScroll + direction, 0, maxScroll);
 }, { passive: false });
 
+document.addEventListener('keydown', (e) => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const target = e.target;
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+  const key = e.key.toLowerCase();
+  if (key === 's') {
+    toggleSound();
+  } else if (key === 'c') {
+    cleanCompleted();
+  } else if (key === 'f') {
+    toggleFullscreen();
+  }
+});
+
 // start
 updateSoundButton();
 updateCompletedToggle();
 setCleanButtonState(false);
+updateConnectionIndicator();
 renderUsagePanel();
 requestAnimationFrame(render);
-// auto-connect to live server if available
-refreshFromLasso().then(ok => { if (ok) startPolling(); });
+// auto-connect to live server
+startPolling();
 </script>
 </body>
 </html>
