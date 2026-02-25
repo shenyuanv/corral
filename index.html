@@ -42,6 +42,8 @@
   .status-active { background: #2f9a3d; }
   .status-waiting { background: #d1a128; }
   .status-ci { background: #c13c3c; }
+  .status-merged { background: #d1a128; }
+  .status-exited { background: #6c6c6c; }
   .status-dead { background: #6c6c6c; }
 </style>
 </head>
@@ -726,7 +728,7 @@ function runtimeLabel(agent) {
   const ts = Date.parse(agent.createdAt);
   if (Number.isNaN(ts)) return 'Unknown';
   const diff = Math.max(0, Date.now() - ts);
-  const isDone = mapState(agent) === 'dead';
+  const isDone = isDoneState(mapState(agent));
   const verb = isDone ? 'Ran for' : 'Running for';
   return `${verb} ${formatDuration(diff)}`;
 }
@@ -777,9 +779,12 @@ function statusDotClass(agent) {
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
   const reaction = getReaction(agent);
-  if (mapState(agent) === 'dead') return 'status-dead';
+  const state = mapState(agent);
+  if (state === 'merged') return 'status-merged';
+  if (state === 'exited') return 'status-exited';
+  if (state === 'dead') return 'status-dead';
   if (reaction.ciEscalated || status.includes('ci_failed') || status.includes('failed')) return 'status-ci';
-  if (status.includes('pr_open') || status.includes('merged') || status.includes('ci') || activity.includes('stale') || mapState(agent) === 'waiting') {
+  if (status.includes('pr_open') || status.includes('merged') || status.includes('ci') || activity.includes('stale') || state === 'waiting') {
     return 'status-waiting';
   }
   return 'status-active';
@@ -964,6 +969,13 @@ function drawMonitorGlow(tileX, tileY, intensity) {
   ctx.restore();
 }
 
+function drawMonitorCheck(screenX, screenY, color) {
+  drawRect(screenX + 1, screenY + 2, 1, 1, color);
+  drawRect(screenX + 2, screenY + 3, 1, 1, color);
+  drawRect(screenX + 3, screenY + 2, 1, 1, color);
+  drawRect(screenX + 4, screenY + 1, 1, 1, color);
+}
+
 function drawMonitor(dx, dy, agent, state, frame) {
   const baseX = dx * TILE + 4;
   const baseY = dy * TILE;
@@ -971,9 +983,15 @@ function drawMonitor(dx, dy, agent, state, frame) {
   const ciRetries = Number(reaction.ciRetries || 0);
   const ciEscalated = !!reaction.ciEscalated;
   const active = state === 'coding';
-  const screenColor = ciEscalated
-    ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
-    : (active ? PAL.monitorScreenActive : PAL.monitorScreen);
+  const merged = state === 'merged';
+  const exited = state === 'exited';
+  const screenColor = merged
+    ? PAL.badgeGold
+    : (exited
+      ? PAL.monitorScreenCiDark
+      : (ciEscalated
+        ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
+        : (active ? PAL.monitorScreenActive : PAL.monitorScreen)));
 
   if (timeState && timeState.monitorGlow > 0 && agent && state !== 'dead') {
     drawMonitorGlow(dx, dy, timeState.monitorGlow);
@@ -983,10 +1001,14 @@ function drawMonitor(dx, dy, agent, state, frame) {
   drawRect(baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, screenColor);
   drawRect(baseX + (MONITOR.w - MONITOR.standW) / 2, baseY + MONITOR.h, MONITOR.standW, MONITOR.standH, PAL.monitor);
 
-  const textColor = ciEscalated ? '#ffe6e6' : (active ? '#0b2' : '#5fbf6a');
-  drawMonitorText(getMonitorText(agent), baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, frame, textColor);
+  if (merged) {
+    drawMonitorCheck(baseX + MONITOR.screenX, baseY + MONITOR.screenY, PAL.badgeGreen);
+  } else if (!exited) {
+    const textColor = ciEscalated ? '#ffe6e6' : (active ? '#0b2' : '#5fbf6a');
+    drawMonitorText(getMonitorText(agent), baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, frame, textColor);
+  }
 
-  if (ciRetries > 0) {
+  if (ciRetries > 0 && !merged && !exited) {
     drawFire(baseX + MONITOR.screenX, baseY + MONITOR.screenY, frame);
   }
 }
@@ -1002,6 +1024,14 @@ function drawDeskFlash(dx, dy, intensity) {
   ctx.restore();
 }
 
+function drawDeskTint(dx, dy, alpha = 0.35) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  drawRect(dx * TILE + 2, dy * TILE + 4, 14, 8, PAL.badgeGold);
+  drawRect(dx * TILE + 2, dy * TILE + 4, 14, 3, PAL.badgeGold);
+  ctx.restore();
+}
+
 function drawDesk(dx, dy, agent, state, frame, flash = 0) {
   if (timeState && timeState.lamp > 0 && agent && state !== 'dead') {
     drawLampGlow(dx, dy, timeState.lamp);
@@ -1009,6 +1039,9 @@ function drawDesk(dx, dy, agent, state, frame, flash = 0) {
   // desk surface
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 8, PAL.desk);
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 3, PAL.deskTop);
+  if (state === 'merged') {
+    drawDeskTint(dx, dy);
+  }
   // monitor
   drawMonitor(dx, dy, agent, state, frame);
   // chair (below desk)
@@ -1156,58 +1189,77 @@ function drawCharacter(tileX, tileY, colorIdx, state, frame, agentType) {
   const px = tileX * TILE;
   const py = tileY * TILE;
   const bob = Math.sin(frame * 0.15) > 0 ? 0 : 1;
+  const celebrating = state === 'merged';
+  const slumped = state === 'exited';
 
   // body offset (sitting = higher up to align with chair)
-  const sitting = state === 'coding' || state === 'reading' || state === 'waiting';
-  const oy = sitting ? -2 : bob;
+  const sitting = state === 'coding' || state === 'reading' || state === 'waiting' || celebrating || slumped;
+  const oy = sitting ? (celebrating ? -3 : (slumped ? -1 : -2)) : bob;
+  const ox = celebrating ? -1 : 0;
+  const headDrop = slumped ? 1 : 0;
 
   // legs
   if (!sitting) {
     const walk = state === 'walking';
     const legOff = walk ? (Math.sin(frame * 0.3) > 0 ? 1 : -1) : 0;
-    drawRect(px + 5, py + 11 + oy, 2, 4, c.pants);
-    drawRect(px + 9, py + 11 + oy + legOff, 2, 4, c.pants);
+    drawRect(px + 5 + ox, py + 11 + oy, 2, 4, c.pants);
+    drawRect(px + 9 + ox, py + 11 + oy + legOff, 2, 4, c.pants);
   } else {
     // seated legs forward
-    drawRect(px + 4, py + 11 + oy, 8, 2, c.pants);
+    drawRect(px + 4 + ox, py + 11 + oy, 8, 2, c.pants);
   }
 
   // torso
-  drawRect(px + 4, py + 6 + oy, 8, 5, c.shirt);
+  drawRect(px + 4 + ox, py + 6 + oy, 8, 5, c.shirt);
 
   // head
-  drawRect(px + 5, py + 1 + oy, 6, 5, c.skin);
+  drawRect(px + 5 + ox, py + 1 + oy + headDrop, 6, 5, c.skin);
   // hair
-  drawRect(px + 5, py + oy, 6, 2, c.hair);
+  drawRect(px + 5 + ox, py + oy + headDrop, 6, 2, c.hair);
   // hoodie hints
-  drawRect(px + 4, py + 3 + oy, 1, 2, c.shirt);
-  drawRect(px + 11, py + 3 + oy, 1, 2, c.shirt);
+  drawRect(px + 4 + ox, py + 3 + oy + headDrop, 1, 2, c.shirt);
+  drawRect(px + 11 + ox, py + 3 + oy + headDrop, 1, 2, c.shirt);
 
   // arms
   if (state === 'coding') {
     // arms forward (typing)
     const armBob = frame % 6 < 3 ? 0 : 1;
-    drawRect(px + 2, py + 7 + oy, 2, 3, c.shirt);
-    drawRect(px + 12, py + 7 + oy + armBob, 2, 3, c.shirt);
+    drawRect(px + 2 + ox, py + 7 + oy, 2, 3, c.shirt);
+    drawRect(px + 12 + ox, py + 7 + oy + armBob, 2, 3, c.shirt);
     // hands on desk
-    drawRect(px + 2, py + 10 + oy, 2, 1, c.skin);
-    drawRect(px + 12, py + 10 + oy + armBob, 2, 1, c.skin);
+    drawRect(px + 2 + ox, py + 10 + oy, 2, 1, c.skin);
+    drawRect(px + 12 + ox, py + 10 + oy + armBob, 2, 1, c.skin);
   } else if (state === 'reading') {
     // hand on chin
-    drawRect(px + 2, py + 7 + oy, 2, 4, c.shirt);
-    drawRect(px + 12, py + 7 + oy, 2, 2, c.shirt);
-    drawRect(px + 12, py + 5 + oy, 2, 2, c.skin); // hand near face
+    drawRect(px + 2 + ox, py + 7 + oy, 2, 4, c.shirt);
+    drawRect(px + 12 + ox, py + 7 + oy, 2, 2, c.shirt);
+    drawRect(px + 12 + ox, py + 5 + oy, 2, 2, c.skin); // hand near face
+  } else if (celebrating) {
+    // arms up (celebration pose)
+    drawRect(px + 2 + ox, py + 1 + oy, 2, 4, c.shirt);
+    drawRect(px + 12 + ox, py + 1 + oy, 2, 4, c.shirt);
+    drawRect(px + 2 + ox, py + oy, 2, 1, c.skin);
+    drawRect(px + 12 + ox, py + oy, 2, 1, c.skin);
+  } else if (slumped) {
+    // arms droop (exited)
+    drawRect(px + 2 + ox, py + 8 + oy, 2, 4, c.shirt);
+    drawRect(px + 12 + ox, py + 8 + oy, 2, 4, c.shirt);
+    drawRect(px + 2 + ox, py + 11 + oy, 2, 1, c.skin);
+    drawRect(px + 12 + ox, py + 11 + oy, 2, 1, c.skin);
   } else {
     // arms at sides
-    drawRect(px + 2, py + 6 + oy, 2, 4, c.shirt);
-    drawRect(px + 12, py + 6 + oy, 2, 4, c.shirt);
+    drawRect(px + 2 + ox, py + 6 + oy, 2, 4, c.shirt);
+    drawRect(px + 12 + ox, py + 6 + oy, 2, 4, c.shirt);
   }
 
   // eyes
   const blinking = frame % 60 < 3;
-  if (!blinking) {
-    drawRect(px + 6, py + 3 + oy, 1, 1, '#222');
-    drawRect(px + 9, py + 3 + oy, 1, 1, '#222');
+  if (slumped) {
+    drawRect(px + 6 + ox, py + 4 + oy + headDrop, 2, 1, '#222');
+    drawRect(px + 9 + ox, py + 4 + oy + headDrop, 2, 1, '#222');
+  } else if (!blinking) {
+    drawRect(px + 6 + ox, py + 3 + oy + headDrop, 1, 1, '#222');
+    drawRect(px + 9 + ox, py + 3 + oy + headDrop, 1, 1, '#222');
   }
 }
 
@@ -1353,7 +1405,7 @@ function drawStatusBar() {
   ctx.fillRect(0, y, CANVAS_W, S);
   ctx.fillStyle = '#888';
   ctx.font = '11px Courier New';
-  const running = agents.filter(a => mapState(a) !== 'dead').length;
+  const running = agents.filter(a => !isDoneState(mapState(a))).length;
   ctx.fillText(`🤠 Corral | ${agents.length} agents | ${running} active`, 8, y + 20);
   const totalTokens = agents.reduce((sum, agent) => {
     const tokens = getTokensUsed(agent);
@@ -1375,12 +1427,17 @@ function mapState(agent) {
   if (!agent) return 'idle';
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
-  if (status.includes('merged')) return 'dead';
-  if (status.includes('dead') || status.includes('exited') || activity.includes('exited') || activity.includes('dead')) return 'dead';
+  if (status.includes('merged') || activity.includes('merged')) return 'merged';
+  if (status.includes('exited') || activity.includes('exited')) return 'exited';
+  if (status.includes('dead') || activity.includes('dead')) return 'dead';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
   if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
   if (status.includes('working') || activity.includes('active')) return 'coding';
   return 'idle';
+}
+
+function isDoneState(state) {
+  return state === 'dead' || state === 'merged' || state === 'exited';
 }
 
 function stateLabel(state, agent) {
@@ -1388,12 +1445,9 @@ function stateLabel(state, agent) {
     case 'coding': return '⌨️ coding';
     case 'reading': return '📖 review';
     case 'waiting': return '⏳ waiting';
-    case 'dead': {
-      const s = (agent && agent.status || '').toLowerCase();
-      if (s.includes('merged')) return '🎉 merged';
-      if (s.includes('exited')) return '💀 exited';
-      return '💀 done';
-    }
+    case 'merged': return '🎉 merged';
+    case 'exited': return '💀 exited';
+    case 'dead': return '💀 done';
     default: return '💤 idle';
   }
 }
