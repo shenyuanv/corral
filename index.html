@@ -75,6 +75,9 @@ const DESK_GAP_X = 5;
 const DESK_GAP_Y = 3;
 const CANVAS_W = COLS * S;
 const CANVAS_H = ROWS * S + S; // extra row for status bar
+const DOOR_TILE = { x: 0, y: 6 };
+const WALK_SPEED = 2; // tiles per second
+const ENTER_STAGGER = 0.5; // seconds
 
 const canvas = document.getElementById('office');
 canvas.width = CANVAS_W;
@@ -149,6 +152,9 @@ let agents = [];
 let currentLayout = null;
 let hoveredDeskIndex = null;
 let hoveredSignature = '';
+let transitions = [];
+let hasInitialized = false;
+let lastRenderTime = null;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -232,6 +238,171 @@ function formatDuration(ms) {
   const mins = totalMins % 60;
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
+}
+
+function agentKey(agent, fallbackIndex) {
+  if (!agent) return `agent-${fallbackIndex}`;
+  const id = (agent.id || agent.label || agent.agentId || agent.name || '').toString().trim();
+  if (id) return id;
+  const repo = getRepoName(agent);
+  const issueId = getIssueId(agent);
+  const created = (agent.createdAt || '').toString().trim();
+  if (repo || issueId || created) return `${repo}#${issueId}-${created}`;
+  return `agent-${fallbackIndex}`;
+}
+
+function buildPath(start, end) {
+  const mid = { x: end.x, y: start.y };
+  const seg1 = Math.abs(mid.x - start.x) + Math.abs(mid.y - start.y);
+  const seg2 = Math.abs(end.x - mid.x) + Math.abs(end.y - mid.y);
+  return {
+    start: { ...start },
+    mid,
+    end: { ...end },
+    seg1,
+    seg2,
+    total: seg1 + seg2,
+  };
+}
+
+function positionAlongPath(path, dist) {
+  if (path.total === 0) return { x: path.end.x, y: path.end.y };
+  if (dist <= path.seg1) {
+    const dx = path.mid.x - path.start.x;
+    const dy = path.mid.y - path.start.y;
+    const stepX = dx === 0 ? 0 : Math.sign(dx) * dist;
+    const stepY = dy === 0 ? 0 : Math.sign(dy) * dist;
+    return { x: path.start.x + stepX, y: path.start.y + stepY };
+  }
+  const remaining = dist - path.seg1;
+  const dx = path.end.x - path.mid.x;
+  const dy = path.end.y - path.mid.y;
+  const stepX = dx === 0 ? 0 : Math.sign(dx) * remaining;
+  const stepY = dy === 0 ? 0 : Math.sign(dy) * remaining;
+  return { x: path.mid.x + stepX, y: path.mid.y + stepY };
+}
+
+function transitionPosition(transition, now) {
+  const progress = now < transition.startAt ? 0 : Math.min(transition.progress, transition.path.total);
+  return positionAlongPath(transition.path, progress);
+}
+
+function makeTransition({ key, agent, type, start, end, startAt, colorIdx }) {
+  return {
+    key,
+    agent,
+    type,
+    path: buildPath(start, end),
+    progress: 0,
+    startAt,
+    colorIdx,
+  };
+}
+
+function reverseTransition(transition, type, end, now) {
+  const start = transitionPosition(transition, now);
+  transition.type = type;
+  transition.path = buildPath(start, end);
+  transition.progress = 0;
+  transition.startAt = now;
+}
+
+function mapSlotsByKey(layout) {
+  const map = new Map();
+  layout.slots.forEach(slot => {
+    map.set(slot.key, slot);
+  });
+  return map;
+}
+
+function updateTransitions(now, dt) {
+  if (!transitions.length) return;
+  transitions = transitions.filter(transition => {
+    if (now < transition.startAt) return true;
+    if (transition.path.total === 0) return false;
+    if (dt > 0) {
+      transition.progress = Math.min(transition.path.total, transition.progress + dt * WALK_SPEED);
+    }
+    return transition.progress < transition.path.total;
+  });
+}
+
+function setAgents(nextAgents, { skipAnimation = false } = {}) {
+  const prevAgents = agents;
+  const prevLayout = buildLayout(prevAgents);
+  const nextLayout = buildLayout(nextAgents);
+  const prevSlotsByKey = mapSlotsByKey(prevLayout);
+  const nextSlotsByKey = mapSlotsByKey(nextLayout);
+  const now = performance.now();
+
+  if (!hasInitialized || skipAnimation) {
+    agents = nextAgents;
+    transitions = [];
+    hasInitialized = true;
+    updateAgentsList();
+    return;
+  }
+
+  transitions.forEach(transition => {
+    const nextSlot = nextSlotsByKey.get(transition.key);
+    if (transition.type === 'enter') {
+      const shouldExit = !nextSlot || mapState(nextSlot.agent) === 'dead';
+      if (shouldExit) {
+        reverseTransition(transition, 'exit', DOOR_TILE, now);
+      } else {
+        transition.agent = nextSlot.agent;
+      }
+      return;
+    }
+    if (transition.type === 'exit') {
+      if (nextSlot && mapState(nextSlot.agent) !== 'dead') {
+        reverseTransition(transition, 'enter', { x: nextSlot.desk.x, y: nextSlot.desk.y + 1 }, now);
+        transition.agent = nextSlot.agent;
+      } else if (nextSlot) {
+        transition.agent = nextSlot.agent;
+      }
+    }
+  });
+
+  const transitionKeys = new Set(transitions.map(transition => transition.key));
+  const enteringSlots = [];
+  nextSlotsByKey.forEach(slot => {
+    if (!prevSlotsByKey.has(slot.key)) enteringSlots.push(slot);
+  });
+  const exitingSlots = [];
+  prevSlotsByKey.forEach(slot => {
+    if (!nextSlotsByKey.has(slot.key)) exitingSlots.push(slot);
+  });
+
+  enteringSlots.forEach((slot, index) => {
+    if (transitionKeys.has(slot.key)) return;
+    transitions.push(makeTransition({
+      key: slot.key,
+      agent: slot.agent,
+      type: 'enter',
+      start: DOOR_TILE,
+      end: { x: slot.desk.x, y: slot.desk.y + 1 },
+      startAt: now + index * ENTER_STAGGER * 1000,
+      colorIdx: slot.idx,
+    }));
+  });
+
+  exitingSlots.forEach(slot => {
+    if (transitionKeys.has(slot.key)) return;
+    transitions.push(makeTransition({
+      key: slot.key,
+      agent: slot.agent,
+      type: 'exit',
+      start: { x: slot.desk.x, y: slot.desk.y + 1 },
+      end: DOOR_TILE,
+      startAt: now,
+      colorIdx: slot.idx,
+    }));
+  });
+
+  agents = nextAgents;
+  hasInitialized = true;
+  updateAgentsList();
 }
 
 function runtimeLabel(agent) {
@@ -347,18 +518,18 @@ function coffeeCount(agent) {
 function buildLayout(list) {
   const groups = [];
   const byRepo = new Map();
-  list.forEach(agent => {
+  list.forEach((agent, index) => {
     const repo = getRepoName(agent) || 'unknown';
     if (!byRepo.has(repo)) {
       const g = { repo, agents: [] };
       byRepo.set(repo, g);
       groups.push(g);
     }
-    byRepo.get(repo).agents.push(agent);
+    byRepo.get(repo).agents.push({ agent, repo, index });
   });
 
   const ordered = [];
-  groups.forEach(group => group.agents.forEach(agent => ordered.push({ agent, repo: group.repo })));
+  groups.forEach(group => group.agents.forEach(item => ordered.push(item)));
 
   const slots = [];
   const deskAgents = new Array(DESKS.length).fill(null);
@@ -369,7 +540,8 @@ function buildLayout(list) {
     const desk = DESKS[i];
     const row = Math.floor(i / DESK_COLS);
     const col = i % DESK_COLS;
-    const slot = { ...item, idx: i, desk, row, col };
+    const key = agentKey(item.agent, item.index);
+    const slot = { ...item, idx: i, desk, row, col, key };
     slots.push(slot);
     deskAgents[i] = slot;
     if (!firstIndex.has(item.repo)) firstIndex.set(item.repo, i);
@@ -403,6 +575,13 @@ function drawFloor() {
     fillTile(x, 0, PAL.wall);
     drawRect(x * TILE, 0, TILE, 4, PAL.wallTop);
   }
+}
+
+function drawDoor() {
+  const px = DOOR_TILE.x * TILE;
+  const py = DOOR_TILE.y * TILE;
+  drawRect(px + 1, py + 1, 14, 14, '#7a4b1f');
+  drawRect(px + 11, py + 8, 2, 2, '#d8c28a');
 }
 
 function drawMonitor(dx, dy, agent, state, frame) {
@@ -768,13 +947,19 @@ function hideTooltip() {
 
 // === MAIN RENDER LOOP ===
 let frame = 0;
-function render() {
+function render(now) {
+  if (lastRenderTime === null) lastRenderTime = now;
+  const dt = Math.min(0.05, (now - lastRenderTime) / 1000);
+  lastRenderTime = now;
   frame++;
+  updateTransitions(now, dt);
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawFloor();
+  drawDoor();
 
   const layout = buildLayout(agents);
   currentLayout = layout;
+  const transitionByKey = new Map(transitions.map(transition => [transition.key, transition]));
 
   layout.dividers.forEach(divider => drawGroupDivider(divider.left.desk, divider.right.desk));
 
@@ -782,8 +967,10 @@ function render() {
   DESKS.forEach((d, i) => {
     const slot = layout.deskAgents[i];
     const agent = slot ? slot.agent : null;
-    const state = agent ? mapState(agent) : 'idle';
-    drawDesk(d.x, d.y, agent, state, frame);
+    const transition = slot ? transitionByKey.get(slot.key) : null;
+    const deskAgent = transition ? null : agent;
+    const state = deskAgent ? mapState(deskAgent) : 'idle';
+    drawDesk(d.x, d.y, deskAgent, state, frame);
   });
 
   // decorative plants
@@ -797,9 +984,11 @@ function render() {
   layout.slots.forEach((slot, i) => {
     const agent = slot.agent;
     const desk = slot.desk;
+    const transition = transitionByKey.get(slot.key);
+    if (transition) return;
     const state = mapState(agent);
     if (state === 'dead') return; // ghost desk
-    drawCharacter(desk.x, desk.y + 1, i, state, frame, resolveAgentType(agent));
+    drawCharacter(desk.x, desk.y + 1, slot.idx, state, frame, resolveAgentType(agent));
     drawTokenBar(desk.x, desk.y + 1, getTokensUsed(agent));
     const prNumber = agent ? agent.prNumber : null;
     const status = (agent.status || '').toLowerCase();
@@ -813,6 +1002,13 @@ function render() {
     drawBubble(desk.x, desk.y, label, state === 'waiting' ? '#ff0' : '#fff');
   });
 
+  // draw transitions
+  transitions.forEach(transition => {
+    if (now < transition.startAt) return;
+    const pos = transitionPosition(transition, now);
+    drawCharacter(pos.x, pos.y, transition.colorIdx, 'walking', frame, resolveAgentType(transition.agent));
+  });
+
   drawStatusBar();
   requestAnimationFrame(render);
 }
@@ -820,7 +1016,7 @@ function render() {
 // === DATA LOADING ===
 function loadDemo() {
   const now = Date.now();
-  agents = [
+  const demoAgents = [
     {
       id: 'codex-1',
       repo: 'zall',
@@ -876,7 +1072,7 @@ function loadDemo() {
       createdAt: new Date(now - 90 * 60 * 1000).toISOString(),
     },
   ];
-  updateAgentsList();
+  setAgents(demoAgents);
 }
 
 function loadAgentsFile() {
@@ -890,8 +1086,8 @@ function handleFile(e) {
   reader.onload = (ev) => {
     try {
       const data = JSON.parse(ev.target.result);
-      agents = Array.isArray(data) ? data : (data.sessions || []);
-      updateAgentsList();
+      const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
+      setAgents(nextAgents);
     } catch(err) { alert('Invalid JSON'); }
   };
   reader.readAsText(file);
@@ -901,8 +1097,8 @@ async function refreshFromLasso() {
   try {
     const resp = await fetch('/api/agents');
     const data = await resp.json();
-    agents = Array.isArray(data) ? data : (data.sessions || []);
-    updateAgentsList();
+    const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
+    setAgents(nextAgents);
     return true;
   } catch(e) {
     document.getElementById('info').textContent = 'Server not running — start with: node server.js';
@@ -948,8 +1144,8 @@ document.addEventListener('drop', e => {
     reader.onload = ev => {
       try {
         const data = JSON.parse(ev.target.result);
-        agents = Array.isArray(data) ? data : (data.sessions || []);
-        updateAgentsList();
+        const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
+        setAgents(nextAgents);
       } catch(err) { alert('Invalid JSON'); }
     };
     reader.readAsText(file);
@@ -969,6 +1165,10 @@ canvas.addEventListener('mousemove', e => {
     hideTooltip();
     return;
   }
+  if (transitions.some(transition => transition.key === slot.key)) {
+    hideTooltip();
+    return;
+  }
   hoveredDeskIndex = idx;
   showTooltip(slot.agent, e.clientX, e.clientY);
 });
@@ -981,12 +1181,16 @@ canvas.addEventListener('click', e => {
   if (idx === null || idx === undefined) return;
   const agent = agents[idx];
   if (!agent) return;
+  if (currentLayout) {
+    const slot = currentLayout.deskAgents[idx];
+    if (slot && transitions.some(transition => transition.key === slot.key)) return;
+  }
   const url = getAgentUrl(agent);
   if (url) window.open(url, '_blank');
 });
 
 // start
-render();
+requestAnimationFrame(render);
 // auto-connect to live server if available
 refreshFromLasso().then(ok => { if (ok) startPolling(); });
 </script>
