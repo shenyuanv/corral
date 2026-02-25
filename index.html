@@ -82,7 +82,9 @@ const OFFICE_H = ROWS * S;
 const TIMELINE_MAX_ROWS = 20;
 const TIMELINE_ROW_HEIGHT = 12;
 const TIMELINE_BAR_HEIGHT = 4;
-const TIMELINE_HEADER_HEIGHT = 18;
+const TIMELINE_LEGEND_HEIGHT = 14;
+const TIMELINE_AXIS_HEIGHT = 14;
+const TIMELINE_HEADER_HEIGHT = TIMELINE_LEGEND_HEIGHT + TIMELINE_AXIS_HEIGHT;
 const TIMELINE_PADDING = 8;
 const TIMELINE_LABEL_WIDTH = 150;
 const TIMELINE_HEIGHT = TIMELINE_HEADER_HEIGHT + TIMELINE_PADDING * 2 + TIMELINE_ROW_HEIGHT * TIMELINE_MAX_ROWS;
@@ -1711,7 +1713,7 @@ function drawTimeline(now) {
   ctx.fillStyle = '#0b0b12';
   ctx.fillRect(0, y, CANVAS_W, TIMELINE_HEADER_HEIGHT);
 
-  drawTimelineLegend(12, y + Math.floor(TIMELINE_HEADER_HEIGHT / 2));
+  drawTimelineLegend(12, y + Math.floor(TIMELINE_LEGEND_HEIGHT / 2));
 
   const { start, end, range } = computeTimelineWindow(entries, now);
   const tickMs = chooseTickMs(range);
@@ -1719,6 +1721,9 @@ function drawTimeline(now) {
   const barW = CANVAS_W - TIMELINE_LABEL_WIDTH - TIMELINE_PADDING;
   const contentTop = y + TIMELINE_HEADER_HEIGHT + TIMELINE_PADDING;
   const contentHeight = TIMELINE_HEIGHT - TIMELINE_HEADER_HEIGHT - TIMELINE_PADDING * 2;
+  const axisTop = y + TIMELINE_LEGEND_HEIGHT;
+  const axisLabelY = axisTop + TIMELINE_AXIS_HEIGHT - 4;
+  const axisLineY = axisTop + TIMELINE_AXIS_HEIGHT - 2;
 
   ctx.save();
   ctx.beginPath();
@@ -1745,7 +1750,7 @@ function drawTimeline(now) {
   ctx.restore();
 
   ctx.fillStyle = TIMELINE_COLORS.axis;
-  ctx.fillRect(barX, y + TIMELINE_HEADER_HEIGHT - 2, barW, 2);
+  ctx.fillRect(barX, axisLineY, barW, 2);
   ctx.fillRect(barX - 1, contentTop, 1, contentHeight);
 
   ctx.fillStyle = TIMELINE_COLORS.label;
@@ -1754,7 +1759,7 @@ function drawTimeline(now) {
   for (let t = Math.ceil(start / tickMs) * tickMs; t <= end; t += tickMs) {
     const x = barX + ((t - start) / range) * barW;
     const label = formatTimelineTime(t);
-    ctx.fillText(label, x - ctx.measureText(label).width / 2, y + TIMELINE_HEADER_HEIGHT - 4);
+    ctx.fillText(label, x - ctx.measureText(label).width / 2, axisLabelY);
   }
 
   const visibleEntries = entries.slice(timelineScroll, timelineScroll + TIMELINE_MAX_ROWS);
