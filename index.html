@@ -93,6 +93,7 @@ const CANVAS_H = OFFICE_H + TIMELINE_HEIGHT + S; // office + timeline + status b
 const DOOR_TILE = { x: 0, y: 6 };
 const WALK_SPEED = 2; // tiles per second
 const ENTER_STAGGER = 0.5; // seconds
+const TOMBSTONE_FADE_MS = 30 * 60 * 1000;
 const CONFETTI_COUNT_MIN = 20;
 const CONFETTI_COUNT_MAX = 30;
 const CONFETTI_SIZE = 2; // base pixels
@@ -140,6 +141,10 @@ const BASE_PAL = {
   tokenYellow: '#d1a128',
   tokenRed: '#c13c3c',
   tokenBg: '#0b0b12',
+  tombstone: '#6c6c6c',
+  tombstoneDark: '#4a4a4a',
+  tombstoneLight: '#8b8b8b',
+  tombstoneText: '#e0dfd8',
 };
 let PAL = { ...BASE_PAL };
 
@@ -247,6 +252,9 @@ let timeState = null;
 let windowStars = [];
 let windowStarSeed = null;
 let previousAgentsByKey = new Map();
+let tombstones = [];
+const tombstonesByKey = new Map();
+const tombstonesByDesk = new Map();
 let historyEntries = [];
 let timelineEntries = [];
 let timelineLayout = null;
@@ -565,6 +573,81 @@ function formatDuration(ms) {
   return `${mins}m`;
 }
 
+function tombstoneLabel(agent) {
+  if (!agent) return 'unknown';
+  const repo = getRepoName(agent);
+  const issueId = getIssueId(agent);
+  if (repo && issueId) return `${repo}#${issueId}`;
+  return repo || agent.id || agent.label || 'unknown';
+}
+
+function tombstoneDuration(agent, deadAt, nowMs) {
+  if (!agent) return '0m';
+  const createdAt = coerceMs(agent.createdAt) || deadAt || nowMs;
+  const endAt = deadAt || nowMs;
+  return formatDuration(Math.max(0, endAt - createdAt));
+}
+
+function tombstoneAlpha(tombstone, nowMs) {
+  const age = nowMs - tombstone.deadAt;
+  if (age <= 0) return 1;
+  return clamp(1 - age / TOMBSTONE_FADE_MS, 0, 1);
+}
+
+function buildTombstone(agent, slot, nowMs) {
+  if (!agent || !slot) return null;
+  const deadAt = coerceMs(agent.endedAt || agent.ended_at) || nowMs;
+  if (nowMs - deadAt >= TOMBSTONE_FADE_MS) return null;
+  return {
+    key: agentKey(agent, slot.idx),
+    deskIndex: slot.idx,
+    desk: slot.desk,
+    label: tombstoneLabel(agent),
+    duration: tombstoneDuration(agent, deadAt, nowMs),
+    deadAt,
+  };
+}
+
+function addTombstone(tombstone, nowMs) {
+  if (!tombstone) return;
+  if (tombstonesByKey.has(tombstone.key)) return;
+  if (nowMs - tombstone.deadAt >= TOMBSTONE_FADE_MS) return;
+  const existing = tombstonesByDesk.get(tombstone.deskIndex);
+  if (existing) removeTombstoneByKey(existing.key);
+  tombstones.push(tombstone);
+  tombstonesByKey.set(tombstone.key, tombstone);
+  tombstonesByDesk.set(tombstone.deskIndex, tombstone);
+}
+
+function removeTombstoneByKey(key) {
+  const existing = tombstonesByKey.get(key);
+  if (!existing) return;
+  tombstonesByKey.delete(key);
+  if (tombstonesByDesk.get(existing.deskIndex) === existing) {
+    tombstonesByDesk.delete(existing.deskIndex);
+  }
+  tombstones = tombstones.filter(tombstone => tombstone.key !== key);
+}
+
+function removeTombstoneAtDesk(deskIndex) {
+  const existing = tombstonesByDesk.get(deskIndex);
+  if (existing) removeTombstoneByKey(existing.key);
+}
+
+function pruneTombstones(nowMs) {
+  if (!tombstones.length) return;
+  tombstones = tombstones.filter(tombstone => {
+    const alive = nowMs - tombstone.deadAt < TOMBSTONE_FADE_MS;
+    if (!alive) {
+      tombstonesByKey.delete(tombstone.key);
+      if (tombstonesByDesk.get(tombstone.deskIndex) === tombstone) {
+        tombstonesByDesk.delete(tombstone.deskIndex);
+      }
+    }
+    return alive;
+  });
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -704,7 +787,7 @@ function transitionPosition(transition, now) {
   return positionAlongPath(transition.path, progress);
 }
 
-function makeTransition({ key, agent, type, start, end, startAt, colorIdx }) {
+function makeTransition({ key, agent, type, start, end, startAt, colorIdx, tombstone = null }) {
   return {
     key,
     agent,
@@ -713,15 +796,17 @@ function makeTransition({ key, agent, type, start, end, startAt, colorIdx }) {
     progress: 0,
     startAt,
     colorIdx,
+    tombstone,
   };
 }
 
-function reverseTransition(transition, type, end, now) {
+function reverseTransition(transition, type, end, now, tombstone = null) {
   const start = transitionPosition(transition, now);
   transition.type = type;
   transition.path = buildPath(start, end);
   transition.progress = 0;
   transition.startAt = now;
+  transition.tombstone = tombstone;
 }
 
 function mapSlotsByKey(layout) {
@@ -742,14 +827,27 @@ function storePreviousAgents(list) {
 
 function updateTransitions(now, dt) {
   if (!transitions.length) return;
-  transitions = transitions.filter(transition => {
-    if (now < transition.startAt) return true;
-    if (transition.path.total === 0) return false;
+  const nowMs = Date.now();
+  const next = [];
+  transitions.forEach(transition => {
+    if (now < transition.startAt) {
+      next.push(transition);
+      return;
+    }
+    if (transition.path.total === 0) {
+      if (transition.tombstone) addTombstone(transition.tombstone, nowMs);
+      return;
+    }
     if (dt > 0) {
       transition.progress = Math.min(transition.path.total, transition.progress + dt * WALK_SPEED);
     }
-    return transition.progress < transition.path.total;
+    if (transition.progress >= transition.path.total) {
+      if (transition.tombstone) addTombstone(transition.tombstone, nowMs);
+      return;
+    }
+    next.push(transition);
   });
+  transitions = next;
 }
 
 function setAgents(nextAgents, { skipAnimation = false } = {}) {
@@ -759,6 +857,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   const prevSlotsByKey = mapSlotsByKey(prevLayout);
   const nextSlotsByKey = mapSlotsByKey(nextLayout);
   const now = performance.now();
+  const nowMs = Date.now();
   if (hasInitialized && previousAgentsByKey.size > 0) {
     nextLayout.slots.forEach(slot => {
       const key = slot.key;
@@ -776,6 +875,11 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
     agents = nextAgents;
     transitions = [];
     hasInitialized = true;
+    nextLayout.slots.forEach(slot => {
+      if (mapState(slot.agent) === 'dead') {
+        addTombstone(buildTombstone(slot.agent, slot, nowMs), nowMs);
+      }
+    });
     updateAgentsList();
     storePreviousAgents(nextAgents);
     updateTimelineEntries();
@@ -785,9 +889,11 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   transitions.forEach(transition => {
     const nextSlot = nextSlotsByKey.get(transition.key);
     if (transition.type === 'enter') {
-      const shouldExit = !nextSlot || mapState(nextSlot.agent) === 'dead';
+      const nextState = nextSlot ? mapState(nextSlot.agent) : null;
+      const shouldExit = !nextSlot || nextState === 'dead';
       if (shouldExit) {
-        reverseTransition(transition, 'exit', DOOR_TILE, now);
+        const tombstone = (nextSlot && nextState === 'dead') ? buildTombstone(nextSlot.agent, nextSlot, nowMs) : null;
+        reverseTransition(transition, 'exit', DOOR_TILE, now, tombstone);
       } else {
         transition.agent = nextSlot.agent;
       }
@@ -795,7 +901,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
     }
     if (transition.type === 'exit') {
       if (nextSlot && mapState(nextSlot.agent) !== 'dead') {
-        reverseTransition(transition, 'enter', { x: nextSlot.desk.x, y: nextSlot.desk.y + 1 }, now);
+        reverseTransition(transition, 'enter', { x: nextSlot.desk.x, y: nextSlot.desk.y + 1 }, now, null);
         transition.agent = nextSlot.agent;
       } else if (nextSlot) {
         transition.agent = nextSlot.agent;
@@ -804,6 +910,15 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   });
 
   const transitionKeys = new Set(transitions.map(transition => transition.key));
+  const deathSlots = [];
+  nextSlotsByKey.forEach(slot => {
+    const prevSlot = prevSlotsByKey.get(slot.key);
+    if (!prevSlot) return;
+    if (mapState(prevSlot.agent) === 'dead') return;
+    if (mapState(slot.agent) === 'dead') {
+      deathSlots.push({ slot, prevSlot });
+    }
+  });
   const enteringSlots = [];
   nextSlotsByKey.forEach(slot => {
     if (!prevSlotsByKey.has(slot.key)) enteringSlots.push(slot);
@@ -813,8 +928,28 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
     if (!nextSlotsByKey.has(slot.key)) exitingSlots.push(slot);
   });
 
+  deathSlots.forEach(({ slot, prevSlot }) => {
+    if (transitionKeys.has(slot.key)) return;
+    transitions.push(makeTransition({
+      key: slot.key,
+      agent: slot.agent,
+      type: 'exit',
+      start: { x: prevSlot.desk.x, y: prevSlot.desk.y + 1 },
+      end: DOOR_TILE,
+      startAt: now,
+      colorIdx: prevSlot.idx,
+      tombstone: buildTombstone(slot.agent, prevSlot, nowMs),
+    }));
+    transitionKeys.add(slot.key);
+  });
+
   enteringSlots.forEach((slot, index) => {
     if (transitionKeys.has(slot.key)) return;
+    if (mapState(slot.agent) === 'dead') {
+      // Agent arrived already dead — place tombstone, no walking
+      addTombstone(buildTombstone(slot.agent, slot, nowMs), nowMs);
+      return;
+    }
     transitions.push(makeTransition({
       key: slot.key,
       agent: slot.agent,
@@ -828,6 +963,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
 
   exitingSlots.forEach(slot => {
     if (transitionKeys.has(slot.key)) return;
+    const tombstone = mapState(slot.agent) === 'dead' ? buildTombstone(slot.agent, slot, nowMs) : null;
     transitions.push(makeTransition({
       key: slot.key,
       agent: slot.agent,
@@ -836,6 +972,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
       end: DOOR_TILE,
       startAt: now,
       colorIdx: slot.idx,
+      tombstone,
     }));
   });
 
@@ -1178,6 +1315,52 @@ function drawDesk(dx, dy, agent, state, frame, flash = 0) {
   if (flash > 0) {
     drawDeskFlash(dx, dy, flash);
   }
+}
+
+function drawTombstoneLabel(dx, dy, tombstone, alpha) {
+  if (!tombstone) return;
+  const lines = [tombstone.label, tombstone.duration];
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = '9px Courier New';
+  const padding = 4;
+  const lineHeight = 10;
+  let textWidth = 0;
+  lines.forEach(line => {
+    textWidth = Math.max(textWidth, ctx.measureText(line).width);
+  });
+  const w = textWidth + padding * 2;
+  const h = lines.length * lineHeight + 4;
+  const x = (dx * TILE + 8) * SCALE - w / 2;
+  const y = (dy * TILE - 6) * SCALE - h;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = PAL.tombstoneText;
+  ctx.textAlign = 'center';
+  lines.forEach((line, idx) => {
+    ctx.fillText(line, x + w / 2, y + 10 + idx * lineHeight);
+  });
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+function drawTombstone(dx, dy, tombstone, nowMs) {
+  if (!tombstone) return;
+  const alpha = tombstoneAlpha(tombstone, nowMs);
+  if (alpha <= 0) return;
+  const baseX = dx * TILE + 5;
+  const baseY = (dy + 1) * TILE + 1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  drawRect(baseX + 1, baseY, 4, 1, PAL.tombstoneLight);
+  drawRect(baseX, baseY + 1, 6, 5, PAL.tombstone);
+  drawRect(baseX, baseY + 1, 1, 5, PAL.tombstoneDark);
+  drawRect(baseX + 5, baseY + 1, 1, 5, PAL.tombstoneDark);
+  drawRect(baseX + 1, baseY + 6, 4, 1, PAL.tombstoneDark);
+  drawRect(baseX + 2, baseY + 3, 2, 1, PAL.tombstoneLight);
+  drawRect(baseX + 2, baseY + 4, 2, 1, PAL.tombstoneLight);
+  ctx.restore();
+  drawTombstoneLabel(dx, dy, tombstone, alpha);
 }
 
 function drawCoffeeCups(dx, dy, count, frame) {
@@ -2028,6 +2211,8 @@ function render(now) {
   frame++;
   updateTransitions(now, dt);
   updateCelebrations(now, dt);
+  const nowMs = Date.now();
+  pruneTombstones(nowMs);
   const nowTime = new Date();
   timeState = getTimeState(nowTime.getHours(), nowTime.getMinutes());
   PAL = timeState.palette;
@@ -2046,10 +2231,20 @@ function render(now) {
     const slot = layout.deskAgents[i];
     const agent = slot ? slot.agent : null;
     const transition = slot ? transitionByKey.get(slot.key) : null;
-    const deskAgent = transition ? null : agent;
-    const state = deskAgent ? mapState(deskAgent) : 'idle';
+    let deskAgent = transition ? null : agent;
+    let state = deskAgent ? mapState(deskAgent) : 'idle';
+    if (state === 'dead') {
+      deskAgent = null;
+      state = 'idle';
+    }
     const flash = slot ? celebrationFlashIntensity(slot.key, now) : 0;
     drawDesk(d.x, d.y, deskAgent, state, frame, flash);
+    const tombstone = tombstonesByDesk.get(i);
+    if ((deskAgent || transition) && tombstone) {
+      removeTombstoneAtDesk(i);
+    } else if (!deskAgent && !transition && tombstone) {
+      drawTombstone(d.x, d.y, tombstone, nowMs);
+    }
   });
 
   // decorative plants
@@ -2158,6 +2353,17 @@ function loadDemo() {
       tokensUsed: 3220,
       createdAt: new Date(now - 90 * 60 * 1000).toISOString(),
     },
+    {
+      id: 'claude-6',
+      repo: 'corral',
+      issueId: '3',
+      issueTitle: 'Fix liveness check',
+      status: 'exited',
+      agentType: 'claude',
+      tokensUsed: 45200,
+      createdAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(now - 10 * 60 * 1000).toISOString(),
+    },
   ];
   const demoHistory = demoAgents.map((agent) => {
     const createdAt = agent.createdAt;
@@ -2174,9 +2380,10 @@ function loadDemo() {
     if ((agent.status || '').includes('merged')) {
       statusHistory.push({ status: 'merged', activity: '', at: new Date(createdTs + 70 * 60 * 1000).toISOString() });
     }
-    const endedAt = statusHistory[statusHistory.length - 1].status === 'merged'
-      ? statusHistory[statusHistory.length - 1].at
-      : null;
+    const endedAt = agent.endedAt
+      || (statusHistory[statusHistory.length - 1].status === 'merged'
+        ? statusHistory[statusHistory.length - 1].at
+        : null);
     return {
       id: agent.id,
       repo: agent.repo,
