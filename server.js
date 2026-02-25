@@ -12,6 +12,8 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const TOKEN_CACHE_TTL_MS = 10 * 1000;
 const USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const USAGE_SCRIPT_TIMEOUT_MS = 15000;
+const LASSO_CLEAN_TIMEOUT_MS = 15000;
+const LASSO_BIN = process.env.LASSO_BIN || 'lasso';
 const DEFAULT_CLAUDE_USAGE_SCRIPT = process.env.HOME
   ? path.join(process.env.HOME, 'clawd/scripts/claude-usage-report.sh')
   : null;
@@ -72,6 +74,20 @@ const ENDED_AT_KEYS = [
 
 const tokenCache = new Map();
 const usageCache = { ts: 0, data: null, pending: null };
+
+function runLassoClean() {
+  return new Promise((resolve, reject) => {
+    execFile(LASSO_BIN, ['clean'], { timeout: LASSO_CLEAN_TIMEOUT_MS }, (err, stdout, stderr) => {
+      if (err) {
+        const message = stderr && stderr.trim() ? stderr.trim() : err.message;
+        const error = new Error(message || 'lasso clean failed');
+        error.code = err.code;
+        return reject(error);
+      }
+      return resolve({ stdout: (stdout || '').trim(), stderr: (stderr || '').trim() });
+    });
+  });
+}
 
 function normalizePid(pid) {
   if (Number.isInteger(pid) && pid > 0) return pid;
@@ -765,6 +781,14 @@ async function getLassoStatus() {
 const server = http.createServer((req, res) => {
   // CORS for local dev
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   if (req.url === '/api/agents') {
     getLassoStatus()
@@ -806,6 +830,24 @@ const server = http.createServer((req, res) => {
       .catch((err) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message, history: [] }));
+      });
+    return;
+  }
+
+  if (req.url === '/api/clean') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Method not allowed' }));
+      return;
+    }
+    runLassoClean()
+      .then((result) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ...result }));
+      })
+      .catch((err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message || 'lasso clean failed' }));
       });
     return;
   }
