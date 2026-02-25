@@ -19,6 +19,7 @@
   button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; }
   button:hover { background: #444; }
   button.active { background: #4a4a4a; border-color: #7a7a7a; color: #f0c040; }
+  button:disabled { opacity: 0.6; cursor: default; }
   #usage-panel {
     margin-top: 12px;
     width: 640px;
@@ -88,6 +89,10 @@
   .status-merged { background: #d1a128; }
   .status-exited { background: #6c6c6c; }
   .status-dead { background: #6c6c6c; }
+  #queue-list { margin-top: 8px; font-size: 11px; max-width: 640px; color: #9aa0b5; }
+  .queue-title { margin-top: 8px; color: #f0c040; font-weight: bold; }
+  .queue-row { display: flex; gap: 8px; padding: 2px 0; }
+  .queue-label { color: #d1a128; min-width: 80px; }
 </style>
 </head>
 <body>
@@ -101,6 +106,8 @@
   <button onclick="refreshFromLasso()">Refresh</button>
   <button onclick="startPolling()">▶ Live</button>
   <button onclick="stopPolling()">⏹ Stop</button>
+  <button id="cleanButton" onclick="cleanCompleted()">🧹 Clean</button>
+  <button id="completedToggle" onclick="toggleCompleted()">✅ Show completed</button>
   <button id="soundToggle" onclick="toggleSound()">🔇 Sound</button>
 </div>
 <div id="usage-panel" aria-live="polite">
@@ -111,6 +118,7 @@
   <div id="usage-cards"></div>
 </div>
 <div id="agents-list"></div>
+<div id="queue-list"></div>
 
 <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFile(event)">
 
@@ -324,6 +332,8 @@ const celebrationByKey = new Map();
 let soundEnabled = false;
 let audioCtx = null;
 let usageLastFetch = 0;
+let showCompleted = true;
+let cleaning = false;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -514,6 +524,26 @@ function updateSoundButton() {
   btn.classList.toggle('active', soundEnabled);
 }
 
+function updateCompletedToggle() {
+  const btn = document.getElementById('completedToggle');
+  if (!btn) return;
+  btn.textContent = showCompleted ? '✅ Show completed' : '⬜ Show completed';
+  btn.classList.toggle('active', showCompleted);
+}
+
+function toggleCompleted() {
+  showCompleted = !showCompleted;
+  updateCompletedToggle();
+  updateAgentsList();
+}
+
+function setCleanButtonState(isCleaning) {
+  const btn = document.getElementById('cleanButton');
+  if (!btn) return;
+  btn.disabled = isCleaning;
+  btn.textContent = isCleaning ? '🧹 Cleaning...' : '🧹 Clean';
+}
+
 function initAudio() {
   if (!audioCtx) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -548,6 +578,26 @@ function playDing() {
   gain.connect(audioCtx.destination);
   osc.start(t);
   osc.stop(t + 0.32);
+}
+
+async function cleanCompleted() {
+  if (cleaning) return;
+  cleaning = true;
+  setCleanButtonState(true);
+  showCompleted = false;
+  updateCompletedToggle();
+  updateAgentsList();
+  try {
+    const resp = await fetch('/api/clean', { method: 'POST' });
+    if (!resp.ok) throw new Error(`Clean failed (${resp.status})`);
+    await refreshFromLasso();
+  } catch (err) {
+    const info = document.getElementById('info');
+    if (info) info.textContent = `Clean failed — ${err.message}`;
+  } finally {
+    cleaning = false;
+    setCleanButtonState(false);
+  }
 }
 
 // === DATA HELPERS ===
@@ -597,6 +647,26 @@ function isMergedStatus(agent) {
   const activity = (agent.activity || '').toLowerCase();
   return status.includes('merged') || activity.includes('merged');
 }
+
+function completionCategory(agent) {
+  if (!agent) return null;
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  if (status.includes('merged') || activity.includes('merged')) return 'merged';
+  if (
+    status.includes('exited') ||
+    activity.includes('exited') ||
+    status.includes('archived') ||
+    activity.includes('archived') ||
+    status.includes('dead') ||
+    activity.includes('dead')
+  ) {
+    return 'exited';
+  }
+  if (agent.endedAt || agent.ended_at) return 'exited';
+  return null;
+}
+
 
 function getAgentUrl(agent) {
   if (!agent) return '';
@@ -721,6 +791,46 @@ function coerceMs(value) {
     if (!Number.isNaN(parsed)) return parsed;
   }
   return null;
+}
+
+function pickTimestamp(agent, keys) {
+  if (!agent) return null;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(agent, key)) continue;
+    const ts = coerceMs(agent[key]);
+    if (ts) return ts;
+  }
+  return null;
+}
+
+const COMPLETED_TIME_KEYS = [
+  'endedAt',
+  'ended_at',
+  'mergedAt',
+  'merged_at',
+  'completedAt',
+  'completed_at',
+  'finishedAt',
+  'finished_at',
+  'closedAt',
+  'closed_at',
+];
+const COMPLETED_FALLBACK_KEYS = [
+  'lastUpdatedAt',
+  'updatedAt',
+  'updated_at',
+  'lastSeenAlive',
+  'last_seen_alive',
+  'lastHeartbeat',
+  'last_heartbeat',
+  'createdAt',
+  'created_at',
+];
+
+function completionTimestamp(agent) {
+  return pickTimestamp(agent, COMPLETED_TIME_KEYS)
+    || pickTimestamp(agent, COMPLETED_FALLBACK_KEYS)
+    || 0;
 }
 
 function normalizeHistoryEntry(entry) {
@@ -1287,16 +1397,57 @@ function coffeeCount(agent) {
 }
 
 function buildLayout(list) {
+  const items = list.map((agent, index) => {
+    const repo = getRepoName(agent) || 'unknown';
+    const state = mapState(agent);
+    const category = completionCategory(agent);
+    return {
+      agent,
+      repo,
+      index,
+      state,
+      category,
+      completedAt: completionTimestamp(agent),
+      key: agentKey(agent, index),
+    };
+  });
+
+  const activeItems = items.filter(item => !isDoneState(item.state));
+  const mergedItems = items.filter(item => item.category === 'merged');
+  const exitedItems = items.filter(item => item.category === 'exited');
+  const completedItems = items.filter(item => item.category);
+
+  const includeKeys = new Set(activeItems.map(item => item.key));
+  if (showCompleted) {
+    const capacityLeft = Math.max(0, DESKS.length - activeItems.length);
+    if (capacityLeft > 0 && completedItems.length > 0) {
+      if (completedItems.length <= capacityLeft) {
+        completedItems.forEach(item => includeKeys.add(item.key));
+      } else {
+        const evictCount = completedItems.length - capacityLeft;
+        const mergedOldest = mergedItems.slice().sort((a, b) => a.completedAt - b.completedAt);
+        const exitedOldest = exitedItems.slice().sort((a, b) => a.completedAt - b.completedAt);
+        const evictOrder = mergedOldest.concat(exitedOldest);
+        const evictSet = new Set(evictOrder.slice(0, evictCount).map(item => item.key));
+        completedItems.forEach(item => {
+          if (!evictSet.has(item.key)) includeKeys.add(item.key);
+        });
+      }
+    }
+  }
+
+  const displayItems = items.filter(item => includeKeys.has(item.key));
+
   const groups = [];
   const byRepo = new Map();
-  list.forEach((agent, index) => {
-    const repo = getRepoName(agent) || 'unknown';
+  displayItems.forEach((item) => {
+    const repo = item.repo || 'unknown';
     if (!byRepo.has(repo)) {
       const g = { repo, agents: [] };
       byRepo.set(repo, g);
       groups.push(g);
     }
-    byRepo.get(repo).agents.push({ agent, repo, index });
+    byRepo.get(repo).agents.push(item);
   });
 
   const ordered = [];
@@ -1311,7 +1462,7 @@ function buildLayout(list) {
     const desk = DESKS[i];
     const row = Math.floor(i / DESK_COLS);
     const col = i % DESK_COLS;
-    const key = agentKey(item.agent, item.index);
+    const key = item.key;
     const slot = { ...item, idx: i, desk, row, col, key };
     slots.push(slot);
     deskAgents[i] = slot;
@@ -1331,7 +1482,9 @@ function buildLayout(list) {
     }
   }
 
-  return { slots, deskAgents, labels, dividers };
+  const overflow = ordered.slice(DESKS.length);
+
+  return { slots, deskAgents, labels, dividers, overflow };
 }
 
 // === DRAW OFFICE ===
@@ -2864,7 +3017,11 @@ function stopPolling() { polling = false; }
 
 function updateAgentsList() {
   const el = document.getElementById('agents-list');
-  el.innerHTML = agents.map((a, i) => {
+  const queueEl = document.getElementById('queue-list');
+  const layout = buildLayout(agents);
+  const deskAgents = layout.slots.map(slot => slot.agent);
+  const queued = (layout.overflow || []).map(item => item.agent);
+  el.innerHTML = deskAgents.map((a, i) => {
     const state = mapState(a);
     const repo = getRepoName(a);
     const issueId = getIssueId(a);
@@ -2874,7 +3031,29 @@ function updateAgentsList() {
       <span class="agent-status">${stateLabel(state, a)}</span>
     </div>`;
   }).join('');
-  document.getElementById('info').textContent = `${agents.length} agents loaded`;
+  if (queueEl) {
+    queueEl.innerHTML = queued.length ? [
+      `<div class="queue-title">Queue (${queued.length})</div>`,
+      ...queued.map((a, i) => {
+        const state = mapState(a);
+        const repo = getRepoName(a);
+        const issueId = getIssueId(a);
+        return `<div class="queue-row">
+          <span class="queue-label">${a.id || a.label || 'agent-' + i}</span>
+          <span class="agent-repo">${repo}${issueId ? '#' + issueId : ''}</span>
+          <span class="agent-status">${stateLabel(state, a)}</span>
+        </div>`;
+      }),
+    ].join('') : '';
+  }
+  const visibleCount = deskAgents.length + queued.length;
+  const hiddenCount = Math.max(0, agents.length - visibleCount);
+  let info = `${visibleCount} agents visible`;
+  if (queued.length) info += ` (${queued.length} queued)`;
+  if (hiddenCount > 0) {
+    info += showCompleted ? ` — ${hiddenCount} completed evicted` : ` — ${hiddenCount} completed hidden`;
+  }
+  document.getElementById('info').textContent = info;
 }
 
 // drag & drop
@@ -2934,12 +3113,10 @@ canvas.addEventListener('click', e => {
   }
   const idx = deskIndexAt(pt.x, pt.y);
   if (idx === null || idx === undefined) return;
-  const agent = agents[idx];
+  const slot = currentLayout ? currentLayout.deskAgents[idx] : null;
+  const agent = slot ? slot.agent : null;
   if (!agent) return;
-  if (currentLayout) {
-    const slot = currentLayout.deskAgents[idx];
-    if (slot && transitions.some(transition => transition.key === slot.key)) return;
-  }
+  if (slot && transitions.some(transition => transition.key === slot.key)) return;
   const url = getAgentUrl(agent);
   if (url) window.open(url, '_blank');
 });
@@ -2956,6 +3133,8 @@ canvas.addEventListener('wheel', e => {
 
 // start
 updateSoundButton();
+updateCompletedToggle();
+setCleanButtonState(false);
 renderUsagePanel();
 requestAnimationFrame(render);
 // auto-connect to live server if available
