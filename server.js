@@ -10,6 +10,16 @@ const SESSIONS_FILE = process.env.LASSO_SESSIONS || path.join(process.env.HOME, 
 const HISTORY_FILE = process.env.LASSO_HISTORY || path.join(path.dirname(SESSIONS_FILE), 'history.json');
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TOKEN_CACHE_TTL_MS = 10 * 1000;
+const USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const USAGE_SCRIPT_TIMEOUT_MS = 15000;
+const DEFAULT_CLAUDE_USAGE_SCRIPT = process.env.HOME
+  ? path.join(process.env.HOME, 'clawd/scripts/claude-usage-report.sh')
+  : null;
+const CLAUDE_USAGE_SCRIPT = process.env.CLAUDE_USAGE_SCRIPT || DEFAULT_CLAUDE_USAGE_SCRIPT;
+const HAS_CLAUDE_USAGE_ARGS = Object.prototype.hasOwnProperty.call(process.env, 'CLAUDE_USAGE_SCRIPT_ARGS');
+const CLAUDE_USAGE_SCRIPT_ARGS = HAS_CLAUDE_USAGE_ARGS
+  ? (process.env.CLAUDE_USAGE_SCRIPT_ARGS || '').split(/\s+/).filter(Boolean)
+  : ['--json'];
 const TOKEN_DIRS = ['.codex', '.claude'];
 const HISTORY_MAX_ENTRIES = 50;
 const HISTORY_COMPLETED_MAX = 20;
@@ -61,6 +71,7 @@ const ENDED_AT_KEYS = [
 ];
 
 const tokenCache = new Map();
+const usageCache = { ts: 0, data: null, pending: null };
 
 function normalizePid(pid) {
   if (Number.isInteger(pid) && pid > 0) return pid;
@@ -347,7 +358,8 @@ function getWorkspacePath(session) {
 function coerceNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
-    const num = Number(value);
+    const normalized = value.replace(/,/g, '').trim();
+    const num = Number(normalized);
     if (Number.isFinite(num)) return num;
   }
   return null;
@@ -446,6 +458,289 @@ async function getTokensForWorkspace(workspacePath) {
   return tokensUsed;
 }
 
+function resolveHomePath(value) {
+  if (!value || typeof value !== 'string') return null;
+  if (value.startsWith('~/')) {
+    if (!process.env.HOME) return null;
+    return path.join(process.env.HOME, value.slice(2));
+  }
+  return value;
+}
+
+function flattenUsageValues(obj, prefix, out) {
+  if (!obj || typeof obj !== 'object') return;
+  Object.entries(obj).forEach(([key, value]) => {
+    const nextKey = prefix ? `${prefix}.${key}` : key;
+    const num = coerceNumber(value);
+    if (num !== null) {
+      out.push({ key: nextKey.toLowerCase(), value: num });
+    }
+    if (value && typeof value === 'object') {
+      flattenUsageValues(value, nextKey, out);
+    }
+  });
+}
+
+function findNumberByPatterns(entries, patterns) {
+  for (const entry of entries) {
+    if (patterns.every((pattern) => pattern.test(entry.key))) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
+function findValueByKey(obj, matcher) {
+  if (!obj || typeof obj !== 'object') return null;
+  for (const [key, value] of Object.entries(obj)) {
+    if (matcher.test(key)) return value;
+    if (value && typeof value === 'object') {
+      const nested = findValueByKey(value, matcher);
+      if (nested !== null && nested !== undefined) return nested;
+    }
+  }
+  return null;
+}
+
+function parseUsageJson(data) {
+  const entries = [];
+  flattenUsageValues(data, '', entries);
+
+  let messagesUsed = findNumberByPatterns(entries, [/message/, /(used|usage|consumed|spent)/]);
+  const messagesLimit = findNumberByPatterns(entries, [/message/, /(limit|max|cap|quota|allowed)/]);
+  const messagesRemaining = findNumberByPatterns(entries, [/message/, /(remaining|left)/]);
+  if (messagesUsed === null && messagesRemaining !== null && messagesLimit !== null) {
+    messagesUsed = Math.max(0, messagesLimit - messagesRemaining);
+  }
+
+  let tokensUsed = findNumberByPatterns(entries, [/token/, /(used|usage|consumed|spent)/]);
+  const tokensLimit = findNumberByPatterns(entries, [/token/, /(limit|max|cap|quota|allowed)/]);
+  const tokensRemaining = findNumberByPatterns(entries, [/token/, /(remaining|left)/]);
+  if (tokensUsed === null && tokensRemaining !== null && tokensLimit !== null) {
+    tokensUsed = Math.max(0, tokensLimit - tokensRemaining);
+  }
+
+  const resetValue = findValueByKey(data, /reset|renew|refresh|rollover|window/i);
+  const resetTs = coerceTimestamp(resetValue);
+  const resetAt = resetTs ? new Date(resetTs).toISOString() : null;
+
+  const metrics = [];
+  if (messagesUsed !== null || messagesLimit !== null) {
+    metrics.push({ id: 'messages', label: 'Messages', used: messagesUsed, limit: messagesLimit, unit: 'msgs' });
+  }
+  if (tokensUsed !== null || tokensLimit !== null) {
+    metrics.push({ id: 'tokens', label: 'Tokens', used: tokensUsed, limit: tokensLimit, unit: 'tokens' });
+  }
+
+  return { metrics, resetAt };
+}
+
+function parseUsageText(raw) {
+  const metrics = [];
+  const clean = raw.replace(/,/g, '');
+
+  const extractPair = (label) => {
+    const pair = clean.match(new RegExp(`${label}[^\\d]*(\\d+)\\s*\\/\\s*(\\d+)`, 'i'));
+    if (pair) {
+      return { used: coerceNumber(pair[1]), limit: coerceNumber(pair[2]) };
+    }
+    const usedMatch = clean.match(new RegExp(`${label}[^\\d]*(?:used|usage|consumed|spent)[^\\d]*(\\d+)`, 'i'));
+    const limitMatch = clean.match(new RegExp(`${label}[^\\d]*(?:limit|max|cap|quota|allowed)[^\\d]*(\\d+)`, 'i'));
+    return {
+      used: usedMatch ? coerceNumber(usedMatch[1]) : null,
+      limit: limitMatch ? coerceNumber(limitMatch[1]) : null,
+    };
+  };
+
+  const messagePair = extractPair('messages?');
+  if (messagePair.used !== null || messagePair.limit !== null) {
+    metrics.push({ id: 'messages', label: 'Messages', used: messagePair.used, limit: messagePair.limit, unit: 'msgs' });
+  }
+
+  const tokenPair = extractPair('tokens?');
+  if (tokenPair.used !== null || tokenPair.limit !== null) {
+    metrics.push({ id: 'tokens', label: 'Tokens', used: tokenPair.used, limit: tokenPair.limit, unit: 'tokens' });
+  }
+
+  const resetMatch = clean.match(/reset[^\\d]*(\\d{4}-\\d{2}-\\d{2}[^\\s]*)/i);
+  const resetTs = resetMatch ? coerceTimestamp(resetMatch[1]) : null;
+  const resetAt = resetTs ? new Date(resetTs).toISOString() : null;
+
+  return { metrics, resetAt };
+}
+
+function parseClaudeUsageOutput(raw) {
+  if (!raw || !raw.trim()) return { metrics: [], resetAt: null };
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parseUsageJson(parsed);
+    } catch (err) {
+      return parseUsageText(trimmed);
+    }
+  }
+  return parseUsageText(trimmed);
+}
+
+async function getClaudeUsage() {
+  const provider = {
+    id: 'claude-max',
+    name: 'Claude Max',
+    status: 'unavailable',
+    metrics: [],
+    resetAt: null,
+    source: 'script',
+  };
+  const scriptPath = resolveHomePath(CLAUDE_USAGE_SCRIPT);
+  if (!scriptPath) {
+    return { ...provider, error: 'Claude usage script not configured' };
+  }
+  try {
+    await fs.promises.access(scriptPath, fs.constants.X_OK);
+  } catch (err) {
+    return { ...provider, error: 'Claude usage script not found or not executable' };
+  }
+
+  return new Promise((resolve) => {
+    execFile(scriptPath, CLAUDE_USAGE_SCRIPT_ARGS, { timeout: USAGE_SCRIPT_TIMEOUT_MS }, (err, stdout, stderr) => {
+      if (err) {
+        resolve({ ...provider, status: 'error', error: err.message });
+        return;
+      }
+      const output = (stdout || '').trim() || (stderr || '').trim();
+      // Try native Anthropic OAuth usage format first (five_hour/seven_day)
+      try {
+        const data = JSON.parse(output);
+        if (data.five_hour || data.seven_day) {
+          const metrics = [];
+          if (data.five_hour) {
+            const utilization = Number(data.five_hour.utilization);
+            const percent = Number.isFinite(utilization) ? Math.round(utilization * 100) : 0;
+            metrics.push({
+              id: 'five_hour',
+              label: '5h window',
+              used: percent,
+              limit: 100,
+              unit: '%',
+              resetAt: data.five_hour.resets_at || null,
+            });
+          }
+          if (data.seven_day) {
+            const utilization = Number(data.seven_day.utilization);
+            const percent = Number.isFinite(utilization) ? Math.round(utilization * 100) : 0;
+            metrics.push({
+              id: 'seven_day',
+              label: '7d window',
+              used: percent,
+              limit: 100,
+              unit: '%',
+              resetAt: data.seven_day.resets_at || null,
+            });
+          }
+          const extraUsage = data.extra_usage || null;
+          resolve({
+            ...provider,
+            status: 'ok',
+            format: 'anthropic',
+            metrics,
+            extraUsage,
+            resetAt: (data.five_hour && data.five_hour.resets_at) || null,
+          });
+          return;
+        }
+      } catch (e) {
+        // fall through to generic parser
+      }
+      const parsed = parseClaudeUsageOutput(output);
+      if (!parsed.metrics.length) {
+        resolve({ ...provider, status: 'error', error: 'Unable to parse Claude usage output' });
+        return;
+      }
+      resolve({
+        ...provider,
+        status: 'ok',
+        metrics: parsed.metrics,
+        resetAt: parsed.resetAt,
+      });
+    });
+  });
+}
+
+async function getCodexUsageEstimate() {
+  const provider = {
+    id: 'codex',
+    name: 'Codex',
+    status: 'ok',
+    metrics: [],
+    resetAt: null,
+    source: 'local',
+    estimated: true,
+  };
+  let sessions = [];
+  try {
+    const status = await getLassoStatus();
+    sessions = Array.isArray(status.sessions) ? status.sessions : [];
+  } catch (err) {
+    return { ...provider, status: 'error', error: err.message };
+  }
+
+  const totalTokens = sessions.reduce((sum, session) => {
+    const tokens = coerceNumber(session.tokensUsed ?? session.tokens_used ?? session.tokenUsage ?? session.token_usage);
+    return tokens === null ? sum : sum + tokens;
+  }, 0);
+  const hasTokens = sessions.some((session) => coerceNumber(session.tokensUsed ?? session.tokens_used ?? session.tokenUsage ?? session.token_usage) !== null);
+  const limitTokens = coerceNumber(process.env.CODEX_USAGE_LIMIT_TOKENS || process.env.CODEX_USAGE_LIMIT);
+  const resetTs = coerceTimestamp(process.env.CODEX_USAGE_RESET_AT || process.env.CODEX_USAGE_RESET);
+  const resetAt = resetTs ? new Date(resetTs).toISOString() : null;
+
+  provider.metrics = [
+    {
+      id: 'tokens',
+      label: 'Tokens',
+      used: hasTokens ? totalTokens : null,
+      limit: limitTokens,
+      unit: 'tokens',
+      estimated: true,
+    },
+  ];
+  provider.resetAt = resetAt;
+  provider.note = hasTokens ? 'Estimated from active agent logs' : 'No token logs found yet';
+  return provider;
+}
+
+async function buildUsageData() {
+  const [claude, codex] = await Promise.all([getClaudeUsage(), getCodexUsageEstimate()]);
+  return {
+    fetchedAt: new Date().toISOString(),
+    providers: [claude, codex].filter(Boolean),
+  };
+}
+
+async function getUsageData() {
+  const now = Date.now();
+  if (usageCache.data && now - usageCache.ts < USAGE_CACHE_TTL_MS) {
+    return usageCache.data;
+  }
+  if (usageCache.pending) return usageCache.pending;
+  usageCache.pending = buildUsageData()
+    .then((data) => {
+      usageCache.data = data;
+      usageCache.ts = Date.now();
+      return data;
+    })
+    .catch((err) => {
+      const fallback = { fetchedAt: new Date().toISOString(), providers: [], error: err.message };
+      usageCache.data = fallback;
+      usageCache.ts = Date.now();
+      return fallback;
+    })
+    .finally(() => {
+      usageCache.pending = null;
+    });
+  return usageCache.pending;
+}
+
 async function getLassoStatus() {
   let raw;
   try {
@@ -493,6 +788,19 @@ const server = http.createServer((req, res) => {
       .catch((err) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message, sessions: [] }));
+      });
+    return;
+  }
+
+  if (req.url === '/api/usage') {
+    getUsageData()
+      .then((data) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      })
+      .catch((err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
       });
     return;
   }
