@@ -459,6 +459,7 @@ const TIME_PHASES = {
 let agents = [];
 let currentLayout = null;
 let hoveredDeskIndex = null;
+let hoveredAgent = null;
 let hoveredSignature = '';
 let transitions = [];
 let hasInitialized = false;
@@ -2970,6 +2971,7 @@ function showTooltip(agent, clientX, clientY) {
 
 function hideTooltip() {
   hoveredDeskIndex = null;
+  hoveredAgent = null;
   hoveredSignature = '';
   timelineHover = null;
   tooltip.style.display = 'none';
@@ -3318,10 +3320,11 @@ canvas.addEventListener('mousemove', e => {
     return;
   }
   hoveredDeskIndex = idx;
+  hoveredAgent = slot.agent;
   showTooltip(slot.agent, e.clientX, e.clientY);
 });
 
-canvas.addEventListener('mouseleave', () => hideTooltip());
+canvas.addEventListener('mouseleave', () => { hideTooltip(); hoveredAgent = null; });
 
 canvas.addEventListener('click', e => {
   const pt = getCanvasPoint(e);
@@ -3332,12 +3335,9 @@ canvas.addEventListener('click', e => {
     }
     return;
   }
-  const idx = deskIndexAt(pt.x, pt.y);
-  if (idx === null || idx === undefined) return;
-  const slot = currentLayout ? currentLayout.deskAgents[idx] : null;
-  const agent = slot ? slot.agent : null;
+  // Use pinned hover agent to avoid race condition with layout refresh
+  const agent = hoveredAgent;
   if (!agent) return;
-  if (slot && transitions.some(transition => transition.key === slot.key)) return;
   const url = getAgentUrl(agent);
   if (url) window.open(url, '_blank');
 });
