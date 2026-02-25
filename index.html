@@ -78,7 +78,16 @@ const DESK_START_Y = 2;
 const DESK_GAP_X = 5;
 const DESK_GAP_Y = 3;
 const CANVAS_W = COLS * S;
-const CANVAS_H = ROWS * S + S; // extra row for status bar
+const OFFICE_H = ROWS * S;
+const TIMELINE_MAX_ROWS = 20;
+const TIMELINE_ROW_HEIGHT = 12;
+const TIMELINE_BAR_HEIGHT = 4;
+const TIMELINE_HEADER_HEIGHT = 18;
+const TIMELINE_PADDING = 8;
+const TIMELINE_LABEL_WIDTH = 150;
+const TIMELINE_HEIGHT = TIMELINE_HEADER_HEIGHT + TIMELINE_PADDING * 2 + TIMELINE_ROW_HEIGHT * TIMELINE_MAX_ROWS;
+const TIMELINE_Y = OFFICE_H;
+const CANVAS_H = OFFICE_H + TIMELINE_HEIGHT + S; // office + timeline + status bar
 const DOOR_TILE = { x: 0, y: 6 };
 const WALK_SPEED = 2; // tiles per second
 const ENTER_STAGGER = 0.5; // seconds
@@ -131,6 +140,19 @@ const BASE_PAL = {
   tokenBg: '#0b0b12',
 };
 let PAL = { ...BASE_PAL };
+
+const TIMELINE_COLORS = {
+  working: '#3b7cff',
+  pr: '#3adf7a',
+  ciFailed: '#ff5c5c',
+  merged: '#f0c040',
+  dead: '#6c6c6c',
+  axis: '#2a2a3f',
+  grid: '#242438',
+  label: '#c9cedf',
+  muted: '#7b8096',
+  now: '#f7e28a',
+};
 
 // === CHARACTER COLORS ===
 const CHAR_COLORS = [
@@ -223,6 +245,11 @@ let timeState = null;
 let windowStars = [];
 let windowStarSeed = null;
 let previousAgentsByKey = new Map();
+let historyEntries = [];
+let timelineEntries = [];
+let timelineLayout = null;
+let timelineScroll = 0;
+let timelineHover = null;
 const mergedAgents = new Set();
 const confettiPool = [];
 const confettiActive = [];
@@ -536,6 +563,98 @@ function formatDuration(ms) {
   return `${mins}m`;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function coerceMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value > 1e12) return value;
+    if (value > 1e9) return value * 1000;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const num = Number(value);
+    if (Number.isFinite(num)) return coerceMs(num);
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
+function normalizeHistoryEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const next = { ...entry };
+  if (!Array.isArray(next.statusHistory)) next.statusHistory = [];
+  return next;
+}
+
+function entryId(entry, fallbackIndex) {
+  if (!entry) return `agent-${fallbackIndex}`;
+  const id = (entry.id || entry.agentId || entry.sessionId || entry.name || '').toString().trim();
+  if (id) return id;
+  return agentKey(entry, fallbackIndex);
+}
+
+function mergeTimelineEntries(activeAgents, historyList) {
+  const historyMap = new Map();
+  historyList.map(normalizeHistoryEntry).forEach((entry) => {
+    if (entry && entry.id) historyMap.set(entry.id, entry);
+  });
+
+  const merged = [];
+  activeAgents.forEach((agent, index) => {
+    const id = entryId(agent, index);
+    const historyEntry = historyMap.get(id);
+    const createdAt = coerceMs(agent.createdAt) || coerceMs(historyEntry && historyEntry.createdAt) || Date.now();
+    const entry = {
+      id,
+      repo: agent.repo || (historyEntry && historyEntry.repo),
+      issueId: agent.issueId || agent.issue_id || (historyEntry && historyEntry.issueId),
+      issueTitle: agent.issueTitle || agent.issue_title || (historyEntry && historyEntry.issueTitle),
+      status: agent.status || (historyEntry && historyEntry.status) || '',
+      activity: agent.activity || (historyEntry && historyEntry.activity) || '',
+      agentType: agent.agentType || agent.agent_type || (historyEntry && historyEntry.agentType),
+      createdAt: new Date(createdAt).toISOString(),
+      endedAt: null,
+      prNumber: agent.prNumber || agent.pr_number || (historyEntry && historyEntry.prNumber),
+      statusHistory: (historyEntry && historyEntry.statusHistory) ? historyEntry.statusHistory.slice() : [],
+      isActive: true,
+      source: agent,
+    };
+    merged.push(entry);
+    historyMap.delete(id);
+  });
+
+  historyMap.forEach((entry) => {
+    const createdAt = coerceMs(entry.createdAt) || Date.now();
+    merged.push({
+      ...entry,
+      createdAt: new Date(createdAt).toISOString(),
+      endedAt: entry.endedAt || null,
+      status: entry.status || '',
+      activity: entry.activity || '',
+      statusHistory: Array.isArray(entry.statusHistory) ? entry.statusHistory.slice() : [],
+      isActive: false,
+      source: entry,
+    });
+  });
+
+  merged.sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    const aTime = a.isActive ? coerceMs(a.createdAt) : (coerceMs(a.endedAt) || coerceMs(a.createdAt));
+    const bTime = b.isActive ? coerceMs(b.createdAt) : (coerceMs(b.endedAt) || coerceMs(b.createdAt));
+    return (bTime || 0) - (aTime || 0);
+  });
+
+  return merged;
+}
+
+function updateTimelineEntries() {
+  timelineEntries = mergeTimelineEntries(agents, historyEntries);
+  const maxScroll = Math.max(0, timelineEntries.length - TIMELINE_MAX_ROWS);
+  timelineScroll = clamp(timelineScroll, 0, maxScroll);
+}
+
 function agentKey(agent, fallbackIndex) {
   if (!agent) return `agent-${fallbackIndex}`;
   const id = (agent.id || agent.label || agent.agentId || agent.name || '').toString().trim();
@@ -657,6 +776,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
     hasInitialized = true;
     updateAgentsList();
     storePreviousAgents(nextAgents);
+    updateTimelineEntries();
     return;
   }
 
@@ -721,6 +841,7 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   hasInitialized = true;
   updateAgentsList();
   storePreviousAgents(nextAgents);
+  updateTimelineEntries();
 }
 
 function runtimeLabel(agent) {
@@ -1398,9 +1519,314 @@ function drawCelebrationText(now) {
   ctx.restore();
 }
 
+// === TIMELINE ===
+function timelineStatusLabel(status, activity) {
+  const s = (status || '').toLowerCase();
+  const a = (activity || '').toLowerCase();
+  if (s.includes('merged') || a.includes('merged')) return 'Merged';
+  if (s.includes('ci_failed') || s.includes('failed')) return 'CI Failed';
+  if (s.includes('ci_passed') || s.includes('passed')) return 'CI Passed';
+  if (s.includes('pr_open') || s.includes('pr_review') || s.includes('changes_requested')) return 'PR Open';
+  if (s.includes('dead') || s.includes('exited') || s.includes('archived')) return 'Exited';
+  if (s.includes('working') || s.includes('running') || a.includes('active')) return 'Working';
+  return status || activity || 'Unknown';
+}
+
+function timelineColorForStatus(status, activity) {
+  const s = (status || '').toLowerCase();
+  const a = (activity || '').toLowerCase();
+  if (s.includes('merged') || a.includes('merged')) return TIMELINE_COLORS.merged;
+  if (s.includes('dead') || s.includes('exited') || s.includes('archived') || a.includes('dead') || a.includes('exited')) return TIMELINE_COLORS.dead;
+  if (s.includes('ci_failed') || s.includes('failed')) return TIMELINE_COLORS.ciFailed;
+  if (s.includes('pr_open') || s.includes('pr_review') || s.includes('changes_requested') || s.includes('ci')) return TIMELINE_COLORS.pr;
+  if (s.includes('working') || s.includes('running') || a.includes('active')) return TIMELINE_COLORS.working;
+  return TIMELINE_COLORS.working;
+}
+
+function fitText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let clipped = text;
+  while (clipped.length > 3 && ctx.measureText(`${clipped}...`).width > maxWidth) {
+    clipped = clipped.slice(0, -1);
+  }
+  return `${clipped}...`;
+}
+
+function buildTimelineEvents(entry, now) {
+  const events = [];
+  if (entry && Array.isArray(entry.statusHistory)) {
+    entry.statusHistory.forEach((item) => {
+      const at = coerceMs(item.at);
+      if (at) events.push({ at, status: item.status || '', activity: item.activity || '' });
+    });
+  }
+  if (!events.length) {
+    const createdAt = coerceMs(entry.createdAt) || now;
+    events.push({ at: createdAt, status: entry.status || '', activity: entry.activity || '' });
+  }
+  events.sort((a, b) => a.at - b.at);
+  return events;
+}
+
+function buildTimelineSegments(entry, now) {
+  const events = buildTimelineEvents(entry, now);
+  const endedAt = coerceMs(entry.endedAt);
+  const endTs = endedAt || now;
+  const segments = [];
+  for (let i = 0; i < events.length; i++) {
+    const current = events[i];
+    const next = events[i + 1];
+    const start = current.at;
+    const end = next ? next.at : endTs;
+    if (!start || !end || end <= start) continue;
+    segments.push({
+      start,
+      end,
+      status: current.status,
+      activity: current.activity,
+    });
+  }
+  return segments;
+}
+
+function buildTimelineMarkers(entry, events, now) {
+  const markers = [];
+  const createdAt = coerceMs(entry.createdAt) || (events[0] && events[0].at) || now;
+  markers.push({ at: createdAt, type: 'spawn', label: 'Spawned', color: '#ffffff' });
+  let sawPr = false;
+  let sawCiFail = false;
+  let sawCiPass = false;
+  let sawMerge = false;
+  events.forEach((event) => {
+    const status = (event.status || '').toLowerCase();
+    if (!sawPr && status.includes('pr_open')) {
+      sawPr = true;
+      markers.push({ at: event.at, type: 'pr', label: 'PR Opened', color: TIMELINE_COLORS.pr });
+    }
+    if (!sawCiFail && (status.includes('ci_failed') || status.includes('failed'))) {
+      sawCiFail = true;
+      markers.push({ at: event.at, type: 'ci_failed', label: 'CI Failed', color: TIMELINE_COLORS.ciFailed });
+    }
+    if (!sawCiPass && status.includes('ci_pass')) {
+      sawCiPass = true;
+      markers.push({ at: event.at, type: 'ci_passed', label: 'CI Passed', color: TIMELINE_COLORS.pr });
+    }
+    if (!sawMerge && status.includes('merged')) {
+      sawMerge = true;
+      markers.push({ at: event.at, type: 'merged', label: 'Merged', color: TIMELINE_COLORS.merged });
+    }
+  });
+  const endedAt = coerceMs(entry.endedAt);
+  if (endedAt && !sawMerge) {
+    markers.push({ at: endedAt, type: 'ended', label: 'Ended', color: TIMELINE_COLORS.dead });
+  }
+  return markers;
+}
+
+function computeTimelineWindow(entries, now) {
+  const oneHour = 60 * 60 * 1000;
+  const day = 24 * 60 * 60 * 1000;
+  let earliest = now - oneHour;
+  entries.forEach((entry) => {
+    const createdAt = coerceMs(entry.createdAt);
+    if (createdAt) earliest = Math.min(earliest, createdAt);
+    if (Array.isArray(entry.statusHistory)) {
+      entry.statusHistory.forEach((item) => {
+        const at = coerceMs(item.at);
+        if (at) earliest = Math.min(earliest, at);
+      });
+    }
+  });
+  let range = clamp(now - earliest, oneHour, day);
+  return { start: now - range, end: now, range };
+}
+
+function chooseTickMs(rangeMs) {
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  if (rangeMs <= 2 * hour) return 15 * minute;
+  if (rangeMs <= 6 * hour) return 30 * minute;
+  if (rangeMs <= 12 * hour) return hour;
+  return 2 * hour;
+}
+
+function formatTimelineTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatTimelineLabel(entry) {
+  const repo = entry.repo || '';
+  const issueId = entry.issueId || '';
+  if (repo && issueId) return `${repo}#${issueId}`;
+  return entry.id || 'agent';
+}
+
+function buildTimelineTooltip(entry, marker) {
+  const title = escapeHtml(formatTimelineLabel(entry));
+  const repoIssue = escapeHtml(formatRepoIssue(entry));
+  const status = escapeHtml(timelineStatusLabel(entry.status, entry.activity));
+  const createdAt = coerceMs(entry.createdAt);
+  const endedAt = coerceMs(entry.endedAt);
+  const createdLabel = createdAt ? new Date(createdAt).toLocaleString() : '—';
+  const endedLabel = endedAt ? new Date(endedAt).toLocaleString() : '—';
+  const eventLabel = marker ? `${marker.label} — ${new Date(marker.at).toLocaleString()}` : '—';
+  return `
+    <div class="tooltip-title">
+      <span class="status-dot ${statusDotClass(entry)}"></span>
+      <span>${title}</span>
+    </div>
+    <div class="tooltip-row"><span class="tooltip-label">Repo/Issue</span><span class="tooltip-value">${repoIssue}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Status</span><span class="tooltip-value">${status}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Created</span><span class="tooltip-value">${escapeHtml(createdLabel)}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Ended</span><span class="tooltip-value">${escapeHtml(endedLabel)}</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">Event</span><span class="tooltip-value">${escapeHtml(eventLabel)}</span></div>
+  `;
+}
+
+function drawTimelineLegend(x, y) {
+  const items = [
+    { label: 'Working', color: TIMELINE_COLORS.working },
+    { label: 'PR Open', color: TIMELINE_COLORS.pr },
+    { label: 'CI Failed', color: TIMELINE_COLORS.ciFailed },
+    { label: 'Merged', color: TIMELINE_COLORS.merged },
+    { label: 'Dead', color: TIMELINE_COLORS.dead },
+  ];
+  let cursor = x;
+  ctx.font = '10px Courier New';
+  ctx.textBaseline = 'middle';
+  items.forEach((item) => {
+    ctx.fillStyle = item.color;
+    ctx.fillRect(cursor, y - 4, 10, 6);
+    ctx.fillStyle = TIMELINE_COLORS.label;
+    ctx.fillText(item.label, cursor + 14, y + 1);
+    cursor += 14 + ctx.measureText(item.label).width + 12;
+  });
+}
+
+function drawTimeline(now) {
+  const entries = timelineEntries;
+  const y = TIMELINE_Y;
+  ctx.fillStyle = '#12121c';
+  ctx.fillRect(0, y, CANVAS_W, TIMELINE_HEIGHT);
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(0, y, CANVAS_W, TIMELINE_HEADER_HEIGHT);
+
+  drawTimelineLegend(12, y + Math.floor(TIMELINE_HEADER_HEIGHT / 2));
+
+  const { start, end, range } = computeTimelineWindow(entries, now);
+  const tickMs = chooseTickMs(range);
+  const barX = TIMELINE_LABEL_WIDTH;
+  const barW = CANVAS_W - TIMELINE_LABEL_WIDTH - TIMELINE_PADDING;
+  const contentTop = y + TIMELINE_HEADER_HEIGHT + TIMELINE_PADDING;
+  const contentHeight = TIMELINE_HEIGHT - TIMELINE_HEADER_HEIGHT - TIMELINE_PADDING * 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(barX, contentTop, barW, contentHeight);
+  ctx.clip();
+
+  ctx.strokeStyle = TIMELINE_COLORS.grid;
+  ctx.lineWidth = 1;
+  for (let t = Math.ceil(start / tickMs) * tickMs; t <= end; t += tickMs) {
+    const x = barX + ((t - start) / range) * barW;
+    ctx.beginPath();
+    ctx.moveTo(x, contentTop);
+    ctx.lineTo(x, contentTop + contentHeight);
+    ctx.stroke();
+  }
+
+  const nowX = barX + ((end - start) / range) * barW;
+  ctx.strokeStyle = TIMELINE_COLORS.now;
+  ctx.beginPath();
+  ctx.moveTo(nowX, contentTop);
+  ctx.lineTo(nowX, contentTop + contentHeight);
+  ctx.stroke();
+
+  ctx.restore();
+
+  ctx.fillStyle = TIMELINE_COLORS.axis;
+  ctx.fillRect(barX, y + TIMELINE_HEADER_HEIGHT - 2, barW, 2);
+  ctx.fillRect(barX - 1, contentTop, 1, contentHeight);
+
+  ctx.fillStyle = TIMELINE_COLORS.label;
+  ctx.font = '10px Courier New';
+  ctx.textBaseline = 'bottom';
+  for (let t = Math.ceil(start / tickMs) * tickMs; t <= end; t += tickMs) {
+    const x = barX + ((t - start) / range) * barW;
+    const label = formatTimelineTime(t);
+    ctx.fillText(label, x - ctx.measureText(label).width / 2, y + TIMELINE_HEADER_HEIGHT - 4);
+  }
+
+  const visibleEntries = entries.slice(timelineScroll, timelineScroll + TIMELINE_MAX_ROWS);
+  const rows = [];
+
+  ctx.font = '10px Courier New';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = TIMELINE_COLORS.label;
+  visibleEntries.forEach((entry, rowIndex) => {
+    const rowY = contentTop + rowIndex * TIMELINE_ROW_HEIGHT;
+    const barY = rowY + Math.floor((TIMELINE_ROW_HEIGHT - TIMELINE_BAR_HEIGHT) / 2);
+    const label = fitText(ctx, formatTimelineLabel(entry), TIMELINE_LABEL_WIDTH - 14);
+    ctx.fillStyle = TIMELINE_COLORS.label;
+    ctx.fillText(label, 8, rowY + TIMELINE_ROW_HEIGHT / 2);
+
+    const segments = buildTimelineSegments(entry, now);
+    segments.forEach((segment) => {
+      const segStart = Math.max(segment.start, start);
+      const segEnd = Math.min(segment.end, end);
+      if (segEnd <= segStart) return;
+      const segX = barX + ((segStart - start) / range) * barW;
+      const segW = Math.max(1, ((segEnd - segStart) / range) * barW);
+      ctx.fillStyle = timelineColorForStatus(segment.status, segment.activity);
+      ctx.fillRect(segX, barY, segW, TIMELINE_BAR_HEIGHT);
+    });
+
+    const events = buildTimelineEvents(entry, now);
+    const markers = buildTimelineMarkers(entry, events, now).map((marker) => {
+      const mx = barX + ((marker.at - start) / range) * barW;
+      const my = barY + Math.floor(TIMELINE_BAR_HEIGHT / 2);
+      return { ...marker, x: mx, y: my };
+    }).filter(marker => marker.x >= barX && marker.x <= barX + barW);
+
+    markers.forEach((marker) => {
+      ctx.fillStyle = marker.color;
+      ctx.beginPath();
+      ctx.arc(marker.x, marker.y + 1, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    rows.push({
+      entry,
+      rowY,
+      barY,
+      barHeight: TIMELINE_BAR_HEIGHT,
+      markers,
+    });
+  });
+
+  timelineLayout = {
+    start,
+    end,
+    range,
+    barX,
+    barW,
+    contentTop,
+    contentHeight,
+    rows,
+  };
+
+  if (entries.length > TIMELINE_MAX_ROWS) {
+    const scrollHint = `${timelineScroll + 1}-${Math.min(timelineScroll + TIMELINE_MAX_ROWS, entries.length)} of ${entries.length}`;
+    ctx.fillStyle = TIMELINE_COLORS.muted;
+    ctx.font = '10px Courier New';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`Scroll ${scrollHint}`, CANVAS_W - ctx.measureText(scrollHint).width - 8, y + TIMELINE_HEIGHT - 4);
+  }
+}
+
 // === STATUS BAR ===
 function drawStatusBar() {
-  const y = ROWS * S;
+  const y = OFFICE_H + TIMELINE_HEIGHT;
   ctx.fillStyle = '#111';
   ctx.fillRect(0, y, CANVAS_W, S);
   ctx.fillStyle = '#888';
@@ -1425,10 +1851,11 @@ function drawStatusBar() {
 // === MAP LASSO STATE → ANIMATION STATE ===
 function mapState(agent) {
   if (!agent) return 'idle';
+  if (agent.endedAt || agent.ended_at) return 'dead';
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
   if (status.includes('merged') || activity.includes('merged')) return 'merged';
-  if (status.includes('exited') || activity.includes('exited')) return 'exited';
+  if (status.includes('exited') || activity.includes('exited') || status.includes('archived') || activity.includes('archived')) return 'exited';
   if (status.includes('dead') || activity.includes('dead')) return 'dead';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
   if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
@@ -1460,6 +1887,45 @@ function getCanvasPoint(e) {
     x: (e.clientX - rect.left) * scaleX,
     y: (e.clientY - rect.top) * scaleY,
   };
+}
+
+function isInTimelineArea(y) {
+  return y >= TIMELINE_Y && y < TIMELINE_Y + TIMELINE_HEIGHT;
+}
+
+function handleTimelineHover(x, y, clientX, clientY) {
+  if (!timelineLayout || !timelineLayout.rows.length) {
+    hideTooltip();
+    return;
+  }
+  const relativeY = y - timelineLayout.contentTop;
+  if (relativeY < 0) {
+    hideTooltip();
+    return;
+  }
+  const rowIndex = Math.floor(relativeY / TIMELINE_ROW_HEIGHT);
+  const row = timelineLayout.rows[rowIndex];
+  if (!row) {
+    hideTooltip();
+    return;
+  }
+  let marker = null;
+  const radius = 4;
+  for (const m of row.markers) {
+    if (Math.abs(x - m.x) <= radius && Math.abs(y - (m.y + 1)) <= radius) {
+      marker = m;
+      break;
+    }
+  }
+  const signature = `timeline:${row.entry.id}:${marker ? marker.type + marker.at : 'row'}`;
+  if (signature !== hoveredSignature) {
+    tooltip.innerHTML = buildTimelineTooltip(row.entry, marker);
+    hoveredSignature = signature;
+  }
+  timelineHover = { entry: row.entry, marker };
+  tooltip.style.display = 'block';
+  tooltip.setAttribute('aria-hidden', 'false');
+  positionTooltip(clientX, clientY);
 }
 
 function deskIndexAt(x, y) {
@@ -1524,6 +1990,7 @@ function showTooltip(agent, clientX, clientY) {
 function hideTooltip() {
   hoveredDeskIndex = null;
   hoveredSignature = '';
+  timelineHover = null;
   tooltip.style.display = 'none';
   tooltip.setAttribute('aria-hidden', 'true');
 }
@@ -1599,11 +2066,17 @@ function render(now) {
 
   drawConfetti();
   drawCelebrationText(now);
+  drawTimeline(Date.now());
   drawStatusBar();
   requestAnimationFrame(render);
 }
 
 // === DATA LOADING ===
+function setHistoryEntries(list) {
+  historyEntries = Array.isArray(list) ? list.map(normalizeHistoryEntry).filter(Boolean) : [];
+  updateTimelineEntries();
+}
+
 function loadDemo() {
   const now = Date.now();
   const demoAgents = [
@@ -1662,7 +2135,39 @@ function loadDemo() {
       createdAt: new Date(now - 90 * 60 * 1000).toISOString(),
     },
   ];
+  const demoHistory = demoAgents.map((agent) => {
+    const createdAt = agent.createdAt;
+    const createdTs = Date.parse(createdAt);
+    const statusHistory = [
+      { status: 'working', activity: '', at: createdAt },
+    ];
+    if ((agent.status || '').includes('pr_open')) {
+      statusHistory.push({ status: 'pr_open', activity: '', at: new Date(createdTs + 45 * 60 * 1000).toISOString() });
+    }
+    if ((agent.status || '').includes('ci')) {
+      statusHistory.push({ status: 'ci_failed', activity: '', at: new Date(createdTs + 75 * 60 * 1000).toISOString() });
+    }
+    if ((agent.status || '').includes('merged')) {
+      statusHistory.push({ status: 'merged', activity: '', at: new Date(createdTs + 70 * 60 * 1000).toISOString() });
+    }
+    const endedAt = statusHistory[statusHistory.length - 1].status === 'merged'
+      ? statusHistory[statusHistory.length - 1].at
+      : null;
+    return {
+      id: agent.id,
+      repo: agent.repo,
+      issueId: agent.issueId,
+      issueTitle: agent.issueTitle,
+      status: agent.status,
+      agentType: agent.agentType,
+      createdAt,
+      endedAt,
+      prNumber: agent.prNumber,
+      statusHistory,
+    };
+  });
   setAgents(demoAgents);
+  setHistoryEntries(demoHistory);
 }
 
 function loadAgentsFile() {
@@ -1678,6 +2183,7 @@ function handleFile(e) {
       const data = JSON.parse(ev.target.result);
       const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
       setAgents(nextAgents);
+      setHistoryEntries([]);
     } catch(err) { alert('Invalid JSON'); }
   };
   reader.readAsText(file);
@@ -1685,10 +2191,18 @@ function handleFile(e) {
 
 async function refreshFromLasso() {
   try {
-    const resp = await fetch('/api/agents');
-    const data = await resp.json();
+    const [agentsResp, historyResp] = await Promise.all([
+      fetch('/api/agents'),
+      fetch('/api/history'),
+    ]);
+    const data = await agentsResp.json();
     const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
     setAgents(nextAgents);
+    if (historyResp.ok) {
+      const historyData = await historyResp.json();
+      const historyList = Array.isArray(historyData) ? historyData : (historyData.history || []);
+      setHistoryEntries(historyList);
+    }
     return true;
   } catch(e) {
     document.getElementById('info').textContent = 'Server not running — start with: node server.js';
@@ -1736,6 +2250,7 @@ document.addEventListener('drop', e => {
         const data = JSON.parse(ev.target.result);
         const nextAgents = Array.isArray(data) ? data : (data.sessions || []);
         setAgents(nextAgents);
+        setHistoryEntries([]);
       } catch(err) { alert('Invalid JSON'); }
     };
     reader.readAsText(file);
@@ -1743,8 +2258,12 @@ document.addEventListener('drop', e => {
 });
 
 canvas.addEventListener('mousemove', e => {
-  if (!currentLayout) return;
   const { x, y } = getCanvasPoint(e);
+  if (isInTimelineArea(y)) {
+    handleTimelineHover(x, y, e.clientX, e.clientY);
+    return;
+  }
+  if (!currentLayout) return;
   const idx = deskIndexAt(x, y);
   if (idx === null) {
     hideTooltip();
@@ -1767,6 +2286,13 @@ canvas.addEventListener('mouseleave', () => hideTooltip());
 
 canvas.addEventListener('click', e => {
   const pt = getCanvasPoint(e);
+  if (isInTimelineArea(pt.y)) {
+    if (timelineHover && timelineHover.entry) {
+      const url = getAgentUrl(timelineHover.entry.source || timelineHover.entry);
+      if (url) window.open(url, '_blank');
+    }
+    return;
+  }
   const idx = deskIndexAt(pt.x, pt.y);
   if (idx === null || idx === undefined) return;
   const agent = agents[idx];
@@ -1778,6 +2304,16 @@ canvas.addEventListener('click', e => {
   const url = getAgentUrl(agent);
   if (url) window.open(url, '_blank');
 });
+
+canvas.addEventListener('wheel', e => {
+  const { x, y } = getCanvasPoint(e);
+  if (!isInTimelineArea(y)) return;
+  if (timelineEntries.length <= TIMELINE_MAX_ROWS) return;
+  e.preventDefault();
+  const direction = e.deltaY > 0 ? 1 : -1;
+  const maxScroll = Math.max(0, timelineEntries.length - TIMELINE_MAX_ROWS);
+  timelineScroll = clamp(timelineScroll + direction, 0, maxScroll);
+}, { passive: false });
 
 // start
 updateSoundButton();
