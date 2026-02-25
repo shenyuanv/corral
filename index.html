@@ -27,7 +27,9 @@
 <div id="controls">
   <button onclick="loadAgentsFile()">Load agents.json</button>
   <button onclick="loadDemo()">Demo Mode</button>
-  <button onclick="refreshFromLasso()">Refresh (lasso)</button>
+  <button onclick="refreshFromLasso()">Refresh</button>
+  <button onclick="startPolling()">▶ Live</button>
+  <button onclick="stopPolling()">⏹ Stop</button>
 </div>
 <div id="agents-list"></div>
 
@@ -301,14 +303,29 @@ function handleFile(e) {
 
 async function refreshFromLasso() {
   try {
-    const resp = await fetch('agents.json');
+    const resp = await fetch('/api/agents');
     const data = await resp.json();
     agents = Array.isArray(data) ? data : (data.sessions || []);
     updateAgentsList();
+    return true;
   } catch(e) {
-    document.getElementById('info').textContent = 'Could not load agents.json — run: lasso status --json > agents.json';
+    document.getElementById('info').textContent = 'Server not running — start with: node server.js';
+    return false;
   }
 }
+
+// Auto-poll every 5s
+let polling = false;
+async function startPolling() {
+  if (polling) return;
+  polling = true;
+  document.getElementById('info').textContent = '🔄 Live mode — polling every 5s';
+  while (polling) {
+    await refreshFromLasso();
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+function stopPolling() { polling = false; }
 
 function updateAgentsList() {
   const el = document.getElementById('agents-list');
@@ -343,6 +360,8 @@ document.addEventListener('drop', e => {
 
 // start
 render();
+// auto-connect to live server if available
+refreshFromLasso().then(ok => { if (ok) startPolling(); });
 </script>
 </body>
 </html>
