@@ -309,12 +309,18 @@ function applyLivenessOverlay(session, now) {
   let status = session.status;
   let activity = session.activity;
   const statusLower = (status || '').toLowerCase();
+  const activityLower = (activity || '').toLowerCase();
+  const shouldArchiveForStale =
+    statusLower.includes('working') ||
+    statusLower.includes('cloning') ||
+    activityLower.includes('working') ||
+    activityLower.includes('cloning');
   if (statusLower.includes('working')) {
     status = 'exited';
     activity = 'exited';
   }
 
-  if (lastSeen && now - lastSeen > ONE_HOUR_MS) {
+  if (shouldArchiveForStale && lastSeen && now - lastSeen > ONE_HOUR_MS) {
     status = 'archived';
     activity = 'archived';
   }
