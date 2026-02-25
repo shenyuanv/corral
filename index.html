@@ -87,7 +87,7 @@ ctx.imageSmoothingEnabled = false;
 const tooltip = document.getElementById('tooltip');
 
 // === COLORS (pixel art palette) ===
-const PAL = {
+const BASE_PAL = {
   floor: '#3a3a5c',
   floorAlt: '#33334f',
   wall: '#5c5c8a',
@@ -117,6 +117,7 @@ const PAL = {
   tokenRed: '#c13c3c',
   tokenBg: '#0b0b12',
 };
+let PAL = { ...BASE_PAL };
 
 // === CHARACTER COLORS ===
 const CHAR_COLORS = [
@@ -147,6 +148,56 @@ for (let row = 0; row < DESK_ROWS; row++) {
   }
 }
 
+// === TIME + WINDOW SETTINGS ===
+const WINDOW = { x: Math.floor(COLS / 2) - 2, y: 0, w: 4, h: 1 };
+const TIME_TRANSITION_MINUTES = 30;
+const TIME_PHASES = {
+  day: {
+    brightness: 1.05,
+    tint: { r: 1.02, g: 1.04, b: 1.08 },
+    sky: '#7ec8ff',
+    sun: '#ffe39a',
+    sunAlpha: 1,
+    starAlpha: 0,
+    lamp: 0,
+    monitorGlow: 0.05,
+    monitorBoost: 1.0,
+  },
+  sunset: {
+    brightness: 0.9,
+    tint: { r: 1.08, g: 0.98, b: 0.9 },
+    sky: '#f7a062',
+    sun: '#ffd08a',
+    sunAlpha: 0.6,
+    starAlpha: 0.2,
+    lamp: 0.55,
+    monitorGlow: 0.3,
+    monitorBoost: 1.1,
+  },
+  night: {
+    brightness: 0.55,
+    tint: { r: 0.8, g: 0.85, b: 1.0 },
+    sky: '#0a1029',
+    sun: '#ffe39a',
+    sunAlpha: 0,
+    starAlpha: 1,
+    lamp: 1,
+    monitorGlow: 0.9,
+    monitorBoost: 1.5,
+  },
+  sunrise: {
+    brightness: 0.85,
+    tint: { r: 1.05, g: 0.98, b: 0.95 },
+    sky: '#f6b4a0',
+    sun: '#ffd7a0',
+    sunAlpha: 0.6,
+    starAlpha: 0.35,
+    lamp: 0.35,
+    monitorGlow: 0.35,
+    monitorBoost: 1.15,
+  },
+};
+
 // === AGENT STATE ===
 let agents = [];
 let currentLayout = null;
@@ -155,6 +206,9 @@ let hoveredSignature = '';
 let transitions = [];
 let hasInitialized = false;
 let lastRenderTime = null;
+let timeState = null;
+let windowStars = [];
+let windowStarSeed = null;
 
 // === DRAWING HELPERS ===
 function fillTile(x, y, color) {
@@ -165,6 +219,177 @@ function fillTile(x, y, color) {
 function drawRect(px, py, w, h, color) {
   ctx.fillStyle = color;
   ctx.fillRect(px * SCALE, py * SCALE, w * SCALE, h * SCALE);
+}
+
+// === TIME + COLOR HELPERS ===
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function hexToRgb(hex) {
+  const clean = hex.replace('#', '').trim();
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16);
+    const g = parseInt(clean[1] + clean[1], 16);
+    const b = parseInt(clean[2] + clean[2], 16);
+    return { r, g, b };
+  }
+  const num = parseInt(clean, 16);
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+}
+
+function rgbToHex({ r, g, b }) {
+  const rr = clampByte(r).toString(16).padStart(2, '0');
+  const gg = clampByte(g).toString(16).padStart(2, '0');
+  const bb = clampByte(b).toString(16).padStart(2, '0');
+  return `#${rr}${gg}${bb}`;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function lerpHex(a, b, t) {
+  const ar = hexToRgb(a);
+  const br = hexToRgb(b);
+  return rgbToHex({
+    r: lerp(ar.r, br.r, t),
+    g: lerp(ar.g, br.g, t),
+    b: lerp(ar.b, br.b, t),
+  });
+}
+
+function applyTone(hex, brightness, tint) {
+  const rgb = hexToRgb(hex);
+  return rgbToHex({
+    r: rgb.r * brightness * tint.r,
+    g: rgb.g * brightness * tint.g,
+    b: rgb.b * brightness * tint.b,
+  });
+}
+
+function boostColor(hex, boost) {
+  if (boost === 1) return hex;
+  const rgb = hexToRgb(hex);
+  return rgbToHex({
+    r: rgb.r * boost,
+    g: rgb.g * boost,
+    b: rgb.b * boost,
+  });
+}
+
+function hashString(input) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6d2b79f5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function ensureWindowStars(seed, width, height) {
+  if (windowStarSeed === seed && windowStars.length) return;
+  windowStarSeed = seed;
+  const rng = mulberry32(hashString(seed));
+  const count = Math.max(6, Math.floor((width * height) / 36));
+  windowStars = [];
+  for (let i = 0; i < count; i++) {
+    windowStars.push({
+      x: Math.floor(rng() * width),
+      y: Math.floor(rng() * height),
+      twinkle: rng() * Math.PI * 2,
+    });
+  }
+}
+
+function getTimeBlend(minutes) {
+  const transitions = [
+    { at: 6 * 60, from: 'night', to: 'sunrise' },
+    { at: 8 * 60, from: 'sunrise', to: 'day' },
+    { at: 17 * 60, from: 'day', to: 'sunset' },
+    { at: 19 * 60, from: 'sunset', to: 'night' },
+  ];
+  for (const transition of transitions) {
+    const start = transition.at - TIME_TRANSITION_MINUTES;
+    if (minutes >= start && minutes < transition.at) {
+      const blend = (minutes - start) / TIME_TRANSITION_MINUTES;
+      return { from: transition.from, to: transition.to, blend };
+    }
+  }
+  let phase = 'day';
+  if (minutes >= 8 * 60 && minutes < 17 * 60) phase = 'day';
+  else if (minutes >= 17 * 60 && minutes < 19 * 60) phase = 'sunset';
+  else if (minutes >= 19 * 60 || minutes < 6 * 60) phase = 'night';
+  else phase = 'sunrise';
+  return { from: phase, to: phase, blend: 0 };
+}
+
+function blendPhaseSettings(fromKey, toKey, blend) {
+  const from = TIME_PHASES[fromKey];
+  const to = TIME_PHASES[toKey];
+  return {
+    phase: fromKey,
+    nextPhase: toKey,
+    blend,
+    brightness: lerp(from.brightness, to.brightness, blend),
+    tint: {
+      r: lerp(from.tint.r, to.tint.r, blend),
+      g: lerp(from.tint.g, to.tint.g, blend),
+      b: lerp(from.tint.b, to.tint.b, blend),
+    },
+    sky: lerpHex(from.sky, to.sky, blend),
+    sun: lerpHex(from.sun, to.sun, blend),
+    sunAlpha: lerp(from.sunAlpha, to.sunAlpha, blend),
+    starAlpha: lerp(from.starAlpha, to.starAlpha, blend),
+    lamp: lerp(from.lamp, to.lamp, blend),
+    monitorGlow: lerp(from.monitorGlow, to.monitorGlow, blend),
+    monitorBoost: lerp(from.monitorBoost, to.monitorBoost, blend),
+  };
+}
+
+function getTimeSettings(hour, minute) {
+  const minutes = ((hour * 60) + minute) % 1440;
+  const dayFactor = minutes / 1440;
+  const blendInfo = getTimeBlend(minutes);
+  const settings = blendPhaseSettings(blendInfo.from, blendInfo.to, blendInfo.blend);
+  return { ...settings, dayFactor };
+}
+
+function getTimeColors(hour, minute, settings) {
+  const state = settings || getTimeSettings(hour, minute);
+  const palette = {};
+  Object.keys(BASE_PAL).forEach((key) => {
+    palette[key] = applyTone(BASE_PAL[key], state.brightness, state.tint);
+  });
+  const boost = state.monitorBoost;
+  palette.monitorScreen = boostColor(palette.monitorScreen, boost);
+  palette.monitorScreenActive = boostColor(palette.monitorScreenActive, boost);
+  palette.monitorScreenCi = boostColor(palette.monitorScreenCi, boost);
+  palette.monitorScreenCiDark = boostColor(palette.monitorScreenCiDark, boost);
+  palette.windowSky = state.sky;
+  palette.windowSun = state.sun;
+  palette.star = '#f8f8ff';
+  palette.lampGlow = '#ffd27a';
+  return palette;
+}
+
+function getTimeState(hour, minute) {
+  const settings = getTimeSettings(hour, minute);
+  const palette = getTimeColors(hour, minute, settings);
+  return { ...settings, palette };
 }
 
 // === DATA HELPERS ===
@@ -575,6 +800,42 @@ function drawFloor() {
     fillTile(x, 0, PAL.wall);
     drawRect(x * TILE, 0, TILE, 4, PAL.wallTop);
   }
+  drawWindow();
+}
+
+function drawWindow() {
+  if (!timeState) return;
+  const px = WINDOW.x * TILE;
+  const py = WINDOW.y * TILE + 2;
+  const w = WINDOW.w * TILE;
+  const h = 10;
+  const innerX = px + 1;
+  const innerY = py + 1;
+  const innerW = w - 2;
+  const innerH = h - 2;
+
+  drawRect(px, py, w, h, PAL.wallTop);
+  drawRect(innerX, innerY, innerW, innerH, PAL.windowSky);
+  drawRect(px + Math.floor(w / 2) - 1, innerY, 2, innerH, PAL.wall);
+
+  if (timeState.starAlpha > 0.05) {
+    const now = new Date();
+    const starSeed = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    ensureWindowStars(starSeed, innerW, innerH);
+    ctx.save();
+    ctx.globalAlpha = timeState.starAlpha;
+    windowStars.forEach(star => {
+      drawRect(innerX + star.x, innerY + star.y, 1, 1, PAL.star);
+    });
+    ctx.restore();
+  }
+
+  if (timeState.sunAlpha > 0.05) {
+    ctx.save();
+    ctx.globalAlpha = timeState.sunAlpha;
+    drawRect(innerX + innerW - 5, innerY + 2, 3, 3, PAL.windowSun);
+    ctx.restore();
+  }
 }
 
 function drawDoor() {
@@ -582,6 +843,34 @@ function drawDoor() {
   const py = DOOR_TILE.y * TILE;
   drawRect(px + 1, py + 1, 14, 14, '#7a4b1f');
   drawRect(px + 11, py + 8, 2, 2, '#d8c28a');
+}
+
+function drawLampGlow(tileX, tileY, intensity) {
+  if (intensity <= 0) return;
+  const cx = (tileX * TILE + 9) * SCALE;
+  const cy = (tileY * TILE + 7) * SCALE;
+  const radius = 7 * SCALE;
+  ctx.save();
+  ctx.globalAlpha = 0.18 * intensity;
+  ctx.fillStyle = PAL.lampGlow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMonitorGlow(tileX, tileY, intensity) {
+  if (intensity <= 0) return;
+  const cx = (tileX * TILE + 4 + MONITOR.screenX + MONITOR.screenW / 2) * SCALE;
+  const cy = (tileY * TILE + MONITOR.screenY + MONITOR.screenH / 2) * SCALE;
+  const radius = 6 * SCALE;
+  ctx.save();
+  ctx.globalAlpha = 0.16 * intensity;
+  ctx.fillStyle = PAL.monitorScreenActive;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawMonitor(dx, dy, agent, state, frame) {
@@ -594,6 +883,10 @@ function drawMonitor(dx, dy, agent, state, frame) {
   const screenColor = ciEscalated
     ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
     : (active ? PAL.monitorScreenActive : PAL.monitorScreen);
+
+  if (timeState && timeState.monitorGlow > 0 && agent && state !== 'dead') {
+    drawMonitorGlow(dx, dy, timeState.monitorGlow);
+  }
 
   drawRect(baseX, baseY, MONITOR.w, MONITOR.h, PAL.monitor);
   drawRect(baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, screenColor);
@@ -608,6 +901,9 @@ function drawMonitor(dx, dy, agent, state, frame) {
 }
 
 function drawDesk(dx, dy, agent, state, frame) {
+  if (timeState && timeState.lamp > 0 && agent && state !== 'dead') {
+    drawLampGlow(dx, dy, timeState.lamp);
+  }
   // desk surface
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 8, PAL.desk);
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 3, PAL.deskTop);
@@ -953,6 +1249,9 @@ function render(now) {
   lastRenderTime = now;
   frame++;
   updateTransitions(now, dt);
+  const nowTime = new Date();
+  timeState = getTimeState(nowTime.getHours(), nowTime.getMinutes());
+  PAL = timeState.palette;
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawFloor();
   drawDoor();
