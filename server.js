@@ -7,9 +7,13 @@ const { execFile } = require('child_process');
 
 const PORT = process.env.PORT || 3377;
 const SESSIONS_FILE = process.env.LASSO_SESSIONS || path.join(process.env.HOME, 'clawd/lasso/sessions.json');
+const HISTORY_FILE = process.env.LASSO_HISTORY || path.join(path.dirname(SESSIONS_FILE), 'history.json');
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TOKEN_CACHE_TTL_MS = 10 * 1000;
 const TOKEN_DIRS = ['.codex', '.claude'];
+const HISTORY_MAX_ENTRIES = 50;
+const HISTORY_COMPLETED_MAX = 20;
+const HISTORY_STATUS_LIMIT = 20;
 const LAST_SEEN_KEYS = [
   'lastSeenAlive',
   'last_seen_alive',
@@ -27,6 +31,33 @@ const LAST_SEEN_KEYS = [
   'updated_at',
   'lastUpdate',
   'last_update',
+];
+const CREATED_AT_KEYS = [
+  'createdAt',
+  'created_at',
+  'startedAt',
+  'started_at',
+  'startTime',
+  'start_time',
+  'spawnedAt',
+  'spawned_at',
+];
+const UPDATED_AT_KEYS = ['updatedAt', 'updated_at', ...LAST_SEEN_KEYS];
+const ENDED_AT_KEYS = [
+  'endedAt',
+  'ended_at',
+  'completedAt',
+  'completed_at',
+  'finishedAt',
+  'finished_at',
+  'closedAt',
+  'closed_at',
+  'mergedAt',
+  'merged_at',
+  'stoppedAt',
+  'stopped_at',
+  'deadAt',
+  'dead_at',
 ];
 
 const tokenCache = new Map();
@@ -67,6 +98,189 @@ function coerceTimestamp(value) {
     if (!Number.isNaN(parsed)) return parsed;
   }
   return null;
+}
+
+function pickSessionTimestamp(session, keys) {
+  if (!session || typeof session !== 'object') return null;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(session, key)) {
+      const ts = coerceTimestamp(session[key]);
+      if (ts) return ts;
+    }
+  }
+  return null;
+}
+
+function toIsoString(ts) {
+  if (!ts) return null;
+  try {
+    return new Date(ts).toISOString();
+  } catch (err) {
+    return null;
+  }
+}
+
+function normalizeHistoryEntry(entry) {
+  const next = { ...entry };
+  if (!Array.isArray(next.statusHistory)) next.statusHistory = [];
+  const createdTs = coerceTimestamp(next.createdAt);
+  if (createdTs) next.createdAt = new Date(createdTs).toISOString();
+  const endedTs = coerceTimestamp(next.endedAt);
+  if (endedTs) next.endedAt = new Date(endedTs).toISOString();
+  return next;
+}
+
+function recordStatusTransition(entry, status, activity, at) {
+  const history = Array.isArray(entry.statusHistory) ? entry.statusHistory : [];
+  const last = history[history.length - 1];
+  const nextStatus = status || '';
+  const nextActivity = activity || '';
+  if (!last || last.status !== nextStatus || last.activity !== nextActivity) {
+    const isoAt = toIsoString(at);
+    if (isoAt) {
+      history.push({ status: nextStatus, activity: nextActivity, at: isoAt });
+      if (history.length > HISTORY_STATUS_LIMIT) {
+        history.splice(0, history.length - HISTORY_STATUS_LIMIT);
+      }
+    }
+  }
+  entry.statusHistory = history;
+}
+
+function isCompletedStatus(status, activity) {
+  const s = (status || '').toLowerCase();
+  const a = (activity || '').toLowerCase();
+  return (
+    s.includes('merged') ||
+    s.includes('dead') ||
+    s.includes('exited') ||
+    s.includes('archived') ||
+    a.includes('merged') ||
+    a.includes('dead') ||
+    a.includes('exited') ||
+    a.includes('archived')
+  );
+}
+
+function buildHistorySnapshot(session, now) {
+  const createdAtTs = pickSessionTimestamp(session, CREATED_AT_KEYS) || now;
+  const updatedAtTs = pickSessionTimestamp(session, UPDATED_AT_KEYS) || now;
+  const endedAtTs = pickSessionTimestamp(session, ENDED_AT_KEYS);
+  const status = session.status || session.activity || '';
+  const activity = session.activity || '';
+  const snapshot = {
+    id: session.id || session.sessionId || session.agentId || session.name,
+    repo: session.repo || session.repository || session.repoName || session.repo_name,
+    issueId: session.issueId || session.issue_id || session.issueNumber || session.issue_number,
+    issueTitle: session.issueTitle || session.issue_title || session.title,
+    status,
+    agentType: session.agentType || session.agent_type || session.agent || session.provider,
+    createdAt: toIsoString(createdAtTs) || new Date(now).toISOString(),
+    endedAt: toIsoString(endedAtTs),
+    prNumber: session.prNumber || session.pr_number || session.pr,
+    activity,
+    lastUpdatedAt: toIsoString(updatedAtTs) || new Date(now).toISOString(),
+  };
+  return snapshot;
+}
+
+async function readHistoryFile() {
+  let raw;
+  try {
+    raw = await fs.promises.readFile(HISTORY_FILE, 'utf8');
+  } catch (err) {
+    return [];
+  }
+  if (!raw.trim()) return [];
+  try {
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.history)) return data.history;
+    return [];
+  } catch (err) {
+    return [];
+  }
+}
+
+async function writeHistoryFile(entries) {
+  await fs.promises.writeFile(HISTORY_FILE, JSON.stringify(entries, null, 2));
+}
+
+async function updateHistoryFromSessions(sessions) {
+  const now = Date.now();
+  const history = await readHistoryFile();
+  const historyById = new Map();
+  history.forEach((entry) => {
+    if (!entry || !entry.id) return;
+    historyById.set(entry.id, normalizeHistoryEntry(entry));
+  });
+
+  const liveIds = new Set();
+  sessions.forEach((session) => {
+    if (!session) return;
+    const snapshot = buildHistorySnapshot(session, now);
+    if (!snapshot.id) return;
+    liveIds.add(snapshot.id);
+    const existing = historyById.get(snapshot.id);
+    const next = existing ? { ...existing } : { id: snapshot.id, statusHistory: [] };
+    next.repo = snapshot.repo || next.repo;
+    next.issueId = snapshot.issueId ?? next.issueId;
+    next.issueTitle = snapshot.issueTitle || next.issueTitle;
+    next.status = snapshot.status || next.status;
+    next.activity = snapshot.activity || next.activity;
+    next.agentType = snapshot.agentType || next.agentType;
+    next.prNumber = snapshot.prNumber ?? next.prNumber;
+    if (!next.createdAt) {
+      next.createdAt = snapshot.createdAt;
+    } else if (snapshot.createdAt) {
+      const existingCreated = coerceTimestamp(next.createdAt);
+      const incomingCreated = coerceTimestamp(snapshot.createdAt);
+      if (incomingCreated && existingCreated && incomingCreated > existingCreated) {
+        next.createdAt = snapshot.createdAt;
+      }
+    }
+    next.lastUpdatedAt = snapshot.lastUpdatedAt;
+
+    const statusAt = pickSessionTimestamp(session, UPDATED_AT_KEYS) || now;
+    const createdAtTs = coerceTimestamp(next.createdAt);
+    const seedAt = next.statusHistory.length === 0 && createdAtTs ? createdAtTs : statusAt;
+    recordStatusTransition(next, snapshot.status, snapshot.activity, seedAt);
+
+    if (next.endedAt && !isCompletedStatus(snapshot.status, snapshot.activity)) {
+      next.endedAt = null;
+    }
+
+    const completedAt = snapshot.endedAt ? coerceTimestamp(snapshot.endedAt) : null;
+    if (completedAt && !next.endedAt) {
+      next.endedAt = new Date(completedAt).toISOString();
+    } else if (!next.endedAt && isCompletedStatus(snapshot.status, snapshot.activity)) {
+      next.endedAt = toIsoString(statusAt) || new Date(now).toISOString();
+    }
+
+    historyById.set(snapshot.id, next);
+  });
+
+  for (const entry of historyById.values()) {
+    if (!entry || !entry.id) continue;
+    if (liveIds.has(entry.id)) continue;
+    if (!entry.endedAt) {
+      entry.endedAt = toIsoString(now) || new Date(now).toISOString();
+    }
+  }
+
+  let entries = Array.from(historyById.values()).map(normalizeHistoryEntry);
+  const active = entries.filter((entry) => !entry.endedAt);
+  const completed = entries.filter((entry) => entry.endedAt);
+  completed.sort((a, b) => (coerceTimestamp(b.endedAt) || 0) - (coerceTimestamp(a.endedAt) || 0));
+  const trimmedCompleted = completed.slice(0, HISTORY_COMPLETED_MAX);
+  entries = [...active, ...trimmedCompleted];
+  entries.sort((a, b) => (coerceTimestamp(a.createdAt) || 0) - (coerceTimestamp(b.createdAt) || 0));
+  if (entries.length > HISTORY_MAX_ENTRIES) {
+    entries = entries.slice(entries.length - HISTORY_MAX_ENTRIES);
+  }
+
+  await writeHistoryFile(entries);
+  return entries;
 }
 
 function pickLastSeenAlive(session) {
@@ -260,13 +474,31 @@ const server = http.createServer((req, res) => {
 
   if (req.url === '/api/agents') {
     getLassoStatus()
-      .then((data) => {
+      .then(async (data) => {
+        try {
+          await updateHistoryFromSessions(data.sessions || []);
+        } catch (err) {
+          // keep /api/agents responsive even if history write fails
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       })
       .catch((err) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message, sessions: [] }));
+      });
+    return;
+  }
+
+  if (req.url === '/api/history') {
+    readHistoryFile()
+      .then((history) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ history }));
+      })
+      .catch((err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message, history: [] }));
       });
     return;
   }
