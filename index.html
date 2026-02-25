@@ -1824,6 +1824,25 @@ function drawTimeline(now) {
   }
 }
 
+function isWorkingState(agent) {
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  return (
+    status.includes('working') ||
+    status.includes('running') ||
+    status.includes('cloning') ||
+    activity.includes('active')
+  );
+}
+
+function isAgentActive(agent) {
+  if (!agent) return false;
+  if (typeof agent.alive === 'boolean') {
+    return agent.alive && isWorkingState(agent);
+  }
+  return isWorkingState(agent);
+}
+
 // === STATUS BAR ===
 function drawStatusBar() {
   const y = OFFICE_H + TIMELINE_HEIGHT;
@@ -1831,8 +1850,8 @@ function drawStatusBar() {
   ctx.fillRect(0, y, CANVAS_W, S);
   ctx.fillStyle = '#888';
   ctx.font = '11px Courier New';
-  const running = agents.filter(a => !isDoneState(mapState(a))).length;
-  ctx.fillText(`🤠 Corral | ${agents.length} agents | ${running} active`, 8, y + 20);
+  const activeCount = agents.filter(isAgentActive).length;
+  ctx.fillText(`🤠 Corral | ${agents.length} agents | ${activeCount} active`, 8, y + 20);
   const totalTokens = agents.reduce((sum, agent) => {
     const tokens = getTokensUsed(agent);
     return tokens === null ? sum : sum + tokens;
