@@ -42,6 +42,12 @@ const SCALE = 2;
 const S = TILE * SCALE; // rendered tile size
 const COLS = 20;
 const ROWS = 12; // 640x384 at scale 2
+const DESK_COLS = 4;
+const DESK_ROWS = 3;
+const DESK_START_X = 2;
+const DESK_START_Y = 2;
+const DESK_GAP_X = 5;
+const DESK_GAP_Y = 3;
 const CANVAS_W = COLS * S;
 const CANVAS_H = ROWS * S + S; // extra row for status bar
 
@@ -62,9 +68,21 @@ const PAL = {
   monitor: '#222',
   monitorScreen: '#0f380f',
   monitorScreenActive: '#4ae04a',
+  monitorScreenCi: '#ff3b3b',
+  monitorScreenCiDark: '#7a1111',
   chair: '#444',
   plant: '#2d5a1e',
   plantPot: '#8b5e3c',
+  divider: '#26263b',
+  badgeGreen: '#2f9a3d',
+  badgeGold: '#d1a128',
+  badgeText: '#111',
+  cup: '#d9d9d9',
+  coffee: '#5a3a1a',
+  steam: '#e5e5e5',
+  fire1: '#f04',
+  fire2: '#f80',
+  fire3: '#ff0',
 };
 
 // === CHARACTER COLORS ===
@@ -77,11 +95,22 @@ const CHAR_COLORS = [
   { skin: '#e8c090', hair: '#802020', shirt: '#40c0c0', pants: '#2a2a4e' }, // teal
 ];
 
+const MONITOR = {
+  w: 8,
+  h: 6,
+  screenX: 1,
+  screenY: 1,
+  screenW: 6,
+  screenH: 4,
+  standW: 4,
+  standH: 2,
+};
+
 // === DESK POSITIONS ===
 const DESKS = [];
-for (let row = 0; row < 3; row++) {
-  for (let col = 0; col < 4; col++) {
-    DESKS.push({ x: 2 + col * 5, y: 2 + row * 3 });
+for (let row = 0; row < DESK_ROWS; row++) {
+  for (let col = 0; col < DESK_COLS; col++) {
+    DESKS.push({ x: DESK_START_X + col * DESK_GAP_X, y: DESK_START_Y + row * DESK_GAP_Y });
   }
 }
 
@@ -99,6 +128,98 @@ function drawRect(px, py, w, h, color) {
   ctx.fillRect(px * SCALE, py * SCALE, w * SCALE, h * SCALE);
 }
 
+// === DATA HELPERS ===
+function getRepoName(agent) {
+  if (!agent) return '';
+  return (agent.repo || '').split('/').pop() || '';
+}
+
+function getIssueId(agent) {
+  if (!agent) return '';
+  return agent.issueId ?? agent.issue ?? agent.issueID ?? '';
+}
+
+function resolveAgentType(agent) {
+  if (!agent) return '';
+  return (agent.agentType || agent.agent || agent.type || '').toLowerCase();
+}
+
+function getMonitorText(agent) {
+  if (!agent) return '';
+  const issueTitle = (agent.issueTitle || '').toString().trim();
+  if (issueTitle) return issueTitle;
+  const repo = getRepoName(agent);
+  const issueId = getIssueId(agent);
+  if (repo && issueId) return `${repo}#${issueId}`;
+  return repo || agent.id || '';
+}
+
+function getReaction(agent) {
+  return agent && agent.reactionState ? agent.reactionState : {};
+}
+
+function hoursRunning(agent) {
+  if (!agent || !agent.createdAt) return 0;
+  const ts = Date.parse(agent.createdAt);
+  if (Number.isNaN(ts)) return 0;
+  return Math.max(0, (Date.now() - ts) / 3600000);
+}
+
+function coffeeCount(agent) {
+  const hours = hoursRunning(agent);
+  if (hours < 1) return 0;
+  if (hours < 2) return 1;
+  if (hours < 4) return 2;
+  return 3;
+}
+
+function buildLayout(list) {
+  const groups = [];
+  const byRepo = new Map();
+  list.forEach(agent => {
+    const repo = getRepoName(agent) || 'unknown';
+    if (!byRepo.has(repo)) {
+      const g = { repo, agents: [] };
+      byRepo.set(repo, g);
+      groups.push(g);
+    }
+    byRepo.get(repo).agents.push(agent);
+  });
+
+  const ordered = [];
+  groups.forEach(group => group.agents.forEach(agent => ordered.push({ agent, repo: group.repo })));
+
+  const slots = [];
+  const deskAgents = new Array(DESKS.length).fill(null);
+  const firstIndex = new Map();
+  const maxCount = Math.min(ordered.length, DESKS.length);
+  for (let i = 0; i < maxCount; i++) {
+    const item = ordered[i];
+    const desk = DESKS[i];
+    const row = Math.floor(i / DESK_COLS);
+    const col = i % DESK_COLS;
+    const slot = { ...item, idx: i, desk, row, col };
+    slots.push(slot);
+    deskAgents[i] = slot;
+    if (!firstIndex.has(item.repo)) firstIndex.set(item.repo, i);
+  }
+
+  const labels = [];
+  for (const [repo, idx] of firstIndex.entries()) {
+    const slot = slots[idx];
+    if (slot) labels.push({ repo, desk: slot.desk, row: slot.row, col: slot.col });
+  }
+
+  const dividers = [];
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i].repo !== slots[i - 1].repo && slots[i].row === slots[i - 1].row) {
+      dividers.push({ left: slots[i - 1], right: slots[i] });
+    }
+  }
+
+  return { slots, deskAgents, labels, dividers };
+}
+
 // === DRAW OFFICE ===
 function drawFloor() {
   for (let y = 0; y < ROWS; y++) {
@@ -113,15 +234,140 @@ function drawFloor() {
   }
 }
 
-function drawDesk(dx, dy, active) {
+function drawMonitor(dx, dy, agent, state, frame) {
+  const baseX = dx * TILE + 4;
+  const baseY = dy * TILE;
+  const reaction = getReaction(agent);
+  const ciRetries = Number(reaction.ciRetries || 0);
+  const ciEscalated = !!reaction.ciEscalated;
+  const active = state === 'coding';
+  const screenColor = ciEscalated
+    ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
+    : (active ? PAL.monitorScreenActive : PAL.monitorScreen);
+
+  drawRect(baseX, baseY, MONITOR.w, MONITOR.h, PAL.monitor);
+  drawRect(baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, screenColor);
+  drawRect(baseX + (MONITOR.w - MONITOR.standW) / 2, baseY + MONITOR.h, MONITOR.standW, MONITOR.standH, PAL.monitor);
+
+  const textColor = ciEscalated ? '#ffe6e6' : (active ? '#0b2' : '#5fbf6a');
+  drawMonitorText(getMonitorText(agent), baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, frame, textColor);
+
+  if (ciRetries > 0) {
+    drawFire(baseX + MONITOR.screenX, baseY + MONITOR.screenY, frame);
+  }
+}
+
+function drawDesk(dx, dy, agent, state, frame) {
   // desk surface
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 8, PAL.desk);
   drawRect(dx * TILE + 2, dy * TILE + 4, 14, 3, PAL.deskTop);
   // monitor
-  drawRect(dx * TILE + 5, dy * TILE, 6, 4, PAL.monitor);
-  drawRect(dx * TILE + 6, dy * TILE + 1, 4, 2, active ? PAL.monitorScreenActive : PAL.monitorScreen);
+  drawMonitor(dx, dy, agent, state, frame);
   // chair (below desk)
   drawRect(dx * TILE + 5, (dy + 1) * TILE + 2, 6, 5, PAL.chair);
+
+  const count = coffeeCount(agent);
+  if (count > 0) {
+    drawCoffeeCups(dx, dy, count, frame);
+  }
+}
+
+function drawCoffeeCups(dx, dy, count, frame) {
+  const baseX = dx * TILE + 3;
+  const baseY = dy * TILE + 5;
+  for (let i = 0; i < count; i++) {
+    const cupX = baseX + i * 4;
+    drawRect(cupX, baseY, 3, 2, PAL.cup);
+    drawRect(cupX + 1, baseY + 1, 1, 1, PAL.coffee);
+    drawRect(cupX + 3, baseY + 1, 1, 1, PAL.cup);
+  }
+
+  if (count >= 3) {
+    const steamX = baseX + (count - 1) * 4 + 1;
+    const phase = frame % 20 < 10 ? 0 : 1;
+    drawRect(steamX, baseY - 2 - phase, 1, 1, PAL.steam);
+    drawRect(steamX + 1, baseY - 4 + phase, 1, 1, PAL.steam);
+  }
+}
+
+function drawFire(screenX, screenY, frame) {
+  const frames = [
+    [
+      { x: 1, y: 3, c: PAL.fire1 }, { x: 2, y: 2, c: PAL.fire2 }, { x: 3, y: 3, c: PAL.fire3 },
+      { x: 4, y: 2, c: PAL.fire2 }, { x: 5, y: 3, c: PAL.fire1 },
+    ],
+    [
+      { x: 1, y: 2, c: PAL.fire2 }, { x: 2, y: 3, c: PAL.fire1 }, { x: 3, y: 1, c: PAL.fire3 },
+      { x: 4, y: 3, c: PAL.fire2 }, { x: 5, y: 2, c: PAL.fire1 },
+    ],
+    [
+      { x: 1, y: 3, c: PAL.fire1 }, { x: 2, y: 1, c: PAL.fire3 }, { x: 3, y: 2, c: PAL.fire2 },
+      { x: 4, y: 1, c: PAL.fire3 }, { x: 5, y: 3, c: PAL.fire1 },
+    ],
+  ];
+  const idx = frame % frames.length;
+  frames[idx].forEach(p => drawRect(screenX + p.x, screenY + p.y, 1, 1, p.c));
+}
+
+function drawMonitorText(text, screenX, screenY, screenW, screenH, frame, color) {
+  if (!text) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(screenX * SCALE, screenY * SCALE, screenW * SCALE, screenH * SCALE);
+  ctx.clip();
+  ctx.fillStyle = color;
+  ctx.font = `${4 * SCALE}px Courier New`;
+  ctx.textBaseline = 'top';
+  const textWidth = ctx.measureText(text).width;
+  const pad = 4 * SCALE;
+  const scroll = (frame * 0.6) % (textWidth + screenW * SCALE + pad);
+  const x = screenX * SCALE + screenW * SCALE - scroll;
+  const y = screenY * SCALE + 1 * SCALE;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawGroupDivider(leftDesk, rightDesk) {
+  const midTileX = leftDesk.x + Math.floor((rightDesk.x - leftDesk.x) / 2);
+  drawRect(midTileX * TILE + 7, leftDesk.y * TILE + 2, 2, 12, PAL.divider);
+}
+
+function drawGroupLabel(dx, dy, text) {
+  if (!text) return;
+  ctx.font = `${6 * SCALE}px Courier New`;
+  const textWidth = ctx.measureText(text).width;
+  const padding = 2 * SCALE;
+  const w = textWidth + padding * 2;
+  const h = 8 * SCALE;
+  const x = (dx * TILE + 8) * SCALE - w / 2;
+  const y = (dy * TILE - 14) * SCALE;
+  ctx.fillStyle = '#333';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#f0c040';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawPrBadge(dx, dy, prNumber, merged) {
+  const label = `PR #${prNumber}${merged ? ' ✓' : ''}`;
+  ctx.font = `${6 * SCALE}px Courier New`;
+  const textWidth = ctx.measureText(label).width;
+  const padding = 2 * SCALE;
+  const w = textWidth + padding * 2;
+  const h = 8 * SCALE;
+  const x = (dx * TILE + 12) * SCALE - w / 2;
+  const y = (dy * TILE - 12) * SCALE;
+  ctx.fillStyle = merged ? PAL.badgeGold : PAL.badgeGreen;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = PAL.badgeText;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + w / 2, y + h / 2 + 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 }
 
 function drawPlant(px, py) {
@@ -131,8 +377,10 @@ function drawPlant(px, py) {
 }
 
 // === DRAW CHARACTER ===
-function drawCharacter(tileX, tileY, colorIdx, state, frame) {
-  const c = CHAR_COLORS[colorIdx % CHAR_COLORS.length];
+function drawCharacter(tileX, tileY, colorIdx, state, frame, agentType) {
+  const base = CHAR_COLORS[colorIdx % CHAR_COLORS.length];
+  const shirt = agentType === 'codex' ? '#3fbf3f' : (agentType === 'claude' ? '#f08b2e' : base.shirt);
+  const c = { ...base, shirt };
   const px = tileX * TILE;
   const py = tileY * TILE;
   const bob = Math.sin(frame * 0.15) > 0 ? 0 : 1;
@@ -159,6 +407,9 @@ function drawCharacter(tileX, tileY, colorIdx, state, frame) {
   drawRect(px + 5, py + 1 + oy, 6, 5, c.skin);
   // hair
   drawRect(px + 5, py + oy, 6, 2, c.hair);
+  // hoodie hints
+  drawRect(px + 4, py + 3 + oy, 1, 2, c.shirt);
+  drawRect(px + 11, py + 3 + oy, 1, 2, c.shirt);
 
   // arms
   if (state === 'coding') {
@@ -209,7 +460,7 @@ function drawStatusBar() {
   ctx.fillRect(0, y, CANVAS_W, S);
   ctx.fillStyle = '#888';
   ctx.font = '11px Courier New';
-  const running = agents.filter(a => a.state !== 'dead').length;
+  const running = agents.filter(a => mapState(a) !== 'dead').length;
   ctx.fillText(`🤠 Corral | ${agents.length} agents | ${running} active`, 8, y + 20);
   const now = new Date().toLocaleTimeString();
   ctx.fillText(now, CANVAS_W - 80, y + 20);
@@ -244,11 +495,16 @@ function render() {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawFloor();
 
+  const layout = buildLayout(agents);
+
+  layout.dividers.forEach(divider => drawGroupDivider(divider.left.desk, divider.right.desk));
+
   // draw desks
   DESKS.forEach((d, i) => {
-    const agent = agents[i];
-    const active = agent && mapState(agent) === 'coding';
-    drawDesk(d.x, d.y, active);
+    const slot = layout.deskAgents[i];
+    const agent = slot ? slot.agent : null;
+    const state = agent ? mapState(agent) : 'idle';
+    drawDesk(d.x, d.y, agent, state, frame);
   });
 
   // decorative plants
@@ -256,16 +512,24 @@ function render() {
   drawPlant(0, 8);
   drawPlant(COLS - 1, 5);
 
+  layout.labels.forEach(label => drawGroupLabel(label.desk.x, label.desk.y, label.repo));
+
   // draw agents at desks
-  agents.forEach((agent, i) => {
-    if (i >= DESKS.length) return;
-    const desk = DESKS[i];
+  layout.slots.forEach((slot, i) => {
+    const agent = slot.agent;
+    const desk = slot.desk;
     const state = mapState(agent);
     if (state === 'dead') return; // ghost desk
-    drawCharacter(desk.x, desk.y + 1, i, state, frame);
+    drawCharacter(desk.x, desk.y + 1, i, state, frame, resolveAgentType(agent));
+    const prNumber = agent ? agent.prNumber : null;
+    const status = (agent.status || '').toLowerCase();
+    if (prNumber !== null && prNumber !== undefined) {
+      drawPrBadge(desk.x, desk.y, prNumber, status.includes('merged'));
+    }
     // bubble with repo/issue
-    const repo = (agent.repo || '').split('/').pop();
-    const label = agent.issueId ? `${repo}#${agent.issueId}` : (repo || agent.id || `agent-${i}`);
+    const repo = getRepoName(agent);
+    const issueId = getIssueId(agent);
+    const label = issueId ? `${repo}#${issueId}` : (repo || agent.id || `agent-${i}`);
     drawBubble(desk.x, desk.y, label, state === 'waiting' ? '#ff0' : '#fff');
   });
 
@@ -275,12 +539,57 @@ function render() {
 
 // === DATA LOADING ===
 function loadDemo() {
+  const now = Date.now();
   agents = [
-    { label: 'codex-1', repo: 'zall', issue: '7', status: 'running', agent: 'codex' },
-    { label: 'codex-2', repo: 'zall', issue: '12', status: 'pr_open', agent: 'codex' },
-    { label: 'claude-3', repo: 'lasso', issue: '29', status: 'running', agent: 'claude' },
-    { label: 'codex-4', repo: 'corral', issue: '1', status: 'ci_pending', agent: 'codex' },
-    { label: 'codex-5', repo: 'zall', issue: '15', status: 'dead', agent: 'codex' },
+    {
+      id: 'codex-1',
+      repo: 'zall',
+      issueId: '7',
+      issueTitle: 'Tighten input validation',
+      status: 'running',
+      agentType: 'codex',
+      createdAt: new Date(now - 30 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'codex-2',
+      repo: 'zall',
+      issueId: '12',
+      issueTitle: 'Add rate limiting',
+      status: 'pr_open',
+      agentType: 'codex',
+      prNumber: 42,
+      createdAt: new Date(now - 2.5 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'claude-3',
+      repo: 'lasso',
+      issueId: '29',
+      issueTitle: 'Refine lasso ingestion',
+      status: 'running',
+      agentType: 'claude',
+      createdAt: new Date(now - 5.5 * 60 * 60 * 1000).toISOString(),
+      reactionState: { ciRetries: 2 },
+    },
+    {
+      id: 'codex-4',
+      repo: 'corral',
+      issueId: '1',
+      issueTitle: 'Rich visuals polish',
+      status: 'ci_pending',
+      agentType: 'codex',
+      reactionState: { ciRetries: 3, ciEscalated: true },
+      prNumber: 88,
+      createdAt: new Date(now - 4.5 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'codex-5',
+      repo: 'zall',
+      issueId: '15',
+      status: 'merged',
+      agentType: 'codex',
+      prNumber: 61,
+      createdAt: new Date(now - 90 * 60 * 1000).toISOString(),
+    },
   ];
   updateAgentsList();
 }
@@ -333,10 +642,11 @@ function updateAgentsList() {
   const el = document.getElementById('agents-list');
   el.innerHTML = agents.map((a, i) => {
     const state = mapState(a);
-    const repo = (a.repo || '').split('/').pop();
+    const repo = getRepoName(a);
+    const issueId = getIssueId(a);
     return `<div class="agent-row">
-      <span class="agent-name">${a.id || 'agent-' + i}</span>
-      <span class="agent-repo">${repo}${a.issueId ? '#' + a.issueId : ''}</span>
+      <span class="agent-name">${a.id || a.label || 'agent-' + i}</span>
+      <span class="agent-repo">${repo}${issueId ? '#' + issueId : ''}</span>
       <span class="agent-status">${stateLabel(state)}</span>
     </div>`;
   }).join('');
