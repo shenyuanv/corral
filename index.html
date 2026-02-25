@@ -945,6 +945,11 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
 
   enteringSlots.forEach((slot, index) => {
     if (transitionKeys.has(slot.key)) return;
+    if (mapState(slot.agent) === 'dead') {
+      // Agent arrived already dead — place tombstone, no walking
+      addTombstone(buildTombstone(slot.agent, slot, nowMs), nowMs);
+      return;
+    }
     transitions.push(makeTransition({
       key: slot.key,
       agent: slot.agent,
@@ -2348,6 +2353,17 @@ function loadDemo() {
       tokensUsed: 3220,
       createdAt: new Date(now - 90 * 60 * 1000).toISOString(),
     },
+    {
+      id: 'claude-6',
+      repo: 'corral',
+      issueId: '3',
+      issueTitle: 'Fix liveness check',
+      status: 'exited',
+      agentType: 'claude',
+      tokensUsed: 45200,
+      createdAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(now - 10 * 60 * 1000).toISOString(),
+    },
   ];
   const demoHistory = demoAgents.map((agent) => {
     const createdAt = agent.createdAt;
@@ -2364,9 +2380,10 @@ function loadDemo() {
     if ((agent.status || '').includes('merged')) {
       statusHistory.push({ status: 'merged', activity: '', at: new Date(createdTs + 70 * 60 * 1000).toISOString() });
     }
-    const endedAt = statusHistory[statusHistory.length - 1].status === 'merged'
-      ? statusHistory[statusHistory.length - 1].at
-      : null;
+    const endedAt = agent.endedAt
+      || (statusHistory[statusHistory.length - 1].status === 'merged'
+        ? statusHistory[statusHistory.length - 1].at
+        : null);
     return {
       id: agent.id,
       repo: agent.repo,
