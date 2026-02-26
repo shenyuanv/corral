@@ -131,12 +131,14 @@
   }
   .usage-card.warn { border-color: #d1a128; }
   .usage-card.alert { border-color: #c13c3c; }
+  .usage-card.exhausted { border-color: #c13c3c; background: #1a0a0a; }
   .usage-title { display: flex; justify-content: space-between; align-items: center; color: #e6e6e6; font-weight: bold; }
   .usage-pill { font-size: 9px; padding: 1px 6px; border-radius: 10px; border: 1px solid #2a2a3f; color: #c9cedf; text-transform: uppercase; letter-spacing: 0.3px; }
   .usage-pill.ok { border-color: #2f9a3d; color: #bfe6c7; }
   .usage-pill.warn { border-color: #d1a128; color: #f3e2a2; }
   .usage-pill.alert { border-color: #c13c3c; color: #f5b3b3; }
   .usage-pill.error { border-color: #7b8096; color: #b1b6c9; }
+  .usage-pill.exhausted { border-color: #c13c3c; color: #f5b3b3; background: #3a1010; }
   .usage-metric { margin-top: 6px; }
   .usage-row { display: flex; justify-content: space-between; color: #c9cedf; font-size: 10px; }
   .usage-bar { height: 6px; background: #1b1b2b; border: 1px solid #2a2a3f; margin-top: 3px; }
@@ -1475,6 +1477,27 @@ function renderUsagePanel() {
   cards.innerHTML = providers.map((provider) => {
     const name = escapeHtml(provider.name || provider.id || 'Usage');
     const status = (provider.status || 'ok').toLowerCase();
+    const isExhausted = provider.quotaStatus && provider.quotaStatus.exhausted;
+
+    if (isExhausted) {
+      const resetLabel = provider.quotaStatus.resetAt
+        ? `Resets ${formatResetAt(provider.quotaStatus.resetAt)}`
+        : 'Reset time unknown';
+      return `
+        <div class="usage-card exhausted">
+          <div class="usage-title">
+            <span>${name}</span>
+            <span class="usage-pill exhausted">exhausted</span>
+          </div>
+          <div class="usage-metric">
+            <div class="usage-row" style="color:#f5b3b3">\u26D4 Quota exhausted</div>
+            <div class="usage-bar"><div class="usage-fill alert" style="width:100%"></div></div>
+          </div>
+          <div class="usage-meta">${escapeHtml(resetLabel)}</div>
+        </div>
+      `;
+    }
+
     const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
     const percents = metrics.map(usagePercent).filter(p => p !== null);
     const highest = percents.length ? Math.max(...percents) : null;
@@ -1482,7 +1505,7 @@ function renderUsagePanel() {
     const cardClass = level === 'warn' ? 'usage-card warn' : level === 'alert' ? 'usage-card alert' : 'usage-card';
     const pillClass = status === 'ok' ? (level === 'alert' ? 'usage-pill alert' : level === 'warn' ? 'usage-pill warn' : 'usage-pill ok') : 'usage-pill error';
     const pillLabel = status === 'ok' ? (level === 'alert' ? 'alert' : level === 'warn' ? 'warn' : 'ok') : 'error';
-    const resetLabel = provider.resetAt ? `Reset ${formatResetAt(provider.resetAt)}` : 'Reset —';
+    const resetLabel = provider.resetAt ? `Reset ${formatResetAt(provider.resetAt)}` : 'Reset \u2014';
     const note = provider.note ? `<div class="usage-note">${escapeHtml(provider.note)}</div>` : '';
     const error = provider.error ? `<div class="usage-note">${escapeHtml(provider.error)}</div>` : '';
 
@@ -2819,7 +2842,17 @@ function drawUsagePanel() {
 
   // Codex provider (right side, row 2)
   const codex = findProvider(usageData, 'codex');
-  if (codex && codex.status === 'ok' && Array.isArray(codex.metrics)) {
+  if (codex && codex.quotaStatus && codex.quotaStatus.exhausted) {
+    // Quota exhausted — show red blinking warning
+    const codexX = 370;
+    const blink = frame % 40 < 20;
+    ctx.fillStyle = blink ? '#ff5c5c' : '#cc3333';
+    ctx.fillText('\u26D4 Codex', codexX, row2Y);
+    ctx.fillStyle = '#ff5c5c';
+    const resetLabel = codex.quotaStatus.resetAt ? formatResetTime(codex.quotaStatus.resetAt) : '';
+    const msg = resetLabel ? 'Quota exhausted \u2014 resets ' + resetLabel : 'Quota exhausted';
+    ctx.fillText(msg, codexX + 52, row2Y);
+  } else if (codex && codex.status === 'ok' && Array.isArray(codex.metrics)) {
     const tokenMetric = codex.metrics.find(m => m.id === 'tokens');
     const codexX = 370;
     ctx.fillStyle = '#9aa0b5';
@@ -2836,8 +2869,9 @@ function drawUsagePanel() {
   }
 
   // Warning indicators
+  const codexExhausted = codex && codex.quotaStatus && codex.quotaStatus.exhausted;
   const maxPct = claudeMetrics.length ? Math.max(...claudeMetrics.map(m => m.pct)) : 0;
-  if (maxPct >= 95) {
+  if (maxPct >= 95 || codexExhausted) {
     const warnX = CANVAS_W - 70;
     const warnY = y + USAGE_PANEL_HEIGHT / 2;
     const blink = frame % 30 < 15;
