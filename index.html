@@ -292,8 +292,8 @@ const DESK_GAP_Y = 3;
 const CANVAS_W = COLS * S;
 const OFFICE_H = ROWS * S;
 const TIMELINE_MAX_ROWS = 20;
-const TIMELINE_ROW_HEIGHT = 12;
-const TIMELINE_BAR_HEIGHT = 4;
+const TIMELINE_ROW_HEIGHT = 18;
+const TIMELINE_BAR_HEIGHT = 8;
 const TIMELINE_LEGEND_HEIGHT = 14;
 const TIMELINE_AXIS_HEIGHT = 14;
 const TIMELINE_HEADER_HEIGHT = TIMELINE_LEGEND_HEIGHT + TIMELINE_AXIS_HEIGHT;
@@ -2423,15 +2423,20 @@ function formatTimelineTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatTimelineLabel(entry) {
+function formatTimelineLabel(entry, now) {
   const repo = entry.repo || '';
   const issueId = entry.issueId || '';
-  if (repo && issueId) return `${repo}#${issueId}`;
-  return entry.id || 'agent';
+  const base = (repo && issueId) ? `${repo}#${issueId}` : (entry.id || 'agent');
+  const createdAt = coerceMs(entry.createdAt);
+  if (createdAt) {
+    const endTs = coerceMs(entry.endedAt) || now || Date.now();
+    return `${base} (${formatDuration(endTs - createdAt)})`;
+  }
+  return base;
 }
 
 function buildTimelineTooltip(entry, marker) {
-  const title = escapeHtml(formatTimelineLabel(entry));
+  const title = escapeHtml(formatTimelineLabel(entry, Date.now()));
   const repoIssue = escapeHtml(formatRepoIssue(entry));
   const status = escapeHtml(timelineStatusLabel(entry.status, entry.activity));
   const createdAt = coerceMs(entry.createdAt);
@@ -2458,6 +2463,7 @@ function drawTimelineLegend(x, y) {
     { label: 'PR Open', color: TIMELINE_COLORS.pr },
     { label: 'CI Failed', color: TIMELINE_COLORS.ciFailed },
     { label: 'Merged', color: TIMELINE_COLORS.merged },
+    { label: 'PR Closed', color: TIMELINE_COLORS.prClosed },
     { label: 'Dead', color: TIMELINE_COLORS.dead },
   ];
   let cursor = x;
@@ -2538,7 +2544,7 @@ function drawTimeline(now) {
   visibleEntries.forEach((entry, rowIndex) => {
     const rowY = contentTop + rowIndex * TIMELINE_ROW_HEIGHT;
     const barY = rowY + Math.floor((TIMELINE_ROW_HEIGHT - TIMELINE_BAR_HEIGHT) / 2);
-    const label = fitText(ctx, formatTimelineLabel(entry), TIMELINE_LABEL_WIDTH - 14);
+    const label = fitText(ctx, formatTimelineLabel(entry, now), TIMELINE_LABEL_WIDTH - 14);
     ctx.fillStyle = TIMELINE_COLORS.label;
     ctx.fillText(label, 8, rowY + TIMELINE_ROW_HEIGHT / 2);
 
@@ -2551,7 +2557,54 @@ function drawTimeline(now) {
       const segW = Math.max(1, ((segEnd - segStart) / range) * barW);
       ctx.fillStyle = timelineColorForStatus(segment.status, segment.activity);
       ctx.fillRect(segX, barY, segW, TIMELINE_BAR_HEIGHT);
+
+      // Status segment labels for wide segments
+      if (segW > 60) {
+        const segLabel = timelineStatusLabel(segment.status, segment.activity);
+        ctx.font = '8px Courier New';
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'middle';
+        const labelW = ctx.measureText(segLabel).width;
+        if (labelW < segW - 4) {
+          ctx.fillText(segLabel, segX + (segW - labelW) / 2, barY + TIMELINE_BAR_HEIGHT / 2);
+        }
+        ctx.font = '10px Courier New';
+      }
     });
+
+    // End marker for finished agents
+    const endedAt = coerceMs(entry.endedAt);
+    if (endedAt && endedAt >= start && endedAt <= end) {
+      const endX = barX + ((endedAt - start) / range) * barW;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(endX - 1, barY - 1, 2, TIMELINE_BAR_HEIGHT + 2);
+    }
+
+    // Start/end time labels on bars
+    const entryStart = coerceMs(entry.createdAt) || (segments[0] && segments[0].start);
+    if (entryStart && segments.length > 0) {
+      const firstSegStart = Math.max(entryStart, start);
+      const lastSegEnd = Math.min(segments[segments.length - 1].end, end);
+      const totalBarX = barX + ((firstSegStart - start) / range) * barW;
+      const totalBarEndX = barX + ((lastSegEnd - start) / range) * barW;
+      const totalBarW = totalBarEndX - totalBarX;
+      ctx.font = '8px Courier New';
+      ctx.textBaseline = 'top';
+      const timeY = barY + TIMELINE_BAR_HEIGHT + 1;
+      // Start time
+      if (totalBarW > 40 && firstSegStart >= start) {
+        ctx.fillStyle = TIMELINE_COLORS.muted;
+        ctx.fillText(formatTimelineTime(firstSegStart), totalBarX, timeY);
+      }
+      // End time (only for finished agents, and only if bar is wide enough)
+      if (endedAt && totalBarW > 80) {
+        const endLabel = formatTimelineTime(endedAt);
+        ctx.fillStyle = TIMELINE_COLORS.muted;
+        ctx.fillText(endLabel, totalBarEndX - ctx.measureText(endLabel).width, timeY);
+      }
+      ctx.font = '10px Courier New';
+      ctx.textBaseline = 'middle';
+    }
 
     const events = buildTimelineEvents(entry, now);
     const markers = buildTimelineMarkers(entry, events, now).map((marker) => {
