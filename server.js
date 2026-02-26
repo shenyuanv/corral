@@ -79,6 +79,7 @@ const ENDED_AT_KEYS = [
 
 const tokenCache = new Map();
 const usageCache = { ts: 0, data: null, pending: null };
+let quotaCache = null; // in-memory cache for codex-quota.json
 
 function runLassoClean() {
   return new Promise((resolve, reject) => {
@@ -465,33 +466,28 @@ async function scanLassoLogForQuotaError(logPath) {
   return null;
 }
 
-async function readCodexQuota() {
-  try {
-    const raw = await fs.promises.readFile(CODEX_QUOTA_FILE, 'utf8');
-    if (!raw.trim()) return null;
-    const data = JSON.parse(raw);
-    if (!data || !data.exhausted) return null;
-    // Auto-clear if reset time has passed
-    if (data.resetAt) {
-      const resetTs = Date.parse(data.resetAt);
-      if (!Number.isNaN(resetTs) && Date.now() >= resetTs) {
-        await clearCodexQuota();
-        return null;
-      }
+function readCodexQuota() {
+  if (!quotaCache || !quotaCache.exhausted) return null;
+  // Auto-clear if reset time has passed
+  if (quotaCache.resetAt) {
+    const resetTs = Date.parse(quotaCache.resetAt);
+    if (!Number.isNaN(resetTs) && Date.now() >= resetTs) {
+      clearCodexQuota();
+      return null;
     }
-    return data;
-  } catch (err) {
-    return null;
   }
+  return quotaCache;
 }
 
 async function writeCodexQuota(data) {
+  quotaCache = data;
   const dir = path.dirname(CODEX_QUOTA_FILE);
   await fs.promises.mkdir(dir, { recursive: true });
   await fs.promises.writeFile(CODEX_QUOTA_FILE, JSON.stringify(data, null, 2));
 }
 
 async function clearCodexQuota() {
+  quotaCache = null;
   try {
     await fs.promises.unlink(CODEX_QUOTA_FILE);
   } catch (err) {
@@ -865,8 +861,8 @@ async function getCodexUsageEstimate() {
   provider.resetAt = resetAt;
   provider.note = hasTokens ? 'Estimated from active agent logs' : 'No token logs found yet';
 
-  // Overlay quota exhaustion status from state file
-  const quota = await readCodexQuota();
+  // Overlay quota exhaustion status from in-memory cache
+  const quota = readCodexQuota();
   if (quota && quota.exhausted) {
     provider.quotaStatus = {
       exhausted: true,
@@ -1032,6 +1028,17 @@ const server = http.createServer((req, res) => {
     res.end(data);
   });
 });
+
+// Load codex quota cache from disk on startup
+try {
+  const raw = fs.readFileSync(CODEX_QUOTA_FILE, 'utf8');
+  if (raw.trim()) {
+    const data = JSON.parse(raw);
+    if (data && data.exhausted) quotaCache = data;
+  }
+} catch (_) {
+  // no cached quota on disk — start with null
+}
 
 const HOST = process.env.HOST || '0.0.0.0';
 server.listen(PORT, HOST, () => {

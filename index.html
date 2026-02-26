@@ -294,7 +294,7 @@ const DESK_GAP_Y = 3;
 const CANVAS_W = COLS * S;
 const OFFICE_H = ROWS * S;
 const TIMELINE_MAX_ROWS = 20;
-const TIMELINE_ROW_HEIGHT = 18;
+const TIMELINE_ROW_HEIGHT = 22;
 const TIMELINE_BAR_HEIGHT = 8;
 const TIMELINE_LEGEND_HEIGHT = 14;
 const TIMELINE_AXIS_HEIGHT = 14;
@@ -1101,8 +1101,9 @@ function mergeTimelineEntries(activeAgents, historyList) {
 
   merged.sort((a, b) => {
     if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-    const aTime = a.isActive ? coerceMs(a.createdAt) : (coerceMs(a.endedAt) || coerceMs(a.createdAt));
-    const bTime = b.isActive ? coerceMs(b.createdAt) : (coerceMs(b.endedAt) || coerceMs(b.createdAt));
+    // Sort by start time (most recent first) for consistency
+    const aTime = coerceMs(a.createdAt);
+    const bTime = coerceMs(b.createdAt);
     return (bTime || 0) - (aTime || 0);
   });
 
@@ -2447,7 +2448,10 @@ function formatTimelineTime(ts) {
 }
 
 function formatTimelineLabel(entry, now) {
-  const repo = entry.repo || '';
+  let repo = entry.repo || '';
+  // Strip owner prefix (e.g. "shenyuanv/corral" → "corral")
+  const slashIdx = repo.indexOf('/');
+  if (slashIdx !== -1) repo = repo.slice(slashIdx + 1);
   const issueId = entry.issueId || '';
   const base = (repo && issueId) ? `${repo}#${issueId}` : (entry.id || 'agent');
   const createdAt = coerceMs(entry.createdAt);
