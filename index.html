@@ -170,6 +170,7 @@
   .status-waiting { background: #d1a128; }
   .status-ci { background: #c13c3c; }
   .status-merged { background: #d1a128; }
+  .status-pr_closed { background: #8855aa; }
   .status-exited { background: #6c6c6c; }
   .status-dead { background: #6c6c6c; }
   #agents-panel {
@@ -231,6 +232,7 @@
   .agent-pill.state-review_waiting { border-color: #d1a128; }
   .agent-pill.state-reading { border-color: #3b7cff; }
   .agent-pill.state-merged { border-color: #d1a128; opacity: 0.8; }
+  .agent-pill.state-pr_closed { border-color: #8855aa; opacity: 0.8; }
   .agent-pill.state-exited,
   .agent-pill.state-dead { border-color: #6c6c6c; opacity: 0.7; }
   .agent-pill.state-idle { border-color: #4a4a62; }
@@ -368,6 +370,7 @@ const TIMELINE_COLORS = {
   pr: '#3adf7a',
   ciFailed: '#ff5c5c',
   merged: '#f0c040',
+  prClosed: '#8855aa',
   dead: '#6c6c6c',
   axis: '#2a2a3f',
   grid: '#242438',
@@ -855,13 +858,12 @@ function completionCategory(agent) {
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
   if (status.includes('merged') || activity.includes('merged')) return 'merged';
+  if (status.includes('pr_closed') || activity.includes('pr_closed')) return 'pr_closed';
   if (
     status.includes('exited') ||
     activity.includes('exited') ||
     status.includes('archived') ||
     activity.includes('archived') ||
-    status.includes('pr_closed') ||
-    activity.includes('pr_closed') ||
     status.includes('dead') ||
     activity.includes('dead')
   ) {
@@ -1545,6 +1547,7 @@ function statusDotClass(agent) {
   const reaction = getReaction(agent);
   const state = mapState(agent);
   if (state === 'merged') return 'status-merged';
+  if (state === 'pr_closed') return 'status-pr_closed';
   if (state === 'exited') return 'status-exited';
   if (state === 'dead') return 'status-dead';
   if (reaction.ciEscalated || status.includes('ci_failed') || status.includes('failed')) return 'status-ci';
@@ -1618,6 +1621,7 @@ function buildLayout(list) {
 
   const activeItems = items.filter(item => !isDoneState(item.state));
   const mergedItems = items.filter(item => item.category === 'merged');
+  const prClosedItems = items.filter(item => item.category === 'pr_closed');
   const exitedItems = items.filter(item => item.category === 'exited');
   const completedItems = items.filter(item => item.category);
 
@@ -1629,9 +1633,10 @@ function buildLayout(list) {
         completedItems.forEach(item => includeKeys.add(item.key));
       } else {
         const evictCount = completedItems.length - capacityLeft;
+        const prClosedOldest = prClosedItems.slice().sort((a, b) => a.completedAt - b.completedAt);
         const mergedOldest = mergedItems.slice().sort((a, b) => a.completedAt - b.completedAt);
         const exitedOldest = exitedItems.slice().sort((a, b) => a.completedAt - b.completedAt);
-        const evictOrder = mergedOldest.concat(exitedOldest);
+        const evictOrder = prClosedOldest.concat(mergedOldest).concat(exitedOldest);
         const evictSet = new Set(evictOrder.slice(0, evictCount).map(item => item.key));
         completedItems.forEach(item => {
           if (!evictSet.has(item.key)) includeKeys.add(item.key);
@@ -1783,6 +1788,14 @@ function drawMonitorCheck(screenX, screenY, color) {
   drawRect(screenX + 4, screenY + 1, 1, 1, color);
 }
 
+function drawMonitorX(screenX, screenY, color) {
+  drawRect(screenX + 1, screenY + 1, 1, 1, color);
+  drawRect(screenX + 4, screenY + 1, 1, 1, color);
+  drawRect(screenX + 2, screenY + 2, 2, 1, color);
+  drawRect(screenX + 1, screenY + 3, 1, 1, color);
+  drawRect(screenX + 4, screenY + 3, 1, 1, color);
+}
+
 function drawMonitor(dx, dy, agent, state, frame) {
   const baseX = dx * TILE + 4;
   const baseY = dy * TILE;
@@ -1792,16 +1805,19 @@ function drawMonitor(dx, dy, agent, state, frame) {
   const reviewWaiting = state === 'review_waiting';
   const active = state === 'coding' || reviewWaiting;
   const merged = state === 'merged';
+  const prClosed = state === 'pr_closed';
   const exited = state === 'exited';
   const screenColor = merged
     ? PAL.badgeGold
-    : (exited
-      ? PAL.monitorScreenCiDark
-      : (reviewWaiting
-        ? PAL.monitorScreenActive
-        : (ciEscalated
-          ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
-          : (active ? PAL.monitorScreenActive : PAL.monitorScreen))));
+    : (prClosed
+      ? '#2a1535'
+      : (exited
+        ? PAL.monitorScreenCiDark
+        : (reviewWaiting
+          ? PAL.monitorScreenActive
+          : (ciEscalated
+            ? (frame % 20 < 10 ? PAL.monitorScreenCi : PAL.monitorScreenCiDark)
+            : (active ? PAL.monitorScreenActive : PAL.monitorScreen)))));
 
   if (timeState && timeState.monitorGlow > 0 && agent && state !== 'dead') {
     drawMonitorGlow(dx, dy, timeState.monitorGlow);
@@ -1813,12 +1829,14 @@ function drawMonitor(dx, dy, agent, state, frame) {
 
   if (merged) {
     drawMonitorCheck(baseX + MONITOR.screenX, baseY + MONITOR.screenY, PAL.badgeGreen);
+  } else if (prClosed) {
+    drawMonitorX(baseX + MONITOR.screenX, baseY + MONITOR.screenY, '#9966aa');
   } else if (!exited) {
     const textColor = ciEscalated ? '#ffe6e6' : (active ? '#0b2' : '#5fbf6a');
     drawMonitorText(getMonitorText(agent), baseX + MONITOR.screenX, baseY + MONITOR.screenY, MONITOR.screenW, MONITOR.screenH, frame, textColor);
   }
 
-  if (ciRetries > 0 && !merged && !exited) {
+  if (ciRetries > 0 && !merged && !prClosed && !exited) {
     drawFire(baseX + MONITOR.screenX, baseY + MONITOR.screenY, frame);
   }
 }
@@ -2046,10 +2064,11 @@ function drawCharacter(tileX, tileY, colorIdx, state, frame, agentType) {
   const py = tileY * TILE;
   const bob = Math.sin(frame * 0.15) > 0 ? 0 : 1;
   const celebrating = state === 'merged';
+  const prClosed = state === 'pr_closed';
   const slumped = state === 'exited';
 
   // body offset (sitting = higher up to align with chair)
-  const sitting = state === 'coding' || state === 'reading' || state === 'waiting' || state === 'review_waiting' || celebrating || slumped;
+  const sitting = state === 'coding' || state === 'reading' || state === 'waiting' || state === 'review_waiting' || celebrating || prClosed || slumped;
   const oy = sitting ? (celebrating ? -3 : (slumped ? -1 : -2)) : bob;
   const ox = celebrating ? -1 : 0;
   const headDrop = slumped ? 1 : 0;
@@ -2279,14 +2298,13 @@ function timelineColorForStatus(status, activity) {
   const s = (status || '').toLowerCase();
   const a = (activity || '').toLowerCase();
   if (s.includes('merged') || a.includes('merged')) return TIMELINE_COLORS.merged;
+  if (s.includes('pr_closed') || a.includes('pr_closed')) return TIMELINE_COLORS.prClosed;
   if (
     s.includes('dead') ||
     s.includes('exited') ||
     s.includes('archived') ||
-    s.includes('pr_closed') ||
     a.includes('dead') ||
-    a.includes('exited') ||
-    a.includes('pr_closed')
+    a.includes('exited')
   ) return TIMELINE_COLORS.dead;
   if (s.includes('ci_failed') || s.includes('failed')) return TIMELINE_COLORS.ciFailed;
   if (s.includes('pr_open') || s.includes('pr_review') || s.includes('changes_requested') || s.includes('ci')) return TIMELINE_COLORS.pr;
@@ -2846,13 +2864,12 @@ function mapState(agent) {
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
   if (status.includes('merged') || activity.includes('merged')) return 'merged';
+  if (status.includes('pr_closed') || activity.includes('pr_closed')) return 'pr_closed';
   if (
     status.includes('exited') ||
     activity.includes('exited') ||
     status.includes('archived') ||
-    activity.includes('archived') ||
-    status.includes('pr_closed') ||
-    activity.includes('pr_closed')
+    activity.includes('archived')
   ) return 'exited';
   if (status.includes('dead') || activity.includes('dead')) return 'dead';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
@@ -2863,7 +2880,7 @@ function mapState(agent) {
 }
 
 function isDoneState(state) {
-  return state === 'dead' || state === 'merged' || state === 'exited';
+  return state === 'dead' || state === 'merged' || state === 'exited' || state === 'pr_closed';
 }
 
 function stateLabel(state, agent) {
@@ -2873,6 +2890,7 @@ function stateLabel(state, agent) {
     case 'review_waiting': return '🙋 needs review';
     case 'waiting': return '⏳ waiting';
     case 'merged': return '🎉 merged';
+    case 'pr_closed': return '🚫 PR closed';
     case 'exited': return '💀 exited';
     case 'dead': return '💀 done';
     default: return '💤 idle';
