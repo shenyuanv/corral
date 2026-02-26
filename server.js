@@ -13,6 +13,7 @@ const TOKEN_CACHE_TTL_MS = 10 * 1000;
 const USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const USAGE_SCRIPT_TIMEOUT_MS = 15000;
 const LASSO_CLEAN_TIMEOUT_MS = 15000;
+const CODEX_QUOTA_FILE = process.env.CODEX_QUOTA_FILE || path.join(path.dirname(SESSIONS_FILE), 'codex-quota.json');
 const LASSO_BIN = process.env.LASSO_BIN || 'lasso';
 const DEFAULT_CLAUDE_USAGE_SCRIPT = process.env.HOME
   ? path.join(process.env.HOME, 'clawd/scripts/claude-usage-report.sh')
@@ -23,6 +24,10 @@ const CLAUDE_USAGE_SCRIPT_ARGS = HAS_CLAUDE_USAGE_ARGS
   ? (process.env.CLAUDE_USAGE_SCRIPT_ARGS || '').split(/\s+/).filter(Boolean)
   : ['--json'];
 const TOKEN_DIRS = ['.codex', '.claude'];
+const QUOTA_ERROR_PATTERN = /try again at (.+)\./i;
+const QUOTA_SCAN_BYTES = 4096;
+const QUOTA_LOG_DIRS = ['.codex', '.claude'];
+const QUOTA_LOG_EXTENSIONS = ['.log', '.jsonl', '.txt', '.err'];
 const HISTORY_MAX_ENTRIES = 50;
 const HISTORY_COMPLETED_MAX = 20;
 const HISTORY_STATUS_LIMIT = 20;
@@ -373,6 +378,115 @@ function getWorkspacePath(session) {
   return null;
 }
 
+function resolveAgentType(session) {
+  const raw = session.agentType || session.agent_type || session.agent || session.provider || '';
+  return (typeof raw === 'string' ? raw : '').toLowerCase();
+}
+
+function parseQuotaResetDate(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  // Remove ordinal suffixes: "Mar 3rd, 2026" → "Mar 3, 2026"
+  const cleaned = raw.replace(/(\d+)(st|nd|rd|th)/gi, '$1').trim();
+  const ts = Date.parse(cleaned);
+  if (!Number.isNaN(ts)) return new Date(ts).toISOString();
+  return null;
+}
+
+async function readFileTail(filePath, bytes) {
+  let fd;
+  try {
+    fd = await fs.promises.open(filePath, 'r');
+    const stat = await fd.stat();
+    const size = stat.size;
+    if (size === 0) return '';
+    const readBytes = Math.min(bytes, size);
+    const buffer = Buffer.alloc(readBytes);
+    await fd.read(buffer, 0, readBytes, Math.max(0, size - readBytes));
+    return buffer.toString('utf8');
+  } catch (err) {
+    return null;
+  } finally {
+    if (fd) await fd.close().catch(() => {});
+  }
+}
+
+async function scanWorkspaceForQuotaError(workspacePath) {
+  if (!workspacePath) return null;
+  for (const dirName of QUOTA_LOG_DIRS) {
+    const dirPath = path.join(workspacePath, dirName);
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    } catch (err) {
+      continue;
+    }
+    const logFiles = entries.filter(
+      (e) => e.isFile() && QUOTA_LOG_EXTENSIONS.some((ext) => e.name.endsWith(ext)),
+    );
+    for (const file of logFiles) {
+      const filePath = path.join(dirPath, file.name);
+      const tail = await readFileTail(filePath, QUOTA_SCAN_BYTES);
+      if (!tail) continue;
+      const match = QUOTA_ERROR_PATTERN.exec(tail);
+      if (match) {
+        const resetAt = parseQuotaResetDate(match[1]);
+        return { resetAt, detectedAt: new Date().toISOString() };
+      }
+    }
+  }
+  return null;
+}
+
+async function readCodexQuota() {
+  try {
+    const raw = await fs.promises.readFile(CODEX_QUOTA_FILE, 'utf8');
+    if (!raw.trim()) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.exhausted) return null;
+    // Auto-clear if reset time has passed
+    if (data.resetAt) {
+      const resetTs = Date.parse(data.resetAt);
+      if (!Number.isNaN(resetTs) && Date.now() >= resetTs) {
+        await clearCodexQuota();
+        return null;
+      }
+    }
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function writeCodexQuota(data) {
+  const dir = path.dirname(CODEX_QUOTA_FILE);
+  await fs.promises.mkdir(dir, { recursive: true });
+  await fs.promises.writeFile(CODEX_QUOTA_FILE, JSON.stringify(data, null, 2));
+}
+
+async function clearCodexQuota() {
+  try {
+    await fs.promises.unlink(CODEX_QUOTA_FILE);
+  } catch (err) {
+    // ignore if file doesn't exist
+  }
+}
+
+async function detectCodexQuotaExhaustion(sessions) {
+  const deadCodexAgents = sessions.filter((s) => {
+    const type = resolveAgentType(s);
+    if (!type.includes('codex')) return false;
+    return s.alive === false;
+  });
+  for (const agent of deadCodexAgents) {
+    const workspacePath = getWorkspacePath(agent);
+    const result = await scanWorkspaceForQuotaError(workspacePath);
+    if (result) {
+      await writeCodexQuota({ exhausted: true, ...result });
+      return;
+    }
+  }
+}
+
 function coerceNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -716,6 +830,19 @@ async function getCodexUsageEstimate() {
   ];
   provider.resetAt = resetAt;
   provider.note = hasTokens ? 'Estimated from active agent logs' : 'No token logs found yet';
+
+  // Overlay quota exhaustion status from state file
+  const quota = await readCodexQuota();
+  if (quota && quota.exhausted) {
+    provider.quotaStatus = {
+      exhausted: true,
+      resetAt: quota.resetAt || null,
+      detectedAt: quota.detectedAt || null,
+    };
+    provider.status = 'exhausted';
+    if (quota.resetAt) provider.resetAt = quota.resetAt;
+  }
+
   return provider;
 }
 
@@ -799,6 +926,11 @@ const server = http.createServer((req, res) => {
           await updateHistoryFromSessions(data.sessions || []);
         } catch (err) {
           // keep /api/agents responsive even if history write fails
+        }
+        try {
+          await detectCodexQuotaExhaustion(data.sessions || []);
+        } catch (err) {
+          // non-critical: don't block response if quota detection fails
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
