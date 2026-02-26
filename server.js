@@ -378,6 +378,22 @@ function getWorkspacePath(session) {
   return null;
 }
 
+function getLassoLogPath(session) {
+  const candidates = [
+    session.logPath,
+    session.log_path,
+    session.logFile,
+    session.log_file,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  const sessionId = session.id || session.sessionId || session.session_id;
+  if (!sessionId) return null;
+  const lassoDir = path.dirname(SESSIONS_FILE);
+  return path.join(lassoDir, 'logs', `${sessionId}.log`);
+}
+
 function resolveAgentType(session) {
   const raw = session.agentType || session.agent_type || session.agent || session.provider || '';
   return (typeof raw === 'string' ? raw : '').toLowerCase();
@@ -437,6 +453,18 @@ async function scanWorkspaceForQuotaError(workspacePath) {
   return null;
 }
 
+async function scanLassoLogForQuotaError(logPath) {
+  if (!logPath) return null;
+  const tail = await readFileTail(logPath, QUOTA_SCAN_BYTES);
+  if (!tail) return null;
+  const match = QUOTA_ERROR_PATTERN.exec(tail);
+  if (match) {
+    const resetAt = parseQuotaResetDate(match[1]);
+    return { resetAt, detectedAt: new Date().toISOString() };
+  }
+  return null;
+}
+
 async function readCodexQuota() {
   try {
     const raw = await fs.promises.readFile(CODEX_QUOTA_FILE, 'utf8');
@@ -482,6 +510,12 @@ async function detectCodexQuotaExhaustion(sessions) {
     const result = await scanWorkspaceForQuotaError(workspacePath);
     if (result) {
       await writeCodexQuota({ exhausted: true, ...result });
+      return;
+    }
+    const logPath = getLassoLogPath(agent);
+    const logResult = await scanLassoLogForQuotaError(logPath);
+    if (logResult) {
+      await writeCodexQuota({ exhausted: true, ...logResult });
       return;
     }
   }
