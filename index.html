@@ -483,6 +483,9 @@ let timelineScroll = 0;
 let timelineHover = null;
 let usageData = null;
 const mergedAgents = new Set();
+const soundedPrOpen = new Set();
+const soundedCiFailed = new Set();
+const soundedDead = new Set();
 const confettiPool = [];
 const confettiActive = [];
 const celebrations = [];
@@ -751,10 +754,12 @@ function initAudio() {
 
 function toggleSound() {
   soundEnabled = !soundEnabled;
+  try { localStorage.setItem('corral-sound', soundEnabled ? '1' : '0'); } catch {}
   updateSoundButton();
   if (soundEnabled) {
     initAudio();
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    playConfirmation();
   }
 }
 
@@ -768,24 +773,51 @@ function toggleFullscreen() {
   }
 }
 
-function playDing() {
-  if (!soundEnabled) return;
+function playTone(freq, endFreq, duration, type = 'triangle', vol = 0.08) {
   initAudio();
   if (!audioCtx) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const t = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(880, t);
-  osc.frequency.exponentialRampToValueAtTime(440, t + 0.12);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  osc.frequency.exponentialRampToValueAtTime(endFreq, t + duration * 0.4);
   gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.08, t + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  gain.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.start(t);
-  osc.stop(t + 0.32);
+  osc.stop(t + duration + 0.01);
+}
+
+function playDing() {
+  if (!soundEnabled) return;
+  playTone(880, 440, 0.3, 'triangle', 0.08);
+}
+
+function playPrCreated() {
+  if (!soundEnabled) return;
+  playTone(523, 784, 0.25, 'sine', 0.06);
+}
+
+function playCiFailed() {
+  if (!soundEnabled) return;
+  playTone(330, 220, 0.35, 'sawtooth', 0.05);
+  setTimeout(() => {
+    if (!soundEnabled) return;
+    playTone(220, 165, 0.35, 'sawtooth', 0.05);
+  }, 200);
+}
+
+function playAgentDied() {
+  if (!soundEnabled) return;
+  playTone(260, 130, 0.5, 'sine', 0.06);
+}
+
+function playConfirmation() {
+  playTone(660, 880, 0.15, 'sine', 0.05);
 }
 
 async function cleanCompleted() {
@@ -853,6 +885,26 @@ function isMergedStatus(agent) {
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
   return status.includes('merged') || activity.includes('merged');
+}
+
+function hasPrOpen(agent) {
+  if (!agent) return false;
+  const status = (agent.status || '').toLowerCase();
+  return status.includes('pr_open');
+}
+
+function hasCiFailed(agent) {
+  if (!agent) return false;
+  const status = (agent.status || '').toLowerCase();
+  return status.includes('ci_failed') || status.includes('failed');
+}
+
+function isDead(agent) {
+  if (!agent) return false;
+  if (agent.endedAt || agent.ended_at) return true;
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  return status.includes('dead') || activity.includes('dead');
 }
 
 function completionCategory(agent) {
@@ -1235,16 +1287,31 @@ function setAgents(nextAgents, { skipAnimation = false } = {}) {
   const now = performance.now();
   const nowMs = Date.now();
   if (hasInitialized && previousAgentsByKey.size > 0) {
+    let soundToPlay = null;
     nextLayout.slots.forEach(slot => {
       const key = slot.key;
       const prevAgent = previousAgentsByKey.get(key);
       if (!prevAgent) return;
-      if (mergedAgents.has(key)) return;
-      if (!isMergedStatus(prevAgent) && isMergedStatus(slot.agent)) {
+      if (!mergedAgents.has(key) && !isMergedStatus(prevAgent) && isMergedStatus(slot.agent)) {
         mergedAgents.add(key);
         startCelebration(slot, now);
       }
+      if (!soundedDead.has(key) && !isDead(prevAgent) && isDead(slot.agent)) {
+        soundedDead.add(key);
+        soundToPlay = soundToPlay || 'dead';
+      }
+      if (!soundedCiFailed.has(key) && !hasCiFailed(prevAgent) && hasCiFailed(slot.agent)) {
+        soundedCiFailed.add(key);
+        if (!soundToPlay || soundToPlay === 'pr') soundToPlay = 'ci';
+      }
+      if (!soundedPrOpen.has(key) && !hasPrOpen(prevAgent) && hasPrOpen(slot.agent)) {
+        soundedPrOpen.add(key);
+        if (!soundToPlay) soundToPlay = 'pr';
+      }
     });
+    if (soundToPlay === 'dead') playAgentDied();
+    else if (soundToPlay === 'ci') playCiFailed();
+    else if (soundToPlay === 'pr') playPrCreated();
   }
 
   if (!hasInitialized || skipAnimation) {
@@ -3494,6 +3561,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // start
+try { soundEnabled = localStorage.getItem('corral-sound') === '1'; } catch {}
 updateSoundButton();
 updateCompletedToggle();
 setCleanButtonState(false);
