@@ -457,23 +457,17 @@
     .sb-section { padding: 12px 14px; }
     .sb-header { font-size: 10px; margin-bottom: 12px; }
 
-    /* Scene area: responsive — fill width, auto height from aspect ratio */
+    /* Scene area: responsive */
     .scene-wrap {
       flex: none;
       width: 100%;
-      min-height: 200px;
     }
     .canvas-area {
       width: 100%;
-      height: 0;
-      padding-bottom: 60%; /* 384/640 = 60% aspect ratio */
-      position: relative;
-      overflow: hidden;
+      aspect-ratio: 640 / 384;
+      min-height: 0;
     }
     .canvas-area canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
       width: 100%;
       height: 100%;
     }
