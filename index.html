@@ -247,6 +247,13 @@
 </style>
 </head>
 <body>
+<script>
+(function() {
+  var pref = null;
+  try { pref = localStorage.getItem('corral-ui-mode'); } catch(e) {}
+  if (pref === 'sv') { window.location.replace('/sv'); return; }
+})();
+</script>
 <div id="app">
   <div class="canvas-shell">
     <canvas id="office" width="640" height="400"></canvas>
@@ -259,6 +266,7 @@
   <div class="action-bar">
     <button id="cleanButton" type="button" onclick="cleanCompleted()">🧹 Clean</button>
     <button id="completedToggle" type="button" onclick="toggleCompleted()">✅ Show completed</button>
+    <button type="button" onclick="switchToSV()" title="Switch to SV view">📺 SV Mode</button>
   </div>
   <div id="usage-panel" aria-live="polite">
     <div id="usage-header">
@@ -736,6 +744,11 @@ function toggleCompleted() {
   showCompleted = !showCompleted;
   updateCompletedToggle();
   updateAgentsList();
+}
+
+function switchToSV() {
+  try { localStorage.setItem('corral-ui-mode', 'sv'); } catch(e) {}
+  window.location.href = '/sv';
 }
 
 function setCleanButtonState(isCleaning) {

@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corral 🤠 — SV Mode</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0c0c1a;
+    font-family: 'Press Start 2P', cursive;
+    color: #c0c0c0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* === TOP BAR === */
+  .top-bar {
+    background: linear-gradient(180deg, #1e1e3a, #14142a);
+    border-bottom: 3px solid #2a2a4a;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 44px;
+  }
+  .top-title {
+    color: #f0c040;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  .top-title .ver { color: #555; font-size: 7px; font-weight: normal; }
+  .top-stats {
+    display: flex;
+    gap: 18px;
+    font-size: 7px;
+    color: #666;
+    align-items: center;
+  }
+  .top-stats .val { color: #5dfc5d; text-shadow: 0 0 6px #5dfc5d33; }
+  .top-stats .val-warn { color: #d1a128; }
+  .top-stats .val-bad { color: #e76e55; }
+  .top-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .conn-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    border: 2px solid #0b0b12;
+  }
+  .conn-dot.connected { background: #2f9a3d; box-shadow: 0 0 6px #2f9a3d88; }
+  .conn-dot.connecting { background: #d1a128; box-shadow: 0 0 6px #d1a12888; }
+  .conn-dot.disconnected { background: #6c6c6c; }
+  .top-btn {
+    background: #1b1b2b;
+    color: #ccc;
+    border: 2px solid #3a3a5c;
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .top-btn:hover { background: #24243a; }
+  .top-btn.active { color: #f0c040; border-color: #6d6d8f; }
+
+  /* === MAIN LAYOUT === */
+  .main {
+    display: flex;
+    height: calc(100vh - 44px);
+  }
+
+  /* === SIDEBAR === */
+  .sidebar {
+    width: 300px;
+    min-width: 200px;
+    max-width: 600px;
+    background: linear-gradient(180deg, rgba(18,18,38,0.97), rgba(10,10,22,0.99));
+    border-right: 3px solid #2a2a4a;
+    overflow-y: auto;
+    font-size: 8px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Drag handle */
+  .resize-handle {
+    position: absolute;
+    top: 0; right: -5px;
+    width: 10px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .resize-handle::after {
+    content: '';
+    width: 3px;
+    height: 40px;
+    background: #3a3a5c;
+    border-radius: 2px;
+    transition: background 0.2s, height 0.2s;
+  }
+  .resize-handle:hover::after,
+  .resize-handle.dragging::after {
+    background: #f0c040;
+    height: 60px;
+    box-shadow: 0 0 8px #f0c04044;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .sb-section {
+    padding: 10px 12px;
+    border-bottom: 2px solid #1a1a30;
+  }
+  .sb-section:last-child { border-bottom: none; flex: 1; }
+
+  .sb-header {
+    color: #f0c040;
+    font-size: 9px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-shadow: 0 0 8px #f0c04022;
+  }
+  .sb-header .count { color: #666; font-size: 7px; }
+
+  /* Agent cards */
+  .agent-card {
+    background: linear-gradient(135deg, #1a1a30, #141428);
+    border: 2px solid #2a2a4a;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+  .agent-card.st-coding::before { background: #2f9a3d; box-shadow: 0 0 6px #2f9a3d88; }
+  .agent-card.st-coding { border-color: #2a5a2a; }
+  .agent-card.st-pr::before { background: #3b7cff; box-shadow: 0 0 6px #3b7cff88; }
+  .agent-card.st-pr { border-color: #2a3a6a; }
+  .agent-card.st-ci::before { background: #e76e55; box-shadow: 0 0 6px #e76e5588; }
+  .agent-card.st-ci { border-color: #6a2a2a; }
+  .agent-card.st-merged::before { background: #f0c040; box-shadow: 0 0 6px #f0c04088; }
+  .agent-card.st-merged { border-color: #6a5a20; opacity: 0.85; }
+  .agent-card.st-dead::before { background: #6c6c6c; }
+  .agent-card.st-dead { border-color: #3a3a3a; opacity: 0.7; }
+  .agent-card.st-closed::before { background: #8855aa; box-shadow: 0 0 6px #8855aa88; }
+  .agent-card.st-closed { border-color: #4a2a5a; opacity: 0.8; }
+
+  .ac-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .ac-pulse {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .ac-pulse.green { background: #2f9a3d; box-shadow: 0 0 4px #2f9a3d; animation: pulse 2s infinite; }
+  .ac-pulse.blue { background: #3b7cff; box-shadow: 0 0 4px #3b7cff; animation: pulse 2s infinite; }
+  .ac-pulse.red { background: #e76e55; box-shadow: 0 0 4px #e76e55; animation: pulse-fast 0.8s infinite; }
+  .ac-pulse.gold { background: #f0c040; animation: none; }
+  .ac-pulse.gray { background: #6c6c6c; animation: none; }
+  .ac-pulse.purple { background: #8855aa; animation: none; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
+  @keyframes pulse-fast { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
+
+  .ac-name { font-size: 9px; }
+  .ac-time { color: #444; font-size: 7px; margin-left: auto; }
+
+  .ac-detail { color: #666; line-height: 2; }
+  .ac-detail .repo { color: #88aaff; }
+  .ac-detail .issue { color: #999; }
+
+  .v-green { color: #5dfc5d; }
+  .v-blue { color: #3b7cff; }
+  .v-red { color: #e76e55; }
+  .v-gold { color: #f0c040; }
+  .v-gray { color: #6c6c6c; }
+  .v-purple { color: #8855aa; }
+  .v-cyan { color: #00e5ff; }
+
+  .progress-bar {
+    height: 3px;
+    background: #1a1a30;
+    margin-top: 6px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar .fill { height: 100%; border-radius: 2px; }
+  .fill-green { background: linear-gradient(90deg, #1a5a1a, #2f9a3d); }
+  .fill-blue { background: linear-gradient(90deg, #1a2a5a, #3b7cff); }
+  .fill-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
+  .fill-gold { background: linear-gradient(90deg, #5a4a10, #f0c040); }
+
+  /* Usage section */
+  .usage-card {
+    background: #0f0f1a;
+    border: 1px solid #2a2a3f;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-radius: 2px;
+  }
+  .usage-card.warn { border-color: #d1a128; }
+  .usage-card.alert { border-color: #c13c3c; }
+  .usage-card.exhausted { border-color: #c13c3c; background: #1a0a0a; }
+  .uc-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 8px;
+  }
+  .uc-pill {
+    font-size: 6px;
+    padding: 1px 5px;
+    border: 1px solid #2a2a3f;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .pill-ok { border-color: #2f9a3d; color: #bfe6c7; }
+  .pill-warn { border-color: #d1a128; color: #f3e2a2; }
+  .pill-alert { border-color: #c13c3c; color: #f5b3b3; }
+  .pill-est { border-color: #666; color: #aaa; }
+  .pill-exhausted { border-color: #c13c3c; color: #f5b3b3; background: #3a1010; }
+  .uc-row {
+    display: flex;
+    justify-content: space-between;
+    color: #999;
+    font-size: 7px;
+    margin-bottom: 3px;
+  }
+  .uc-bar {
+    height: 5px;
+    background: #1b1b2b;
+    border: 1px solid #222;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .uc-fill { height: 100%; }
+  .uf-green { background: linear-gradient(90deg, #1a4a1a, #2f9a3d); }
+  .uf-yellow { background: linear-gradient(90deg, #5a4a10, #d1a128); }
+  .uf-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
+  .uc-note { color: #555; font-size: 6px; margin-top: 4px; }
+
+  /* Timeline mini */
+  .tl-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    font-size: 6px;
+  }
+  .tl-label { width: 56px; color: #888; overflow: hidden; white-space: nowrap; }
+  .tl-track {
+    flex: 1;
+    height: 6px;
+    background: #111;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+  }
+  .tl-seg { height: 100%; }
+  .tl-time { width: 24px; color: #555; text-align: right; }
+
+  /* Queue */
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: #0f0f1a;
+    border: 1px dashed #2a2a3f;
+    margin-bottom: 4px;
+    font-size: 7px;
+    color: #666;
+  }
+  .qi-num { color: #88aaff; }
+
+  /* === SCENE AREA === */
+  .scene-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .canvas-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 40%, #151530, #0c0c1a 70%);
+    min-height: 0;
+  }
+  .canvas-area canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 6px);
+    pointer-events: none;
+  }
+
+  /* Mock tooltip */
+  .mock-tooltip {
+    position: absolute;
+    top: 55%;
+    right: 8%;
+    padding: 8px 10px;
+    font-size: 8px;
+    line-height: 1.7;
+    color: #e6e6e6;
+    background: #15151fee;
+    border: 3px solid #4a4a62;
+    box-shadow: 0 0 0 3px #0b0b12, 4px 4px 0 #0b0b12;
+    z-index: 10;
+    min-width: 180px;
+    display: none;
+  }
+  .tt-title { color: #f0c040; font-size: 9px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+  .tt-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .tt-row { display: flex; gap: 6px; }
+  .tt-lbl { color: #7b8096; min-width: 54px; }
+
+  /* === STATUS BAR === */
+  .status-bar {
+    background: linear-gradient(180deg, #1a1a30, #121228);
+    border-top: 3px solid #2a2a4a;
+    padding: 0 14px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7px;
+    color: #555;
+  }
+  .sb-log {
+    color: #5dfc5d;
+    text-shadow: 0 0 4px #5dfc5d22;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+
+  /* No-data message */
+  .no-data { color: #555; font-size: 7px; text-align: center; padding: 12px; }
+</style>
+</head>
+<body>
+
+<!-- UI MODE REDIRECT -->
+<script>
+(function() {
+  var pref = null;
+  try { pref = localStorage.getItem('corral-ui-mode'); } catch(e) {}
+  if (pref === 'classic') {
+    window.location.replace('/');
+    return;
+  }
+  // Set preference to sv if not already set
+  try { localStorage.setItem('corral-ui-mode', 'sv'); } catch(e) {}
+})();
+</script>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="top-title">
+    <span style="font-size:16px">🤠</span>
+    <span>CORRAL</span>
+    <span class="ver">sv</span>
+  </div>
+  <div class="top-stats" id="topStats">
+    <span>AGENTS <span class="val" id="statAgents">0</span>/<span style="color:#555">12</span></span>
+    <span>PRs <span class="val" id="statPRs">0</span></span>
+    <span>MERGED <span class="val" id="statMerged">0</span></span>
+    <span>DEAD <span class="val-bad" id="statDead">0</span></span>
+    <span>UPTIME <span class="val" id="statUptime">0:00:00</span></span>
+  </div>
+  <div class="top-controls">
+    <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
+    <button class="top-btn" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
+    <button class="top-btn" id="cleanBtn" onclick="cleanAgents()">🧹</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="resize-handle" id="resizeHandle"></div>
+
+    <!-- Usage -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>📊 USAGE</span>
+        <span class="count" id="usageUpdated">—</span>
+      </div>
+      <div id="usageCards">
+        <div class="no-data">Loading usage data...</div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>📈 TIMELINE</span>
+        <span class="count" id="timelineRange">—</span>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-bottom:6px; font-size:6px; color:#555">
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3b7cff;display:inline-block"></span>Work</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3adf7a;display:inline-block"></span>PR</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#ff5c5c;display:inline-block"></span>CI</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#f0c040;display:inline-block"></span>Merge</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#8855aa;display:inline-block"></span>Close</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#6c6c6c;display:inline-block"></span>Dead</span>
+      </div>
+
+      <div id="timelineRows">
+        <div class="no-data">No timeline data</div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;color:#444;font-size:5px;margin-top:4px;padding:0 60px 0 0">
+        <span>-6h</span><span>-4h</span><span>-2h</span><span>Now</span>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>⚡ AGENTS</span>
+        <span class="count" id="agentCount">—</span>
+      </div>
+      <div id="agentCards">
+        <div class="no-data">Waiting for agent data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE -->
+  <div class="scene-wrap">
+    <div class="canvas-area">
+      <canvas id="office" width="640" height="384"></canvas>
+      <div class="scanlines"></div>
+    </div>
+    <div class="status-bar">
+      <span class="sb-log" id="statusLog">▸ Connecting to server...</span>
+      <span>POLL 5s │ <span id="agentCountBar">0</span> agents │ <span id="clock"></span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SV UI — Live data integration
+// ============================================================
+
+// --- State ---
+let agents = [];
+let historyData = [];
+let usageData = null;
+let connectionState = 'connecting';
+let polling = false;
+const startTime = Date.now();
+
+// --- Helpers ---
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => {
+    switch (c) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return c;
+    }
+  });
+}
+
+function getRepoName(agent) {
+  if (!agent) return '';
+  return (agent.repo || '').split('/').pop() || '';
+}
+
+function getIssueId(agent) {
+  if (!agent) return '';
+  return agent.issueId ?? agent.issue ?? agent.issueID ?? '';
+}
+
+function resolveAgentType(agent) {
+  if (!agent) return '';
+  return (agent.agentType || agent.agent || agent.type || '').toLowerCase();
+}
+
+function mapState(agent) {
+  if (!agent) return 'idle';
+  if (agent.endedAt || agent.ended_at) return 'dead';
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  if (status.includes('merged') || activity.includes('merged')) return 'merged';
+  if (status.includes('pr_closed') || activity.includes('pr_closed')) return 'pr_closed';
+  if (status.includes('exited') || activity.includes('exited') ||
+      status.includes('archived') || activity.includes('archived')) return 'exited';
+  if (status.includes('dead') || activity.includes('dead')) return 'dead';
+  if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
+  if (status.includes('pr_open') && agent.alive === false) return 'review_waiting';
+  if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
+  if (status.includes('working') || activity.includes('active')) return 'coding';
+  return 'idle';
+}
+
+function stateLabel(state) {
+  switch(state) {
+    case 'coding': return 'coding';
+    case 'reading': return 'review';
+    case 'review_waiting': return 'needs review';
+    case 'waiting': return 'PR open';
+    case 'merged': return 'merged ✓';
+    case 'pr_closed': return 'PR closed';
+    case 'exited': return 'exited 💀';
+    case 'dead': return 'done 💀';
+    default: return 'idle';
+  }
+}
+
+function isDoneState(state) {
+  return state === 'dead' || state === 'merged' || state === 'exited' || state === 'pr_closed';
+}
+
+function stateToCardClass(state) {
+  if (state === 'coding') return 'st-coding';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'st-pr';
+  if (state === 'merged') return 'st-merged';
+  if (state === 'exited' || state === 'dead') return 'st-dead';
+  if (state === 'pr_closed') return 'st-closed';
+  return '';
+}
+
+function stateToPulseClass(state) {
+  if (state === 'coding') return 'green';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'blue';
+  if (state === 'merged') return 'gold';
+  if (state === 'exited' || state === 'dead') return 'gray';
+  if (state === 'pr_closed') return 'purple';
+  return 'gray';
+}
+
+function stateToColorClass(state) {
+  if (state === 'coding') return 'v-green';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'v-blue';
+  if (state === 'merged') return 'v-gold';
+  if (state === 'exited' || state === 'dead') return 'v-gray';
+  if (state === 'pr_closed') return 'v-purple';
+  return 'v-gray';
+}
+
+function stateToFillClass(state) {
+  if (state === 'coding') return 'fill-green';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'fill-blue';
+  if (state === 'merged') return 'fill-gold';
+  return '';
+}
+
+function formatDuration(ms) {
+  const totalMins = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hours > 0) return hours + 'h ' + mins + 'm';
+  return mins + 'm';
+}
+
+function getCreatedAt(agent) {
+  const keys = ['createdAt','created_at','startedAt','started_at','startTime','start_time','spawnedAt','spawned_at'];
+  for (const k of keys) { if (agent[k]) return new Date(agent[k]).getTime(); }
+  return null;
+}
+
+function getTokens(agent) {
+  return agent.tokensUsed || agent.tokens_used || agent.tokens || 0;
+}
+
+function getPrNumber(agent) {
+  return agent.prNumber || agent.pr_number || agent.pr || null;
+}
+
+function isCiFailing(agent) {
+  const status = (agent.status || '').toLowerCase();
+  return status.includes('ci_failed') || status.includes('failed');
+}
+
+// --- Connection indicator ---
+function setConnection(state) {
+  connectionState = state;
+  const dot = document.getElementById('connDot');
+  if (!dot) return;
+  dot.className = 'conn-dot ' + state;
+  dot.title = state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting...' : 'Disconnected';
+}
+
+// --- View toggle ---
+function switchToClassic() {
+  try { localStorage.setItem('corral-ui-mode', 'classic'); } catch(e) {}
+  window.location.href = '/';
+}
+
+// --- Clean button ---
+async function cleanAgents() {
+  const btn = document.getElementById('cleanBtn');
+  if (btn) btn.disabled = true;
+  try {
+    await fetch('/api/clean', { method: 'POST' });
+    await refreshFromLasso();
+  } catch(e) {}
+  if (btn) btn.disabled = false;
+}
+
+// --- Top stats bar ---
+function updateTopStats() {
+  const active = agents.filter(a => !isDoneState(mapState(a)));
+  const prs = agents.filter(a => {
+    const s = mapState(a);
+    return s === 'waiting' || s === 'reading' || s === 'review_waiting';
+  });
+  const merged = agents.filter(a => mapState(a) === 'merged');
+  const dead = agents.filter(a => {
+    const s = mapState(a);
+    return s === 'dead' || s === 'exited';
+  });
+
+  const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  el('statAgents', active.length);
+  el('statPRs', prs.length);
+  el('statMerged', merged.length);
+  el('statDead', dead.length);
+  el('agentCountBar', agents.length);
+
+  // Uptime
+  const upMs = Date.now() - startTime;
+  const h = Math.floor(upMs / 3600000);
+  const m = Math.floor((upMs % 3600000) / 60000);
+  const s = Math.floor((upMs % 60000) / 1000);
+  el('statUptime', h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0'));
+}
+
+// --- Agent cards ---
+function renderAgentCards() {
+  const container = document.getElementById('agentCards');
+  const countEl = document.getElementById('agentCount');
+  if (!container) return;
+
+  if (agents.length === 0) {
+    container.innerHTML = '<div class="no-data">No agents connected</div>';
+    if (countEl) countEl.textContent = '—';
+    return;
+  }
+
+  const active = agents.filter(a => !isDoneState(mapState(a)));
+  const terminal = agents.filter(a => isDoneState(mapState(a)));
+  if (countEl) countEl.textContent = active.length + ' active' + (terminal.length ? ' · ' + terminal.length + ' terminal' : '');
+
+  container.innerHTML = agents.map(agent => {
+    const state = mapState(agent);
+    const cardClass = stateToCardClass(state);
+    const pulseClass = stateToPulseClass(state);
+    const colorClass = stateToColorClass(state);
+    const fillClass = stateToFillClass(state);
+    const name = escapeHtml(agent.id || 'agent');
+    const repo = escapeHtml(getRepoName(agent));
+    const issueId = getIssueId(agent);
+    const issueTitle = escapeHtml(agent.issueTitle || '');
+    const tokens = getTokens(agent);
+    const tokensLabel = tokens > 1000 ? Math.round(tokens / 1000) + 'K' : tokens;
+    const prNum = getPrNumber(agent);
+    const created = getCreatedAt(agent);
+    const elapsed = created ? formatDuration(Date.now() - created) : '—';
+    const failing = isCiFailing(agent);
+    const tokenPct = Math.min(100, Math.max(0, tokens / 2000));
+
+    let detailLine = '';
+    if (repo) detailLine += `<span class="repo">${repo}</span>`;
+    if (issueId) detailLine += ` <span class="v-cyan">#${escapeHtml(String(issueId))}</span>`;
+    if (issueTitle) detailLine += ` — ${issueTitle}`;
+    detailLine += '<br>';
+    detailLine += `<span class="${colorClass}">▸ ${escapeHtml(stateLabel(state))}</span>`;
+    if (prNum) detailLine += ` · PR <span class="v-green">#${escapeHtml(String(prNum))}</span>`;
+    if (failing) detailLine += ` · <span class="v-red">CI ✗</span>`;
+    if (tokens) detailLine += ` · ${tokensLabel} tokens`;
+
+    return `
+      <div class="agent-card ${cardClass}">
+        <div class="ac-top">
+          <span class="ac-pulse ${pulseClass}"></span>
+          <span class="ac-name ${colorClass}">${name}</span>
+          <span class="ac-time">${elapsed}</span>
+        </div>
+        <div class="ac-detail">${detailLine}</div>
+        ${fillClass ? `<div class="progress-bar"><div class="fill ${fillClass}" style="width:${tokenPct}%"></div></div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// --- Usage panel ---
+function renderUsageCards() {
+  const container = document.getElementById('usageCards');
+  const updatedEl = document.getElementById('usageUpdated');
+  if (!container) return;
+
+  if (!usageData || (!Array.isArray(usageData.providers) && !Array.isArray(usageData.usage))) {
+    container.innerHTML = '<div class="no-data">Usage unavailable</div>';
+    if (updatedEl) updatedEl.textContent = '—';
+    return;
+  }
+
+  const providers = Array.isArray(usageData.providers) ? usageData.providers : usageData.usage;
+  if (!providers || providers.length === 0) {
+    container.innerHTML = '<div class="no-data">' + escapeHtml(usageData.error || 'No usage data') + '</div>';
+    return;
+  }
+
+  if (updatedEl && usageData.fetchedAt) {
+    const d = new Date(usageData.fetchedAt);
+    const ago = Math.round((Date.now() - d.getTime()) / 60000);
+    updatedEl.textContent = ago <= 1 ? 'just now' : ago + 'm ago';
+  }
+
+  container.innerHTML = providers.map(provider => {
+    const name = escapeHtml(provider.name || provider.id || 'Usage');
+    const isExhausted = provider.quotaStatus && provider.quotaStatus.exhausted;
+
+    if (isExhausted) {
+      const resetLabel = provider.quotaStatus.resetAt
+        ? 'Resets ' + new Date(provider.quotaStatus.resetAt).toLocaleString()
+        : 'Reset time unknown';
+      return `
+        <div class="usage-card exhausted">
+          <div class="uc-title"><span>${name}</span><span class="uc-pill pill-exhausted">EXHAUSTED</span></div>
+          <div class="uc-row" style="color:#f5b3b3">⛔ Quota exhausted</div>
+          <div class="uc-bar"><div class="uc-fill uf-red" style="width:100%"></div></div>
+          <div class="uc-note">${escapeHtml(resetLabel)}</div>
+        </div>`;
+    }
+
+    const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
+    const percents = metrics.map(m => {
+      if (m.utilization !== null && m.utilization !== undefined) return Number(m.utilization) / 100;
+      if (m.used == null || m.limit == null || m.limit === 0) return null;
+      return Math.min(1, Math.max(0, m.used / m.limit));
+    }).filter(p => p !== null);
+    const highest = percents.length ? Math.max(...percents) : null;
+    const level = highest === null ? 'unknown' : highest >= 0.95 ? 'alert' : highest >= 0.8 ? 'warn' : 'ok';
+    const pillClass = level === 'alert' ? 'pill-alert' : level === 'warn' ? 'pill-warn' : 'pill-ok';
+    const cardWarn = level === 'warn' ? ' warn' : level === 'alert' ? ' alert' : '';
+    const resetNote = provider.resetAt ? 'Resets ' + new Date(provider.resetAt).toLocaleString() : '';
+
+    const metricsHtml = metrics.map(m => {
+      const label = escapeHtml(m.label || m.id || 'Metric');
+      let pct = null;
+      if (m.utilization !== null && m.utilization !== undefined) pct = Number(m.utilization) / 100;
+      else if (m.used != null && m.limit != null && m.limit > 0) pct = Math.min(1, m.used / m.limit);
+      const fillWidth = pct === null ? 0 : Math.round(pct * 100);
+      const fillClass = pct === null ? 'uf-green' : pct >= 0.95 ? 'uf-red' : pct >= 0.8 ? 'uf-yellow' : 'uf-green';
+
+      let valStr = '—';
+      if (m.unit === '%' && m.limit === 100 && m.used != null) valStr = m.used + '%';
+      else if (m.limit != null) valStr = m.used + ' / ' + m.limit + (m.unit ? ' ' + m.unit : '');
+      else if (m.used != null) valStr = m.used + (m.unit ? ' ' + m.unit : '');
+
+      return `
+        <div class="uc-row"><span>${label}</span><span>${escapeHtml(valStr)}</span></div>
+        <div class="uc-bar"><div class="uc-fill ${fillClass}" style="width:${fillWidth}%"></div></div>`;
+    }).join('');
+
+    return `
+      <div class="usage-card${cardWarn}">
+        <div class="uc-title"><span>${name}</span><span class="uc-pill ${pillClass}">${level.toUpperCase()}</span></div>
+        ${metricsHtml || '<div class="uc-note">No metrics</div>'}
+        ${resetNote ? '<div class="uc-note">' + escapeHtml(resetNote) + '</div>' : ''}
+      </div>`;
+  }).join('');
+}
+
+// --- Timeline ---
+function renderTimeline() {
+  const container = document.getElementById('timelineRows');
+  const rangeEl = document.getElementById('timelineRange');
+  if (!container) return;
+
+  // Use history data if available, otherwise fall back to current agents
+  const items = historyData.length ? historyData : agents;
+  if (!items.length) {
+    container.innerHTML = '<div class="no-data">No timeline data</div>';
+    return;
+  }
+
+  const now = Date.now();
+  const windowMs = 6 * 3600000; // 6 hours
+  const windowStart = now - windowMs;
+  if (rangeEl) rangeEl.textContent = 'last 6h';
+
+  // Build timeline rows from history statusHistory or agent data
+  const rows = items.slice(0, 12).map(item => {
+    const name = escapeHtml((item.id || '').substring(0, 8));
+    const state = mapState(item);
+    const colorClass = stateToColorClass(state);
+    const created = getCreatedAt(item) || windowStart;
+    const elapsed = formatDuration(now - created);
+
+    // If history item has statusHistory, render segments
+    const statusHistory = item.statusHistory || [];
+    if (statusHistory.length > 1) {
+      let segments = '';
+      for (let i = 0; i < statusHistory.length; i++) {
+        const entry = statusHistory[i];
+        const entryTime = new Date(entry.at).getTime();
+        const nextTime = i + 1 < statusHistory.length ? new Date(statusHistory[i+1].at).getTime() : now;
+        const segStart = Math.max(entryTime, windowStart);
+        const segEnd = Math.min(nextTime, now);
+        if (segEnd <= segStart) continue;
+        const startPct = ((segStart - windowStart) / windowMs) * 100;
+        const widthPct = ((segEnd - segStart) / windowMs) * 100;
+        const color = timelineColor(entry.status || '');
+        segments += `<div class="tl-seg" style="position:absolute;left:${startPct}%;width:${widthPct}%;background:${color}"></div>`;
+      }
+      return `<div class="tl-row">
+        <span class="tl-label ${colorClass}">${name}</span>
+        <div class="tl-track" style="position:relative">${segments}</div>
+        <span class="tl-time">${elapsed}</span>
+      </div>`;
+    }
+
+    // Simple single-color bar for agents without history
+    const agentStart = Math.max(created, windowStart);
+    const startPct = ((agentStart - windowStart) / windowMs) * 100;
+    const widthPct = ((now - agentStart) / windowMs) * 100;
+    const color = timelineColor(item.status || '');
+    return `<div class="tl-row">
+      <span class="tl-label ${colorClass}">${name}</span>
+      <div class="tl-track" style="position:relative">
+        <div class="tl-seg" style="position:absolute;left:${startPct}%;width:${widthPct}%;background:${color}"></div>
+      </div>
+      <span class="tl-time">${elapsed}</span>
+    </div>`;
+  });
+
+  container.innerHTML = rows.join('');
+}
+
+function timelineColor(status) {
+  const s = (status || '').toLowerCase();
+  if (s.includes('merged')) return '#f0c040';
+  if (s.includes('pr_closed')) return '#8855aa';
+  if (s.includes('exited') || s.includes('dead') || s.includes('archived')) return '#6c6c6c';
+  if (s.includes('ci_failed') || s.includes('failed')) return '#ff5c5c';
+  if (s.includes('pr_open') || s.includes('ci')) return '#3adf7a';
+  if (s.includes('working') || s.includes('coding') || s.includes('active')) return '#3b7cff';
+  return '#3b7cff';
+}
+
+// --- Status log ---
+const logMessages = [];
+function addLog(msg) {
+  logMessages.push(msg);
+  if (logMessages.length > 20) logMessages.shift();
+  const el = document.getElementById('statusLog');
+  if (el) el.textContent = msg;
+}
+
+// --- Data fetching ---
+async function refreshFromLasso() {
+  try {
+    const [agentsResp, historyResp] = await Promise.all([
+      fetch('/api/agents'),
+      fetch('/api/history'),
+    ]);
+    if (!agentsResp.ok) throw new Error('Agents fetch failed');
+    const data = await agentsResp.json();
+    agents = Array.isArray(data) ? data : (data.sessions || []);
+
+    if (historyResp.ok) {
+      const hData = await historyResp.json();
+      historyData = Array.isArray(hData.history) ? hData.history : [];
+    }
+
+    setConnection('connected');
+    updateAll();
+
+    // Log latest agent activity
+    if (agents.length) {
+      const a = agents[0];
+      addLog('▸ ' + (a.id || 'agent') + ' — ' + (a.status || 'active') + ' — poll OK');
+    } else {
+      addLog('▸ Poll OK — no active agents');
+    }
+  } catch(err) {
+    setConnection('disconnected');
+    addLog('▸ Connection failed — ' + err.message);
+  }
+}
+
+async function refreshUsage() {
+  try {
+    const resp = await fetch('/api/usage');
+    if (!resp.ok) throw new Error('Usage fetch failed');
+    usageData = await resp.json();
+    renderUsageCards();
+  } catch(err) {
+    usageData = { error: err.message, providers: [] };
+    renderUsageCards();
+  }
+}
+
+function updateAll() {
+  updateTopStats();
+  renderAgentCards();
+  renderTimeline();
+}
+
+async function startPolling() {
+  if (polling) return;
+  polling = true;
+  setConnection('connecting');
+  // Initial fetch
+  await refreshFromLasso();
+  await refreshUsage();
+  // Poll loop
+  while (polling) {
+    await new Promise(r => setTimeout(r, 5000));
+    await refreshFromLasso();
+    // Usage less frequently
+    if (Date.now() % 30000 < 6000) await refreshUsage();
+  }
+}
+
+// --- Clock ---
+setInterval(() => {
+  const el = document.getElementById('clock');
+  if (el) el.textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+  updateTopStats(); // update uptime counter
+}, 1000);
+
+// ============================================================
+// Canvas — reuse mockup rendering (pixel art office)
+// ============================================================
+const canvas = document.getElementById('office');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 16, SCALE = 2, S = TILE * SCALE;
+const COLS = 20, ROWS = 12;
+let frame = 0;
+
+const PAL = {
+  floor1: '#3d3550', floor2: '#352e48', floor3: '#302a42',
+  floorCrack: '#2a2440',
+  beam: '#6a5040', beamDark: '#5a4030', beamLight: '#7a6050', nail: '#999',
+  wall: '#4a4a72', wallDark: '#3e3e64', wallLight: '#5a5a82', wallPanel: '#424268',
+  desk: '#8b6914', deskTop: '#c49b2a', deskDark: '#6a5010',
+  monitor: '#1a1a1a', monitorBezel: '#2a2a2a',
+  chair: '#3a3a3a', chairDark: '#2a2a2a', chairLight: '#4a4a4a',
+  plant: '#2d5a1e', plantLight: '#3a7a2a', plantPot: '#8b5e3c', plantPotDark: '#6a4a2a',
+  cup: '#e0e0e0', cupDark: '#ccc', coffee: '#5a3a1a',
+  fire1: '#ff0044', fire2: '#ff6600', fire3: '#ffaa00', fire4: '#ffee44',
+  tombstone: '#6c6c6c', tombstoneLight: '#8b8b8b',
+  divider: '#26263b',
+  neonPink: '#ff2d7b', neonPinkGlow: 'rgba(255,45,123,0.12)',
+  neonCyan: '#00e5ff', neonCyanGlow: 'rgba(0,229,255,0.08)',
+  wb: '#d8d8c8', wbFrame: '#888',
+  pizza: '#c49b2a', pizzaDark: '#8b6914',
+};
+
+const CHARS = [
+  { skin: '#f5c6a0', skinD: '#d4a080', hair: '#4a2800', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#3050a0' },
+  { skin: '#d4a373', skinD: '#b88855', hair: '#1a1a2e', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#2a2a4e' },
+  { skin: '#f5deb3', skinD: '#d4bc90', hair: '#c04000', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#404040' },
+  { skin: '#c49b6a', skinD: '#a07a48', hair: '#222',    shirt: '#f08b2e', shirtD: '#c06a18', pants: '#3a3a5c' },
+  { skin: '#f0d0b0', skinD: '#d0b090', hair: '#604020', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#333' },
+  { skin: '#e8c090', skinD: '#c8a070', hair: '#802020', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#2a2a4e' },
+];
+
+const DESKS = [];
+for (let r = 0; r < 3; r++)
+  for (let c = 0; c < 4; c++)
+    DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
+
+function R(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+function tileRect(tx, ty, tw, th, color) { R(tx * S, ty * S, tw * S, th * S, color); }
+
+function drawFloor() {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const hash = ((c * 7 + r * 13) % 3);
+      tileRect(c, r, 1, 1, hash === 0 ? PAL.floor1 : hash === 1 ? PAL.floor2 : PAL.floor3);
+    }
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  ctx.fillStyle = PAL.floorCrack;
+  for (let i = 0; i < 15; i++) ctx.fillRect(40 + i * 2, 100 + Math.sin(i) * 2 | 0, 2, 1);
+  for (let i = 0; i < 10; i++) ctx.fillRect(180 + i * 2, 150 + (i % 3 === 0 ? 1 : 0), 1, 1);
+  ctx.fillStyle = '#2e2845';
+  ctx.fillRect(90, 130, 4, 3);
+  ctx.fillRect(200, 110, 3, 4);
+  ctx.restore();
+}
+
+function drawWalls() {
+  for (let c = 0; c < COLS; c++) tileRect(c, 0, 1, 1, PAL.wall);
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  ctx.fillStyle = PAL.wallLight; ctx.fillRect(0, 0, COLS * TILE, 2);
+  ctx.fillStyle = PAL.wallDark; ctx.fillRect(0, 2, COLS * TILE, 1);
+  for (let x = 0; x < COLS * TILE; x += 40) { ctx.fillStyle = PAL.wallPanel; ctx.fillRect(x, 3, 1, TILE - 3); }
+  ctx.fillStyle = '#3a3028'; ctx.fillRect(0, TILE - 2, COLS * TILE, 2);
+  ctx.fillStyle = '#4a4038'; ctx.fillRect(0, TILE - 2, COLS * TILE, 1);
+  ctx.restore();
+}
+
+function drawGarageFrame() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(0, 0, COLS * TILE, 3, PAL.beam); R(0, 0, COLS * TILE, 1, PAL.beamLight); R(0, 2, COLS * TILE, 1, PAL.beamDark);
+  R(0, 0, 3, ROWS * TILE, PAL.beam); R(0, 0, 1, ROWS * TILE, PAL.beamLight); R(2, 0, 1, ROWS * TILE, PAL.beamDark);
+  R(COLS * TILE - 3, 0, 3, ROWS * TILE, PAL.beam); R(COLS * TILE - 3, 0, 1, ROWS * TILE, PAL.beamLight);
+  [[6,1],[6,80],[6,160],[COLS*TILE-5,1],[COLS*TILE-5,80],[COLS*TILE-5,160]].forEach(([nx, ny]) => {
+    ctx.fillStyle = PAL.nail; ctx.fillRect(nx, ny, 2, 2);
+    ctx.fillStyle = '#777'; ctx.fillRect(nx, ny, 1, 1);
+  });
+  ctx.restore();
+}
+
+function drawWindow() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 120, y = 2, w = 64, h = 12;
+  R(x, y, w, h, '#0a1029');
+  const buildings = [[x+2,y+6,6,6],[x+10,y+4,4,8],[x+16,y+7,5,5],[x+24,y+3,8,9],[x+34,y+5,6,7],[x+42,y+6,4,6],[x+48,y+4,5,8],[x+55,y+7,6,5]];
+  buildings.forEach(([bx,by,bw,bh]) => {
+    ctx.fillStyle = '#0c1530'; ctx.fillRect(bx, by, bw, bh);
+    for (let wx = bx + 1; wx < bx + bw - 1; wx += 2)
+      for (let wy = by + 1; wy < by + bh - 1; wy += 2)
+        if (Math.random() > 0.5) {
+          ctx.fillStyle = ['#f0d060','#5dfc5d','#00e5ff','#ff8844','#fff'][Math.floor(Math.random()*5)];
+          ctx.fillRect(wx, wy, 1, 1);
+        }
+  });
+  ctx.fillStyle = '#fff';
+  [[x+5,y+1],[x+20,y+2],[x+45,y+1],[x+55,y+2],[x+35,y+1],[x+15,y+1],[x+60,y+2]].forEach(([sx,sy]) => ctx.fillRect(sx, sy, 1, 1));
+  ctx.fillStyle = '#ffe39a'; ctx.fillRect(x+50, y+1, 4, 4);
+  ctx.fillStyle = '#d8d060'; ctx.fillRect(x+51, y+1, 2, 2);
+  ctx.fillStyle = '#5a5040';
+  ctx.fillRect(x-1, y-1, w+2, 1); ctx.fillRect(x-1, y+h, w+2, 1);
+  ctx.fillRect(x-1, y-1, 1, h+2); ctx.fillRect(x+w, y-1, 1, h+2);
+  ctx.fillRect(x+w/2, y, 1, h); ctx.fillRect(x, y + h/2, w, 1);
+  ctx.restore();
+}
+
+function drawDoor() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 4, y = TILE + 2;
+  R(x, y, 14, 28, '#3a3028'); R(x+1, y+1, 12, 26, '#2a2218');
+  R(x+2, y+2, 10, 10, '#2e2620'); R(x+2, y+14, 10, 12, '#2e2620');
+  R(x+10, y+15, 2, 2, '#c49b2a'); R(x+10, y+15, 1, 1, '#dab84a');
+  R(x-1, y-1, 16, 1, PAL.beam); R(x-1, y-1, 1, 30, PAL.beam); R(x+14, y-1, 1, 30, PAL.beam);
+  ctx.restore();
+}
+
+function drawNeonSign() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const nx = 55, ny = 3;
+  for (let r = 8; r > 0; r -= 2) R(nx-r, ny-r, 56+r*2, 10+r*2, `rgba(255,45,123,${0.008 * (8-r)})`);
+  const L = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[1,5],[2,5],[3,5]];
+  const A = [[5,1],[5,2],[5,3],[5,4],[5,5],[6,0],[7,0],[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[6,3],[7,3]];
+  const S1 = [[10,0],[11,0],[12,0],[13,0],[10,1],[10,2],[11,2],[12,2],[13,2],[13,3],[13,4],[10,5],[11,5],[12,5],[13,5],[10,4]];
+  const S2 = S1.map(([x,y]) => [x+5, y]);
+  const O = [[20,0],[21,0],[22,0],[20,1],[23,1],[20,2],[23,2],[20,3],[23,3],[20,4],[23,4],[21,5],[22,5]];
+  [L, A, S1, S2, O].forEach(letter => { letter.forEach(([lx, ly]) => R(nx+lx*2, ny+ly, 2, 1, PAL.neonPink)); });
+  R(nx, ny+7, 48, 1, PAL.neonCyan);
+  for (let i = 0; i < 48; i += 3) R(nx+i, ny+7, 1, 1, '#005a6a');
+  R(nx-4, ny+8, 56, 4, PAL.neonPinkGlow);
+  ctx.restore();
+}
+
+function drawWhiteboard() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 220, y = 2;
+  R(x, y, 40, 12, PAL.wb); R(x, y, 40, 1, PAL.wbFrame); R(x, y+11, 40, 1, PAL.wbFrame);
+  R(x, y, 1, 12, PAL.wbFrame); R(x+39, y, 1, 12, PAL.wbFrame);
+  ctx.fillStyle = '#444'; ctx.font = '3px "Press Start 2P"';
+  ctx.fillText('DAYS WITHOUT', x+3, y+4); ctx.fillText('INCIDENT:', x+3, y+8);
+  ctx.fillStyle = '#e04040'; ctx.font = '6px "Press Start 2P"'; ctx.fillText('0', x+30, y+9);
+  ctx.fillStyle = '#aaa'; ctx.font = '4px "Press Start 2P"'; ctx.fillText('3', x+26, y+5);
+  ctx.fillStyle = '#e04040'; R(x+25, y+3, 6, 1, '#e04040');
+  R(x+10, y+12, 20, 1, '#666'); R(x+11, y+12, 2, 1, '#e04040');
+  R(x+14, y+12, 2, 1, '#4040e0'); R(x+17, y+12, 2, 1, '#40c040');
+  ctx.restore();
+}
+
+function drawDesk(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE + 8;
+  R(x, y, TILE, 2, PAL.deskTop); R(x, y, TILE, 1, '#d4ab3a');
+  for (let gx = x + 2; gx < x + TILE - 1; gx += 3) R(gx, y+1, 2, 1, PAL.desk);
+  R(x, y+2, TILE, 4, PAL.desk); R(x, y+2, TILE, 1, PAL.deskDark);
+  R(x+1, y+6, 2, 6, PAL.deskDark); R(x+TILE-3, y+6, 2, 6, PAL.deskDark);
+  ctx.restore();
+}
+
+function drawChair(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = d.y * TILE + 10;
+  R(x, y, 10, 2, PAL.chairLight); R(x+1, y, 8, 1, PAL.chair);
+  R(x, y-6, 10, 2, PAL.chairLight); R(x+1, y-6, 8, 1, PAL.chair);
+  R(x, y-4, 1, 4, PAL.chairDark); R(x+9, y-4, 1, 4, PAL.chairDark);
+  R(x, y-2, 2, 1, PAL.chair); R(x+8, y-2, 2, 1, PAL.chair);
+  R(x+4, y+2, 2, 3, PAL.chairDark); R(x+1, y+5, 8, 1, PAL.chair);
+  R(x+1, y+6, 2, 1, '#555'); R(x+7, y+6, 2, 1, '#555');
+  ctx.restore();
+}
+
+function drawMonitor(d, state) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = d.y * TILE;
+  R(x, y, 10, 7, PAL.monitorBezel); R(x+1, y, 8, 1, PAL.monitor);
+  const sc = state === 'ci_failed' ? '#3a0808' : (state === 'coding' ? '#0a200a' : '#0a0a0a');
+  R(x+1, y+1, 8, 5, sc);
+  if (state === 'coding') {
+    const colors = ['#4ae04a', '#2a8a2a', '#6af06a', '#3aaa3a'];
+    for (let line = 0; line < 4; line++) {
+      const indent = line === 2 ? 2 : 0;
+      const len = 2 + (line * 3 + frame) % 4;
+      R(x+2+indent, y+1+line, Math.min(len, 6-indent), 1, colors[line % colors.length]);
+    }
+    if (frame % 10 < 5) R(x+7, y+4, 1, 1, '#4ae04a');
+  } else if (state === 'ci_failed') {
+    const bright = Math.sin(frame * 0.1) > 0;
+    const c = bright ? '#ff3b3b' : '#aa2222';
+    R(x+2,y+1,1,1,c); R(x+6,y+1,1,1,c);
+    R(x+3,y+2,1,1,c); R(x+5,y+2,1,1,c); R(x+4,y+3,1,1,c);
+    R(x+3,y+4,1,1,c); R(x+5,y+4,1,1,c); R(x+2,y+5,1,1,c); R(x+6,y+5,1,1,c);
+    R(x+2, y+1, 6, 1, '#3a0808');
+    R(x+2, y+2, 1, 1, '#aa2222'); R(x+3, y+2, 2, 1, '#ff3b3b');
+  } else if (state === 'merged') {
+    R(x+4,y+1,2,1,'#f0c040'); R(x+3,y+2,4,1,'#f0c040');
+    R(x+2,y+3,6,1,'#d8a820'); R(x+3,y+4,4,1,'#f0c040');
+  } else {
+    R(x+3,y+3,1,1,'#4ae04a'); R(x+4,y+4,1,1,'#4ae04a');
+    R(x+5,y+3,1,1,'#4ae04a'); R(x+6,y+2,1,1,'#4ae04a'); R(x+7,y+1,1,1,'#2a8a2a');
+  }
+  R(x+3, y+7, 4, 1, '#333'); R(x+2, y+8, 6, 1, '#2a2a2a');
+  if (state === 'coding' || state === 'ci_failed') {
+    R(x-1, y+7, 12, 3, state === 'ci_failed' ? 'rgba(255,59,59,0.05)' : 'rgba(74,224,74,0.05)');
+  }
+  ctx.restore();
+}
+
+function drawCharacter(d, colorIdx, state) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const c = CHARS[colorIdx % CHARS.length];
+  const x = d.x * TILE, y = (d.y + 1) * TILE;
+  const sleeping = state === 'sleeping';
+  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
+  const celeb = state === 'merged';
+  const slumped = state === 'exited' || sleeping;
+  const walk = state === 'walking';
+  const bob = sitting ? 0 : (Math.sin(frame * 0.15) > 0 ? 0 : 1);
+  const oy = sitting ? (celeb ? -3 : slumped ? -1 : -2) : bob;
+
+  if (!sitting) { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(x+3, y+14+bob, 10, 2); }
+  ctx.fillStyle = c.pants;
+  if (sitting) R(x+4, y+11+oy, 8, 2, c.pants);
+  else {
+    const lo = walk ? (Math.sin(frame*0.3) > 0 ? 1 : -1) : 0;
+    R(x+5, y+11+oy, 2, 4, c.pants); R(x+9, y+11+oy+lo, 2, 4, c.pants);
+    R(x+4, y+15+oy, 3, 1, '#222'); R(x+9, y+15+oy+lo, 3, 1, '#222');
+  }
+  R(x+4, y+6+oy, 8, 5, c.shirt); R(x+4, y+6+oy, 8, 1, c.shirtD); R(x+4, y+10+oy, 8, 1, c.shirtD);
+  R(x+7, y+7+oy, 1, 3, c.shirtD);
+  R(x+5, y+1+oy, 6, 5, c.skin); R(x+5, y+5+oy, 6, 1, c.skinD);
+  R(x+4, y+3+oy, 1, 2, c.skinD); R(x+11, y+3+oy, 1, 2, c.skinD);
+  R(x+5, y+oy, 6, 2, c.hair); R(x+4, y+oy+1, 1, 1, c.hair); R(x+11, y+oy+1, 1, 1, c.hair);
+  R(x+4, y+3+oy, 1, 3, c.shirt); R(x+11, y+3+oy, 1, 3, c.shirt);
+
+  if (state === 'coding') {
+    R(x+3, y+2+oy, 1, 3, '#333'); R(x+12, y+2+oy, 1, 3, '#333');
+    R(x+3, y+3+oy, 1, 2, '#555'); R(x+12, y+3+oy, 1, 2, '#555');
+    R(x+4, y+oy, 8, 1, '#444');
+  }
+
+  if (sleeping) {
+    const zf = frame % 90;
+    ctx.fillStyle = '#aaddff'; ctx.font = '3px "Press Start 2P"';
+    if (zf < 30) ctx.fillText('z', x+13, y+oy);
+    else if (zf < 60) ctx.fillText('zZ', x+12, y+oy-2);
+    else ctx.fillText('zZz', x+11, y+oy-4);
+  }
+
+  if (state === 'coding') {
+    const ab = frame % 6 < 3 ? 0 : 1;
+    R(x+2, y+7+oy, 2, 3, c.shirt); R(x+12, y+7+oy+ab, 2, 3, c.shirt);
+    R(x+2, y+10+oy, 2, 1, c.skin); R(x+12, y+10+oy+ab, 2, 1, c.skin);
+  } else if (celeb) {
+    R(x+2, y+1+oy, 2, 4, c.shirt); R(x+12, y+1+oy, 2, 4, c.shirt);
+    R(x+2, y+oy, 2, 1, c.skin); R(x+12, y+oy, 2, 1, c.skin);
+  } else if (slumped) {
+    R(x+2, y+8+oy, 2, 4, c.shirt); R(x+12, y+8+oy, 2, 4, c.shirt);
+  } else {
+    R(x+2, y+6+oy, 2, 4, c.shirt); R(x+12, y+6+oy, 2, 4, c.shirt);
+  }
+
+  const blink = frame % 60 < 3;
+  if (slumped) { R(x+6, y+4+oy, 2, 1, '#222'); R(x+9, y+4+oy, 2, 1, '#222'); }
+  else if (!blink) {
+    R(x+6, y+3+oy, 2, 2, '#fff'); R(x+9, y+3+oy, 2, 2, '#fff');
+    const px = state === 'coding' ? 0 : (Math.sin(frame*0.02) > 0 ? 0 : 1);
+    R(x+6+px, y+3+oy, 1, 1, '#111'); R(x+9+px, y+3+oy, 1, 1, '#111');
+    R(x+6, y+3+oy, 1, 1, '#ddf'); R(x+9, y+3+oy, 1, 1, '#ddf');
+  }
+  ctx.restore();
+}
+
+function drawFire(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE - 6;
+  [[PAL.fire1,'#cc0033',4,4,4],[PAL.fire2,'#dd5500',5,2,6],[PAL.fire3,PAL.fire4,4,0,4]].forEach(([c1,c2,cnt,yOff,h]) => {
+    for (let i = 0; i < cnt; i++) {
+      ctx.fillStyle = Math.random() > 0.5 ? c1 : c2;
+      ctx.fillRect(x + 2 + Math.floor(Math.random() * 12), y + yOff + Math.floor(Math.random() * h), 2, 2);
+    }
+  });
+  for (let i = 0; i < 4; i++) {
+    const age = (frame * 2 + i * 37) % 60;
+    if (age < 30) {
+      ctx.fillStyle = `rgba(255,136,0,${0.6 - age/50})`;
+      ctx.fillRect(x + 4 + Math.sin(age * 0.3 + i) * 4, y - age / 4, 1, 1);
+    }
+  }
+  R(x-2, y+8, TILE+4, 4, 'rgba(255,68,0,0.04)');
+  ctx.restore();
+}
+
+function drawTombstone(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = (d.y + 1) * TILE + 2;
+  R(x+1, y+11, 10, 1, 'rgba(0,0,0,0.2)');
+  R(x+2, y, 8, 10, PAL.tombstone); R(x+3, y-1, 6, 1, PAL.tombstone);
+  R(x+4, y-2, 4, 1, PAL.tombstoneLight); R(x+3, y, 6, 1, PAL.tombstoneLight);
+  R(x+2, y+9, 8, 1, '#555');
+  R(x+5, y+1, 2, 1, '#888'); R(x+4, y+2, 4, 1, '#888'); R(x+5, y+3, 2, 3, '#888');
+  ctx.fillStyle = '#e0dfd8'; ctx.font = '4px "Press Start 2P"'; ctx.fillText('RIP', x+3, y+9);
+  ctx.restore();
+}
+
+function drawBubble(d, text, color) {
+  const px = d.x * S, py = (d.y * TILE - 10) * SCALE;
+  R(px - 1, py - 13, text.length * 5.5 + 12, 13, 'rgba(0,0,0,0.8)');
+  R(px + S/2 - 2, py, 4, 3, 'rgba(0,0,0,0.8)');
+  ctx.fillStyle = color || '#fff'; ctx.font = '8px "Press Start 2P"';
+  ctx.textAlign = 'center'; ctx.fillText(text, px + S/2, py - 3); ctx.textAlign = 'left';
+}
+
+function drawConfetti(d) {
+  const cx = d.x * S + S/2, cy = d.y * S;
+  const colors = ['#f0c040', '#4ae04a', '#fff', '#d1a128', '#ff5a9a', '#00e5ff'];
+  for (let i = 0; i < 15; i++) {
+    const a = (i / 15) * Math.PI * 2 + frame * 0.04;
+    const dist = 20 + Math.sin(frame * 0.08 + i * 1.3) * 14;
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fillRect(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist - 10, 2 + (i % 2), 2 + (i % 2));
+  }
+}
+
+function drawPrBadge(d, num, merged) {
+  const x = d.x * S + S - 6, y = d.y * S - 2;
+  R(x, y, 22, 12, merged ? '#d1a128' : '#2f9a3d');
+  R(x, y, 22, 1, merged ? '#e8c848' : '#4ae04a');
+  ctx.fillStyle = '#111'; ctx.font = '7px "Press Start 2P"'; ctx.fillText(`#${num}`, x + 2, y + 9);
+}
+
+function drawTokenBar(d, pct) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 1, y = (d.y + 1) * TILE + TILE - 2, w = TILE - 2;
+  R(x, y, w, 2, '#0b0b12');
+  const color = pct > 80 ? '#c13c3c' : pct > 50 ? '#d1a128' : '#2f9a3d';
+  R(x, y, Math.floor(w * pct / 100), 2, color);
+  ctx.restore();
+}
+
+function drawPlant(tx, ty) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = tx * TILE + 4, y = ty * TILE;
+  R(x+2, y+10, 8, 6, PAL.plantPot); R(x+1, y+10, 10, 2, PAL.plantPotDark); R(x+3, y+10, 6, 1, PAL.plantPot);
+  R(x+4, y+4, 4, 6, PAL.plant); R(x+2, y+2, 8, 4, PAL.plant);
+  R(x, y+4, 3, 3, PAL.plant); R(x+9, y+3, 3, 4, PAL.plant);
+  R(x+3, y+2, 2, 1, PAL.plantLight); R(x+7, y+3, 2, 1, PAL.plantLight); R(x+1, y+4, 1, 1, PAL.plantLight);
+  ctx.restore();
+}
+
+function drawServerRack(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(px, py, 8, 16, '#1a1a1a'); R(px+1, py+1, 6, 14, '#111');
+  for (let i = 0; i < 5; i++) {
+    R(px+2, py+2+i*3, 1, 1, ((frame + i * 17) % 30) < 15 ? '#2f9a3d' : '#1a3a1a');
+    R(px+4, py+2+i*3, 1, 1, ((frame + i * 23) % 40) < 20 ? '#3b7cff' : '#1a1a3a');
+    R(px+2, py+3+i*3, 4, 1, '#222');
+  }
+  ctx.restore();
+}
+
+function drawDivider(col) {
+  const x = (2 + col * 5 - 1) * S + S/2;
+  ctx.strokeStyle = PAL.divider; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(x, S); ctx.lineTo(x, ROWS * S - S); ctx.stroke(); ctx.setLineDash([]);
+}
+
+function drawLampGlow(tx, ty) {
+  const cx = tx * S + S/2, cy = ty * S;
+  const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy + 60, 60);
+  grad.addColorStop(0, 'rgba(255,240,200,0.06)'); grad.addColorStop(1, 'rgba(255,240,200,0)');
+  ctx.fillStyle = grad; ctx.fillRect(cx - 60, cy, 120, 80);
+}
+
+// Tumbleweed
+let tumbleX = -20;
+function drawTumbleweed() {
+  tumbleX = (tumbleX + 0.4) % (COLS * S + 40);
+  const ty = (ROWS - 1) * S - 8 + Math.sin(tumbleX * 0.03) * 4;
+  ctx.save(); ctx.translate(tumbleX, ty); ctx.rotate(frame * 0.06);
+  ctx.fillStyle = '#6a5a30'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#8a7a40'; ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) { const a = i * Math.PI / 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*5, Math.sin(a)*5); ctx.stroke(); }
+  ctx.restore();
+}
+
+// Map live agents to desk positions for canvas rendering
+function buildCanvasAgents() {
+  return agents.slice(0, 12).map((agent, idx) => {
+    const state = mapState(agent);
+    const canvasState = state === 'waiting' || state === 'reading' ? 'reading' :
+                        state === 'review_waiting' ? 'reading' :
+                        state === 'dead' ? 'exited' :
+                        state === 'pr_closed' ? 'sleeping' :
+                        state;
+    return {
+      desk: idx,
+      ci: idx % CHARS.length,
+      state: canvasState,
+      pr: getPrNumber(agent),
+      tokens: Math.min(100, Math.max(0, getTokens(agent) / 2000 * 100)),
+      dead: state === 'dead' || state === 'exited',
+      label: getRepoName(agent) + (getIssueId(agent) ? '#' + getIssueId(agent) : ''),
+      failing: isCiFailing(agent),
+    };
+  });
+}
+
+function render() {
+  frame++;
+  ctx.clearRect(0, 0, 640, 384);
+
+  drawFloor(); drawWalls(); drawGarageFrame(); drawWindow(); drawDoor();
+  drawNeonSign(); drawWhiteboard();
+  drawLampGlow(5, 0); drawLampGlow(15, 0);
+  drawDivider(2); drawDivider(3);
+
+  DESKS.forEach(d => { drawDesk(d); drawChair(d); });
+
+  const canvasAgents = buildCanvasAgents();
+  canvasAgents.forEach(a => {
+    const d = DESKS[a.desk];
+    if (!d) return;
+    const screenState = a.failing ? 'ci_failed' :
+      a.state === 'coding' ? 'coding' :
+      a.state === 'merged' ? 'merged' : 'pr_open';
+    drawMonitor(d, screenState);
+
+    if (a.dead) drawTombstone(d);
+    else drawCharacter(d, a.ci, a.state);
+
+    drawTokenBar(d, a.tokens);
+    if (a.failing) drawFire(d);
+    if (a.pr) drawPrBadge(d, a.pr, a.state === 'merged');
+    if (a.label) {
+      const bc = a.failing ? '#f66' : (a.state === 'merged' ? '#f0c040' : '#fff');
+      drawBubble(d, a.label, bc);
+    }
+    if (a.state === 'merged') drawConfetti(d);
+  });
+
+  drawTumbleweed();
+  drawPlant(0, 2); drawPlant(0, 9); drawPlant(COLS - 1, 4);
+  drawServerRack((COLS - 1) * TILE - 4, 6 * TILE);
+
+  requestAnimationFrame(render);
+}
+
+// === SIDEBAR RESIZE ===
+(function() {
+  const sidebar = document.getElementById('sidebar');
+  const handle = document.getElementById('resizeHandle');
+  let dragging = false, startX, startW;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault(); dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+    handle.classList.add('dragging'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    sidebar.style.width = Math.max(200, Math.min(600, startW + (e.clientX - startX))) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return; dragging = false;
+    handle.classList.remove('dragging'); document.body.style.cursor = ''; document.body.style.userSelect = '';
+    try { localStorage.setItem('corral-sidebar-w', sidebar.offsetWidth); } catch {}
+  });
+  try { const saved = localStorage.getItem('corral-sidebar-w'); if (saved) sidebar.style.width = saved + 'px'; } catch {}
+})();
+
+// === START ===
+requestAnimationFrame(render);
+startPolling();
+</script>
+</body>
+</html>
