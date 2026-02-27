@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corral 🤠 — Full Feature Mockup v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0c0c1a;
+    font-family: 'Press Start 2P', cursive;
+    color: #c0c0c0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* === TOP BAR === */
+  .top-bar {
+    background: linear-gradient(180deg, #1e1e3a, #14142a);
+    border-bottom: 3px solid #2a2a4a;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 44px;
+  }
+  .top-title {
+    color: #f0c040;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  .top-title .ver { color: #555; font-size: 7px; font-weight: normal; }
+  .top-stats {
+    display: flex;
+    gap: 18px;
+    font-size: 7px;
+    color: #666;
+    align-items: center;
+  }
+  .top-stats .val { color: #5dfc5d; text-shadow: 0 0 6px #5dfc5d33; }
+  .top-stats .val-warn { color: #d1a128; }
+  .top-stats .val-bad { color: #e76e55; }
+  .top-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .conn-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: #2f9a3d;
+    border: 2px solid #0b0b12;
+    box-shadow: 0 0 6px #2f9a3d88;
+  }
+  .top-btn {
+    background: #1b1b2b;
+    color: #ccc;
+    border: 2px solid #3a3a5c;
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .top-btn:hover { background: #24243a; }
+  .top-btn.active { color: #f0c040; border-color: #6d6d8f; }
+
+  /* === MAIN LAYOUT === */
+  .main {
+    display: flex;
+    height: calc(100vh - 44px);
+  }
+
+  /* === SIDEBAR === */
+  .sidebar {
+    width: 300px;
+    min-width: 200px;
+    max-width: 600px;
+    background: linear-gradient(180deg, rgba(18,18,38,0.97), rgba(10,10,22,0.99));
+    border-right: 3px solid #2a2a4a;
+    overflow-y: auto;
+    font-size: 8px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Drag handle */
+  .resize-handle {
+    position: absolute;
+    top: 0; right: -5px;
+    width: 10px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .resize-handle::after {
+    content: '';
+    width: 3px;
+    height: 40px;
+    background: #3a3a5c;
+    border-radius: 2px;
+    transition: background 0.2s, height 0.2s;
+  }
+  .resize-handle:hover::after,
+  .resize-handle.dragging::after {
+    background: #f0c040;
+    height: 60px;
+    box-shadow: 0 0 8px #f0c04044;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .sb-section {
+    padding: 10px 12px;
+    border-bottom: 2px solid #1a1a30;
+  }
+  .sb-section:last-child { border-bottom: none; flex: 1; }
+
+  .sb-header {
+    color: #f0c040;
+    font-size: 9px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-shadow: 0 0 8px #f0c04022;
+  }
+  .sb-header .count { color: #666; font-size: 7px; }
+
+  /* Agent cards */
+  .agent-card {
+    background: linear-gradient(135deg, #1a1a30, #141428);
+    border: 2px solid #2a2a4a;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+  .agent-card.st-coding::before { background: #2f9a3d; box-shadow: 0 0 6px #2f9a3d88; }
+  .agent-card.st-coding { border-color: #2a5a2a; }
+  .agent-card.st-pr::before { background: #3b7cff; box-shadow: 0 0 6px #3b7cff88; }
+  .agent-card.st-pr { border-color: #2a3a6a; }
+  .agent-card.st-ci::before { background: #e76e55; box-shadow: 0 0 6px #e76e5588; }
+  .agent-card.st-ci { border-color: #6a2a2a; }
+  .agent-card.st-merged::before { background: #f0c040; box-shadow: 0 0 6px #f0c04088; }
+  .agent-card.st-merged { border-color: #6a5a20; opacity: 0.85; }
+  .agent-card.st-dead::before { background: #6c6c6c; }
+  .agent-card.st-dead { border-color: #3a3a3a; opacity: 0.7; }
+  .agent-card.st-closed::before { background: #8855aa; box-shadow: 0 0 6px #8855aa88; }
+  .agent-card.st-closed { border-color: #4a2a5a; opacity: 0.8; }
+
+  .ac-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .ac-pulse {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .ac-pulse.green { background: #2f9a3d; box-shadow: 0 0 4px #2f9a3d; animation: pulse 2s infinite; }
+  .ac-pulse.blue { background: #3b7cff; box-shadow: 0 0 4px #3b7cff; animation: pulse 2s infinite; }
+  .ac-pulse.red { background: #e76e55; box-shadow: 0 0 4px #e76e55; animation: pulse-fast 0.8s infinite; }
+  .ac-pulse.gold { background: #f0c040; animation: none; }
+  .ac-pulse.gray { background: #6c6c6c; animation: none; }
+  .ac-pulse.purple { background: #8855aa; animation: none; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
+  @keyframes pulse-fast { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
+
+  .ac-name { font-size: 9px; }
+  .ac-time { color: #444; font-size: 7px; margin-left: auto; }
+
+  .ac-detail { color: #666; line-height: 2; }
+  .ac-detail .repo { color: #88aaff; }
+  .ac-detail .issue { color: #999; }
+
+  .v-green { color: #5dfc5d; }
+  .v-blue { color: #3b7cff; }
+  .v-red { color: #e76e55; }
+  .v-gold { color: #f0c040; }
+  .v-gray { color: #6c6c6c; }
+  .v-purple { color: #8855aa; }
+  .v-cyan { color: #00e5ff; }
+
+  .progress-bar {
+    height: 3px;
+    background: #1a1a30;
+    margin-top: 6px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar .fill { height: 100%; border-radius: 2px; }
+  .fill-green { background: linear-gradient(90deg, #1a5a1a, #2f9a3d); }
+  .fill-blue { background: linear-gradient(90deg, #1a2a5a, #3b7cff); }
+  .fill-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
+  .fill-gold { background: linear-gradient(90deg, #5a4a10, #f0c040); }
+
+  /* Usage section */
+  .usage-card {
+    background: #0f0f1a;
+    border: 1px solid #2a2a3f;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-radius: 2px;
+  }
+  .usage-card.warn { border-color: #d1a128; }
+  .uc-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 8px;
+  }
+  .uc-pill {
+    font-size: 6px;
+    padding: 1px 5px;
+    border: 1px solid #2a2a3f;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .pill-ok { border-color: #2f9a3d; color: #bfe6c7; }
+  .pill-warn { border-color: #d1a128; color: #f3e2a2; }
+  .pill-est { border-color: #666; color: #aaa; }
+  .uc-row {
+    display: flex;
+    justify-content: space-between;
+    color: #999;
+    font-size: 7px;
+    margin-bottom: 3px;
+  }
+  .uc-bar {
+    height: 5px;
+    background: #1b1b2b;
+    border: 1px solid #222;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .uc-fill { height: 100%; }
+  .uf-green { background: linear-gradient(90deg, #1a4a1a, #2f9a3d); }
+  .uf-yellow { background: linear-gradient(90deg, #5a4a10, #d1a128); }
+  .uc-note { color: #555; font-size: 6px; margin-top: 4px; }
+
+  /* Timeline mini */
+  .tl-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    font-size: 6px;
+  }
+  .tl-label { width: 56px; color: #888; overflow: hidden; white-space: nowrap; }
+  .tl-track {
+    flex: 1;
+    height: 6px;
+    background: #111;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+  }
+  .tl-seg { height: 100%; }
+  .tl-time { width: 24px; color: #555; text-align: right; }
+
+  /* Queue */
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: #0f0f1a;
+    border: 1px dashed #2a2a3f;
+    margin-bottom: 4px;
+    font-size: 7px;
+    color: #666;
+  }
+  .qi-num { color: #88aaff; }
+
+  /* === SCENE AREA === */
+  .scene-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .canvas-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 40%, #151530, #0c0c1a 70%);
+    min-height: 0;
+  }
+  .canvas-area canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 6px);
+    pointer-events: none;
+  }
+
+  /* Mock tooltip */
+  .mock-tooltip {
+    position: absolute;
+    top: 55%;
+    right: 8%;
+    padding: 8px 10px;
+    font-size: 8px;
+    line-height: 1.7;
+    color: #e6e6e6;
+    background: #15151fee;
+    border: 3px solid #4a4a62;
+    box-shadow: 0 0 0 3px #0b0b12, 4px 4px 0 #0b0b12;
+    z-index: 10;
+    min-width: 180px;
+  }
+  .tt-title { color: #f0c040; font-size: 9px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+  .tt-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .tt-row { display: flex; gap: 6px; }
+  .tt-lbl { color: #7b8096; min-width: 54px; }
+
+  /* === STATUS BAR === */
+  .status-bar {
+    background: linear-gradient(180deg, #1a1a30, #121228);
+    border-top: 3px solid #2a2a4a;
+    padding: 0 14px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7px;
+    color: #555;
+  }
+  .sb-log {
+    color: #5dfc5d;
+    text-shadow: 0 0 4px #5dfc5d22;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="top-title">
+    <span style="font-size:16px">🤠</span>
+    <span>CORRAL</span>
+    <span class="ver">v4.0-sv</span>
+  </div>
+  <div class="top-stats">
+    <span>AGENTS <span class="val">5</span>/<span style="color:#555">12</span></span>
+    <span>PRs <span class="val">3</span></span>
+    <span>CI <span class="val">●</span><span class="val-bad">●</span><span class="val">●</span></span>
+    <span>MERGED <span class="val">1</span></span>
+    <span>DEAD <span class="val-bad">1</span></span>
+    <span>UPTIME <span class="val">4:23:17</span></span>
+  </div>
+  <div class="top-controls">
+    <div class="conn-dot" title="Connected to lasso"></div>
+    <button class="top-btn">🔇</button>
+    <button class="top-btn active">✅</button>
+    <button class="top-btn">🧹</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="resize-handle" id="resizeHandle"></div>
+
+    <!-- Usage (moved up) -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>📊 USAGE</span>
+        <span class="count">updated 2m ago</span>
+      </div>
+
+      <div class="usage-card">
+        <div class="uc-title">
+          <span>Claude Max</span>
+          <span class="uc-pill pill-ok">OK</span>
+        </div>
+        <div class="uc-row"><span>5h window</span><span>42.3%</span></div>
+        <div class="uc-bar"><div class="uc-fill uf-green" style="width:42.3%"></div></div>
+        <div class="uc-row" style="margin-top:4px"><span>7d window</span><span>68.7%</span></div>
+        <div class="uc-bar"><div class="uc-fill uf-yellow" style="width:68.7%"></div></div>
+        <div class="uc-note">Resets in 3h · Extra: $27.50 / $100</div>
+      </div>
+
+      <div class="usage-card warn">
+        <div class="uc-title">
+          <span>Codex</span>
+          <span class="uc-pill pill-est">EST</span>
+        </div>
+        <div class="uc-row"><span>Tokens used</span><span>~340K</span></div>
+        <div class="uc-bar"><div class="uc-fill uf-green" style="width:34%"></div></div>
+        <div class="uc-note">Estimated from agent JSONL logs</div>
+      </div>
+    </div>
+
+    <!-- Timeline (moved up) -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>📈 TIMELINE</span>
+        <span class="count">last 6h</span>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-bottom:6px; font-size:6px; color:#555">
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3b7cff;display:inline-block"></span>Work</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3adf7a;display:inline-block"></span>PR</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#ff5c5c;display:inline-block"></span>CI</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#f0c040;display:inline-block"></span>Merge</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#8855aa;display:inline-block"></span>Close</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#6c6c6c;display:inline-block"></span>Dead</span>
+      </div>
+
+      <div class="tl-row">
+        <span class="tl-label v-green">cdx-1</span>
+        <div class="tl-track">
+          <div style="flex:82"></div>
+          <div class="tl-seg" style="flex:18;background:#3b7cff"></div>
+        </div>
+        <span class="tl-time">30m</span>
+      </div>
+      <div class="tl-row">
+        <span class="tl-label v-blue">cdx-2</span>
+        <div class="tl-track">
+          <div style="flex:58"></div>
+          <div class="tl-seg" style="flex:14;background:#3b7cff"></div>
+          <div class="tl-seg" style="flex:13;background:#3adf7a"></div>
+          <div style="flex:15"></div>
+        </div>
+        <span class="tl-time">2.5h</span>
+      </div>
+      <div class="tl-row">
+        <span class="tl-label v-red">cld-3</span>
+        <div class="tl-track">
+          <div style="flex:8"></div>
+          <div class="tl-seg" style="flex:27;background:#3b7cff"></div>
+          <div class="tl-seg" style="flex:20;background:#3adf7a"></div>
+          <div class="tl-seg" style="flex:13;background:#ff5c5c"></div>
+          <div class="tl-seg" style="flex:32;background:#3b7cff"></div>
+        </div>
+        <span class="tl-time">5.5h</span>
+      </div>
+      <div class="tl-row">
+        <span class="tl-label v-red">cdx-4</span>
+        <div class="tl-track">
+          <div style="flex:22"></div>
+          <div class="tl-seg" style="flex:26;background:#3b7cff"></div>
+          <div class="tl-seg" style="flex:14;background:#3adf7a"></div>
+          <div class="tl-seg" style="flex:38;background:#ff5c5c"></div>
+        </div>
+        <span class="tl-time">4.5h</span>
+      </div>
+      <div class="tl-row">
+        <span class="tl-label v-gold">cdx-5</span>
+        <div class="tl-track">
+          <div style="flex:72"></div>
+          <div class="tl-seg" style="flex:10;background:#3b7cff"></div>
+          <div class="tl-seg" style="flex:6;background:#3adf7a"></div>
+          <div class="tl-seg" style="flex:4;background:#f0c040"></div>
+          <div style="flex:8"></div>
+        </div>
+        <span class="tl-time">1.5h</span>
+      </div>
+      <div class="tl-row">
+        <span class="tl-label v-gray">cld-6</span>
+        <div class="tl-track">
+          <div style="flex:48"></div>
+          <div class="tl-seg" style="flex:17;background:#3b7cff"></div>
+          <div class="tl-seg" style="flex:13;background:#3adf7a"></div>
+          <div class="tl-seg" style="flex:7;background:#6c6c6c"></div>
+          <div style="flex:15"></div>
+        </div>
+        <span class="tl-time">3h</span>
+      </div>
+      <div class="tl-row">
+        <span class="tl-label v-purple">cld-7</span>
+        <div class="tl-track">
+          <div style="flex:32"></div>
+          <div class="tl-seg" style="flex:23;background:#3b7cff"></div>
+          <div class="tl-seg" style="flex:10;background:#3adf7a"></div>
+          <div class="tl-seg" style="flex:17;background:#8855aa"></div>
+          <div style="flex:18"></div>
+        </div>
+        <span class="tl-time">4h</span>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;color:#444;font-size:5px;margin-top:4px;padding:0 60px 0 0">
+        <span>-6h</span><span>-4h</span><span>-2h</span><span>Now</span>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>⚡ AGENTS</span>
+        <span class="count">5 active · 2 terminal</span>
+      </div>
+
+      <div class="agent-card st-coding">
+        <div class="ac-top">
+          <span class="ac-pulse green"></span>
+          <span class="ac-name v-green">codex-1</span>
+          <span class="ac-time">30m</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">zall</span> <span class="v-cyan">#7</span> — Tighten input validation<br>
+          <span class="v-green">▸ coding</span> · 24K tokens · ☕×1
+        </div>
+        <div class="progress-bar"><div class="fill fill-green" style="width:25%"></div></div>
+      </div>
+
+      <div class="agent-card st-pr">
+        <div class="ac-top">
+          <span class="ac-pulse blue"></span>
+          <span class="ac-name v-blue">codex-2</span>
+          <span class="ac-time">2h 30m</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">zall</span> <span class="v-cyan">#12</span> — Add rate limiting<br>
+          <span class="v-blue">▸ PR open</span> · <span class="v-green">PR #42</span> · CI <span class="v-green">✓</span> · 61K tokens · ☕×2
+        </div>
+        <div class="progress-bar"><div class="fill fill-blue" style="width:65%"></div></div>
+      </div>
+
+      <div class="agent-card st-ci">
+        <div class="ac-top">
+          <span class="ac-pulse red"></span>
+          <span class="ac-name v-red">claude-3</span>
+          <span class="ac-time">5h 30m</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">lasso</span> <span class="v-cyan">#29</span> — Refine ingestion<br>
+          <span class="v-red">▸ CI failed</span> · retry 2/3 · 128K tokens · ☕×3
+        </div>
+        <div class="progress-bar"><div class="fill fill-red" style="width:85%"></div></div>
+      </div>
+
+      <div class="agent-card st-ci">
+        <div class="ac-top">
+          <span class="ac-pulse red"></span>
+          <span class="ac-name v-red">codex-4</span>
+          <span class="ac-time">4h 30m</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">corral</span> <span class="v-cyan">#1</span> — Rich visuals polish<br>
+          <span class="v-red">▸ CI escalated ⚠</span> · 3/3 retries · PR <span class="v-green">#88</span> · 85K tokens
+        </div>
+        <div class="progress-bar"><div class="fill fill-red" style="width:70%"></div></div>
+      </div>
+
+      <div class="agent-card st-merged">
+        <div class="ac-top">
+          <span class="ac-pulse gold"></span>
+          <span class="ac-name v-gold">codex-5</span>
+          <span class="ac-time">1h 30m</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">zall</span> <span class="v-cyan">#15</span><br>
+          <span class="v-gold">▸ merged ✓</span> · PR <span class="v-gold">#61</span> · 3K tokens
+        </div>
+        <div class="progress-bar"><div class="fill fill-gold" style="width:100%"></div></div>
+      </div>
+
+      <div class="agent-card st-dead">
+        <div class="ac-top">
+          <span class="ac-pulse gray"></span>
+          <span class="ac-name v-gray">claude-6</span>
+          <span class="ac-time">3h</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">corral</span> <span class="v-cyan">#3</span> — Fix liveness check<br>
+          <span class="v-gray">▸ exited 💀</span> · died 10m ago · 45K tokens
+        </div>
+      </div>
+
+      <div class="agent-card st-closed">
+        <div class="ac-top">
+          <span class="ac-pulse purple"></span>
+          <span class="ac-name v-purple">claude-8</span>
+          <span class="ac-time">6h</span>
+        </div>
+        <div class="ac-detail">
+          <span class="repo">lasso</span> <span class="v-cyan">#77</span> — Batch execution engine<br>
+          <span class="v-purple">▸ sleeping 💤</span> · PR #77 · 92K tokens · ☕×4
+        </div>
+      </div>
+    </div>
+
+    <!-- Queue -->
+    <div class="sb-section">
+      <div class="sb-header">
+        <span>📋 QUEUE</span>
+        <span class="count">3 pending</span>
+      </div>
+      <div class="queue-item">
+        <span class="qi-num">#43</span>
+        <span>retry logic with backoff</span>
+      </div>
+      <div class="queue-item">
+        <span class="qi-num">#44</span>
+        <span>clean stale sessions</span>
+      </div>
+      <div class="queue-item">
+        <span class="qi-num">#45</span>
+        <span>slack thread support</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE -->
+  <div class="scene-wrap">
+    <div class="canvas-area">
+      <canvas id="office" width="640" height="384"></canvas>
+      <div class="scanlines"></div>
+      <!-- Mock tooltip on hover -->
+      <div class="mock-tooltip">
+        <div class="tt-title"><span class="tt-dot" style="background:#2f9a3d"></span> codex-1</div>
+        <div class="tt-row"><span class="tt-lbl">repo</span><span style="color:#88aaff">zall#7</span></div>
+        <div class="tt-row"><span class="tt-lbl">issue</span><span>Tighten input validation</span></div>
+        <div class="tt-row"><span class="tt-lbl">state</span><span class="v-green">coding</span></div>
+        <div class="tt-row"><span class="tt-lbl">time</span><span>30m</span></div>
+        <div class="tt-row"><span class="tt-lbl">tokens</span><span>24,350</span></div>
+        <div class="tt-row"><span class="tt-lbl">agent</span><span>codex (green)</span></div>
+        <div class="tt-row"><span class="tt-lbl">PR</span><span style="color:#555">—</span></div>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span class="sb-log" id="statusLog">▸ codex-1 wrote src/validate.js — +42 lines, -3 — 8s ago</span>
+      <span>POLL 5s │ MEM 42MB │ 7 agents │ <span id="clock"></span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('office');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 16, SCALE = 2, S = TILE * SCALE;
+const COLS = 20, ROWS = 12;
+let frame = 0;
+
+const PAL = {
+  // Garage concrete
+  floor1: '#3d3550', floor2: '#352e48', floor3: '#302a42',
+  floorCrack: '#2a2440',
+  // Wood beams / garage frame
+  beam: '#6a5040', beamDark: '#5a4030', beamLight: '#7a6050', nail: '#999',
+  // Walls (drywall with character)
+  wall: '#4a4a72', wallDark: '#3e3e64', wallLight: '#5a5a82',
+  wallPanel: '#424268',
+  // Furniture
+  desk: '#8b6914', deskTop: '#c49b2a', deskDark: '#6a5010',
+  monitor: '#1a1a1a', monitorBezel: '#2a2a2a',
+  chair: '#3a3a3a', chairDark: '#2a2a2a', chairLight: '#4a4a4a',
+  // Props
+  plant: '#2d5a1e', plantLight: '#3a7a2a', plantPot: '#8b5e3c', plantPotDark: '#6a4a2a',
+  cup: '#e0e0e0', cupDark: '#ccc', coffee: '#5a3a1a',
+  // Effects
+  fire1: '#ff0044', fire2: '#ff6600', fire3: '#ffaa00', fire4: '#ffee44',
+  ember: '#ff880066',
+  tombstone: '#6c6c6c', tombstoneLight: '#8b8b8b',
+  divider: '#26263b',
+  // Neon sign
+  neonPink: '#ff2d7b', neonPinkGlow: 'rgba(255,45,123,0.12)',
+  neonCyan: '#00e5ff', neonCyanGlow: 'rgba(0,229,255,0.08)',
+  // Whiteboard
+  wb: '#d8d8c8', wbFrame: '#888',
+  // Pizza box
+  pizza: '#c49b2a', pizzaDark: '#8b6914',
+};
+
+const CHARS = [
+  { skin: '#f5c6a0', skinD: '#d4a080', hair: '#4a2800', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#3050a0' },
+  { skin: '#d4a373', skinD: '#b88855', hair: '#1a1a2e', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#2a2a4e' },
+  { skin: '#f5deb3', skinD: '#d4bc90', hair: '#c04000', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#404040' },
+  { skin: '#c49b6a', skinD: '#a07a48', hair: '#222',    shirt: '#f08b2e', shirtD: '#c06a18', pants: '#3a3a5c' },
+  { skin: '#f0d0b0', skinD: '#d0b090', hair: '#604020', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#333' },
+  { skin: '#e8c090', skinD: '#c8a070', hair: '#802020', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#2a2a4e' },
+];
+
+const DESKS = [];
+for (let r = 0; r < 3; r++)
+  for (let c = 0; c < 4; c++)
+    DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
+
+function R(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+}
+
+function tileRect(tx, ty, tw, th, color) {
+  R(tx * S, ty * S, tw * S, th * S, color);
+}
+
+// ============= ENVIRONMENT =============
+
+function drawFloor() {
+  // Concrete floor with subtle variation
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const hash = ((c * 7 + r * 13) % 3);
+      const base = hash === 0 ? PAL.floor1 : hash === 1 ? PAL.floor2 : PAL.floor3;
+      tileRect(c, r, 1, 1, base);
+    }
+  }
+  // Floor cracks
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  ctx.fillStyle = PAL.floorCrack;
+  // Crack 1
+  for (let i = 0; i < 15; i++) ctx.fillRect(40 + i * 2, 100 + Math.sin(i) * 2 | 0, 2, 1);
+  // Crack 2
+  for (let i = 0; i < 10; i++) ctx.fillRect(180 + i * 2, 150 + (i % 3 === 0 ? 1 : 0), 1, 1);
+  // Floor stains
+  ctx.fillStyle = '#2e2845';
+  ctx.fillRect(90, 130, 4, 3);
+  ctx.fillRect(200, 110, 3, 4);
+  ctx.restore();
+}
+
+function drawWalls() {
+  // Back wall
+  for (let c = 0; c < COLS; c++) {
+    tileRect(c, 0, 1, 1, PAL.wall);
+  }
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Wall top molding
+  ctx.fillStyle = PAL.wallLight;
+  ctx.fillRect(0, 0, COLS * TILE, 2);
+  ctx.fillStyle = PAL.wallDark;
+  ctx.fillRect(0, 2, COLS * TILE, 1);
+  // Panel lines
+  for (let x = 0; x < COLS * TILE; x += 40) {
+    ctx.fillStyle = PAL.wallPanel;
+    ctx.fillRect(x, 3, 1, TILE - 3);
+  }
+  // Baseboard
+  ctx.fillStyle = '#3a3028';
+  ctx.fillRect(0, TILE - 2, COLS * TILE, 2);
+  ctx.fillStyle = '#4a4038';
+  ctx.fillRect(0, TILE - 2, COLS * TILE, 1);
+  ctx.restore();
+}
+
+function drawGarageFrame() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Top beam
+  R(0, 0, COLS * TILE, 3, PAL.beam);
+  R(0, 0, COLS * TILE, 1, PAL.beamLight);
+  R(0, 2, COLS * TILE, 1, PAL.beamDark);
+  // Left beam
+  R(0, 0, 3, ROWS * TILE, PAL.beam);
+  R(0, 0, 1, ROWS * TILE, PAL.beamLight);
+  R(2, 0, 1, ROWS * TILE, PAL.beamDark);
+  // Right beam
+  R(COLS * TILE - 3, 0, 3, ROWS * TILE, PAL.beam);
+  R(COLS * TILE - 3, 0, 1, ROWS * TILE, PAL.beamLight);
+  // Nails
+  const nails = [[6, 1], [6, 80], [6, 160], [COLS*TILE-5, 1], [COLS*TILE-5, 80], [COLS*TILE-5, 160]];
+  nails.forEach(([nx, ny]) => {
+    ctx.fillStyle = PAL.nail; ctx.fillRect(nx, ny, 2, 2);
+    ctx.fillStyle = '#777'; ctx.fillRect(nx, ny, 1, 1);
+  });
+  ctx.restore();
+}
+
+function drawWindow() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 120, y = 2, w = 64, h = 12;
+  // Night sky
+  R(x, y, w, h, '#0a1029');
+  // City skyline
+  const buildings = [[x+2,y+6,6,6],[x+10,y+4,4,8],[x+16,y+7,5,5],[x+24,y+3,8,9],[x+34,y+5,6,7],
+    [x+42,y+6,4,6],[x+48,y+4,5,8],[x+55,y+7,6,5]];
+  buildings.forEach(([bx,by,bw,bh]) => {
+    ctx.fillStyle = '#0c1530';
+    ctx.fillRect(bx, by, bw, bh);
+    // Random lit windows
+    for (let wx = bx + 1; wx < bx + bw - 1; wx += 2) {
+      for (let wy = by + 1; wy < by + bh - 1; wy += 2) {
+        if (Math.random() > 0.5) {
+          ctx.fillStyle = ['#f0d060','#5dfc5d','#00e5ff','#ff8844','#fff'][Math.floor(Math.random()*5)];
+          ctx.fillRect(wx, wy, 1, 1);
+        }
+      }
+    }
+  });
+  // Stars
+  ctx.fillStyle = '#fff';
+  [[x+5,y+1],[x+20,y+2],[x+45,y+1],[x+55,y+2],[x+35,y+1],[x+15,y+1],[x+60,y+2]].forEach(([sx,sy]) => ctx.fillRect(sx, sy, 1, 1));
+  // Moon
+  ctx.fillStyle = '#ffe39a'; ctx.fillRect(x+50, y+1, 4, 4);
+  ctx.fillStyle = '#d8d060'; ctx.fillRect(x+51, y+1, 2, 2); // crater shadow
+  // Frame
+  ctx.fillStyle = '#5a5040';
+  ctx.fillRect(x-1, y-1, w+2, 1); ctx.fillRect(x-1, y+h, w+2, 1);
+  ctx.fillRect(x-1, y-1, 1, h+2); ctx.fillRect(x+w, y-1, 1, h+2);
+  ctx.fillRect(x+w/2, y, 1, h); // center divider
+  ctx.fillRect(x, y + h/2, w, 1); // horizontal divider
+  // Moonlight shaft on floor
+  ctx.fillStyle = 'rgba(255,227,154,0.02)';
+  for (let dy = 0; dy < 20; dy++) {
+    const spread = dy * 3;
+    ctx.fillRect(x - spread/2, y + h + dy * 4, w + spread, 3);
+  }
+  ctx.restore();
+}
+
+function drawDoor() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Garage-style side door
+  const x = 4, y = TILE + 2;
+  R(x, y, 14, 28, '#3a3028');
+  R(x+1, y+1, 12, 26, '#2a2218');
+  // Panels
+  R(x+2, y+2, 10, 10, '#2e2620');
+  R(x+2, y+14, 10, 12, '#2e2620');
+  // Knob
+  R(x+10, y+15, 2, 2, '#c49b2a');
+  R(x+10, y+15, 1, 1, '#dab84a');
+  // Door frame
+  R(x-1, y-1, 16, 1, PAL.beam);
+  R(x-1, y-1, 1, 30, PAL.beam);
+  R(x+14, y-1, 1, 30, PAL.beam);
+  ctx.restore();
+}
+
+function drawNeonSign() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const nx = 55, ny = 3;
+  // Glow layers
+  for (let r = 8; r > 0; r -= 2) {
+    R(nx-r, ny-r, 56+r*2, 10+r*2, `rgba(255,45,123,${0.008 * (8-r)})`);
+  }
+  // "LASSO" text
+  const L = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[1,5],[2,5],[3,5]];
+  const A = [[5,1],[5,2],[5,3],[5,4],[5,5],[6,0],[7,0],[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[6,3],[7,3]];
+  const S1 = [[10,0],[11,0],[12,0],[13,0],[10,1],[10,2],[11,2],[12,2],[13,2],[13,3],[13,4],[10,5],[11,5],[12,5],[13,5],[10,4]];
+  const S2 = S1.map(([x,y]) => [x+5, y]);
+  const O = [[20,0],[21,0],[22,0],[20,1],[23,1],[20,2],[23,2],[20,3],[23,3],[20,4],[23,4],[21,5],[22,5]];
+  [L, A, S1, S2, O].forEach(letter => {
+    letter.forEach(([lx, ly]) => {
+      R(nx+lx*2, ny+ly, 2, 1, PAL.neonPink);
+    });
+  });
+  // Cyan accent line below
+  R(nx, ny+7, 48, 1, PAL.neonCyan);
+  for (let i = 0; i < 48; i += 3) R(nx+i, ny+7, 1, 1, '#005a6a');
+  // Underglow on wall
+  R(nx-4, ny+8, 56, 4, PAL.neonPinkGlow);
+  ctx.restore();
+}
+
+function drawWhiteboard() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 220, y = 2;
+  R(x, y, 40, 12, PAL.wb);
+  R(x, y, 40, 1, PAL.wbFrame);
+  R(x, y+11, 40, 1, PAL.wbFrame);
+  R(x, y, 1, 12, PAL.wbFrame);
+  R(x+39, y, 1, 12, PAL.wbFrame);
+  // "DAYS WITHOUT INCIDENT:" text
+  ctx.fillStyle = '#444';
+  ctx.font = '3px "Press Start 2P"';
+  ctx.fillText('DAYS WITHOUT', x+3, y+4);
+  ctx.fillText('INCIDENT:', x+3, y+8);
+  // The big red zero
+  ctx.fillStyle = '#e04040';
+  ctx.font = '6px "Press Start 2P"';
+  ctx.fillText('0', x+30, y+9);
+  // Strikethrough on a crossed-out "3"
+  ctx.fillStyle = '#aaa';
+  ctx.font = '4px "Press Start 2P"';
+  ctx.fillText('3', x+26, y+5);
+  ctx.fillStyle = '#e04040';
+  R(x+25, y+3, 6, 1, '#e04040'); // strikethrough line
+  // Marker tray
+  R(x+10, y+12, 20, 1, '#666');
+  R(x+11, y+12, 2, 1, '#e04040');
+  R(x+14, y+12, 2, 1, '#4040e0');
+  R(x+17, y+12, 2, 1, '#40c040');
+  ctx.restore();
+}
+
+function drawWallMonitor(mx, my) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(mx, my, 16, 10, '#111');
+  R(mx+1, my+1, 14, 8, '#0a1a0a');
+  // "Not Hotdog" app — cycles through 4 phases
+  const phase = Math.floor(frame / 90) % 4;
+  if (phase === 0) {
+    // Draw hotdog
+    R(mx+4, my+4, 8, 2, '#d4a040'); // bun
+    R(mx+5, my+4, 6, 1, '#cc3333'); // sausage
+    // Mustard zigzag
+    ctx.fillStyle = '#f0d060';
+    for (let i = 0; i < 3; i++) ctx.fillRect(mx+5+i*2, my+4+(i%2), 1, 1);
+  } else if (phase === 1) {
+    // ✓ HOTDOG
+    ctx.fillStyle = '#4ae04a';
+    ctx.font = '3px "Press Start 2P"';
+    ctx.fillText('✓HOT', mx+2, my+5);
+    ctx.fillText(' DOG', mx+2, my+8);
+  } else if (phase === 2) {
+    // Draw pizza slice
+    R(mx+6, my+3, 4, 1, '#e8a030');
+    R(mx+5, my+4, 6, 2, '#e8a030');
+    R(mx+4, my+6, 8, 2, '#dab84a');
+    // Pepperoni
+    R(mx+6, my+5, 1, 1, '#aa2222');
+    R(mx+8, my+6, 1, 1, '#aa2222');
+  } else {
+    // ✗ NOT HOTDOG
+    ctx.fillStyle = '#ff3b3b';
+    ctx.font = '3px "Press Start 2P"';
+    ctx.fillText('✗NOT', mx+2, my+5);
+    ctx.fillText('HTDOG', mx+1, my+8);
+  }
+  // Stand
+  R(mx+6, my+10, 4, 2, '#222');
+  R(mx+4, my+12, 8, 1, '#222');
+  ctx.restore();
+}
+
+function drawPosterRocket(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(px, py, 12, 14, '#111');
+  R(px+1, py+1, 10, 12, '#0a0a2a');
+  // Rocket
+  R(px+5, py+3, 2, 6, '#ccc');
+  R(px+4, py+4, 4, 2, '#ddd');
+  R(px+4, py+4, 1, 1, '#eee'); // highlight
+  R(px+4, py+9, 1, 2, '#ff4400');
+  R(px+7, py+9, 1, 2, '#ff4400');
+  R(px+5, py+9, 2, 3, '#ff6600');
+  R(px+5, py+11, 2, 1, '#ffaa00'); // flame tip
+  // Stars
+  [[px+2,py+2],[px+9,py+3],[px+3,py+10],[px+8,py+8]].forEach(([sx,sy]) => {
+    ctx.fillStyle = '#fff'; ctx.fillRect(sx, sy, 1, 1);
+  });
+  ctx.restore();
+}
+
+// Floor props
+function drawPizzaBox(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(px, py, 8, 6, PAL.pizza);
+  R(px, py, 8, 1, PAL.pizzaDark);
+  R(px+1, py+2, 6, 3, '#dab84a');
+  // Lid line
+  R(px, py+3, 8, 1, PAL.pizzaDark);
+  ctx.restore();
+}
+
+function drawRedBullCans(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // 2 small cans
+  for (let i = 0; i < 2; i++) {
+    const cx = px + i * 4;
+    R(cx, py, 3, 5, '#2a4a8a');
+    R(cx, py, 3, 2, '#8a2a2a');
+    R(cx+1, py+2, 1, 1, '#ccc'); // label
+  }
+  ctx.restore();
+}
+
+function drawCable(x1, y1, x2, y2) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  ctx.strokeStyle = '#2a2a3a';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  const mx = (x1 + x2) / 2, my = Math.max(y1, y2) + 3;
+  ctx.quadraticCurveTo(mx, my, x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPowerStrip(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(px, py, 12, 3, '#3a3a3a');
+  R(px, py, 12, 1, '#4a4a4a');
+  for (let i = 0; i < 4; i++) {
+    R(px+1+i*3, py+1, 2, 1, '#555');
+  }
+  // Power light
+  R(px+11, py+1, 1, 1, frame % 60 < 30 ? '#2f9a3d' : '#1a5a1a');
+  ctx.restore();
+}
+
+function drawRubberDuck(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(px, py+1, 5, 3, '#f0d060');
+  R(px+1, py, 3, 1, '#f0d060');
+  R(px+5, py+1, 2, 2, '#e8a030'); // beak
+  R(px+1, py+1, 1, 1, '#111'); // eye
+  R(px, py+4, 5, 1, '#d8b848');
+  ctx.restore();
+}
+
+function drawServerRack(px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  R(px, py, 8, 16, '#1a1a1a');
+  R(px+1, py+1, 6, 14, '#111');
+  // Blinky lights
+  for (let i = 0; i < 5; i++) {
+    const on = ((frame + i * 17) % 30) < 15;
+    R(px+2, py+2+i*3, 1, 1, on ? '#2f9a3d' : '#1a3a1a');
+    R(px+4, py+2+i*3, 1, 1, ((frame + i * 23) % 40) < 20 ? '#3b7cff' : '#1a1a3a');
+    // Drive bays
+    R(px+2, py+3+i*3, 4, 1, '#222');
+  }
+  ctx.restore();
+}
+
+function drawLampGlow(tx, ty) {
+  // Overhead lamp cone
+  const cx = tx * S + S/2, cy = ty * S;
+  const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy + 60, 60);
+  grad.addColorStop(0, 'rgba(255,240,200,0.06)');
+  grad.addColorStop(1, 'rgba(255,240,200,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - 60, cy, 120, 80);
+}
+
+// ============= FURNITURE =============
+
+function drawDesk(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE + 8;
+  // Surface with wood grain
+  R(x, y, TILE, 2, PAL.deskTop);
+  R(x, y, TILE, 1, '#d4ab3a'); // top highlight
+  // Wood grain
+  for (let gx = x + 2; gx < x + TILE - 1; gx += 3) R(gx, y+1, 2, 1, PAL.desk);
+  // Front panel
+  R(x, y+2, TILE, 4, PAL.desk);
+  R(x, y+2, TILE, 1, PAL.deskDark);
+  // Legs
+  R(x+1, y+6, 2, 6, PAL.deskDark);
+  R(x+TILE-3, y+6, 2, 6, PAL.deskDark);
+  ctx.restore();
+}
+
+function drawChair(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = d.y * TILE + 10;
+  // Seat
+  R(x, y, 10, 2, PAL.chairLight);
+  R(x+1, y, 8, 1, PAL.chair);
+  // Backrest
+  R(x, y-6, 10, 2, PAL.chairLight);
+  R(x+1, y-6, 8, 1, PAL.chair);
+  R(x, y-4, 1, 4, PAL.chairDark);
+  R(x+9, y-4, 1, 4, PAL.chairDark);
+  // Armrests
+  R(x, y-2, 2, 1, PAL.chair);
+  R(x+8, y-2, 2, 1, PAL.chair);
+  // Base
+  R(x+4, y+2, 2, 3, PAL.chairDark);
+  R(x+1, y+5, 8, 1, PAL.chair);
+  // Wheels
+  R(x+1, y+6, 2, 1, '#555');
+  R(x+7, y+6, 2, 1, '#555');
+  ctx.restore();
+}
+
+function drawMonitor(d, state) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = d.y * TILE;
+  // Monitor body (thinner bezel, modern look)
+  R(x, y, 10, 7, PAL.monitorBezel);
+  R(x+1, y, 8, 1, PAL.monitor); // top bezel
+  const sc = state === 'ci_failed' ? '#3a0808' : (state === 'coding' ? '#0a200a' : '#0a0a0a');
+  R(x+1, y+1, 8, 5, sc);
+  // Screen content
+  if (state === 'coding') {
+    // Multi-color code lines
+    const colors = ['#4ae04a', '#2a8a2a', '#6af06a', '#3aaa3a'];
+    for (let line = 0; line < 4; line++) {
+      const indent = line === 2 ? 2 : 0;
+      const len = 2 + (line * 3 + frame) % 4;
+      R(x+2+indent, y+1+line, Math.min(len, 6-indent), 1, colors[line % colors.length]);
+    }
+    // Blinking cursor
+    if (frame % 10 < 5) R(x+7, y+4, 1, 1, '#4ae04a');
+  } else if (state === 'ci_failed') {
+    // Red pulsing X
+    const bright = Math.sin(frame * 0.1) > 0;
+    const c = bright ? '#ff3b3b' : '#aa2222';
+    R(x+2,y+1,1,1,c); R(x+6,y+1,1,1,c);
+    R(x+3,y+2,1,1,c); R(x+5,y+2,1,1,c);
+    R(x+4,y+3,1,1,c);
+    R(x+3,y+4,1,1,c); R(x+5,y+4,1,1,c);
+    R(x+2,y+5,1,1,c); R(x+6,y+5,1,1,c);
+    // Error text
+    R(x+2, y+1, 6, 1, '#3a0808'); // clear
+    R(x+2, y+2, 1, 1, '#aa2222');
+    R(x+3, y+2, 2, 1, '#ff3b3b');
+  } else if (state === 'merged') {
+    // Gold star celebration
+    R(x+4,y+1,2,1,'#f0c040'); R(x+3,y+2,4,1,'#f0c040');
+    R(x+2,y+3,6,1,'#d8a820'); R(x+3,y+4,4,1,'#f0c040');
+    R(x+3,y+4,1,1,'#f0c040'); R(x+6,y+4,1,1,'#f0c040');
+  } else {
+    // PR open — green checkmark
+    R(x+3,y+3,1,1,'#4ae04a'); R(x+4,y+4,1,1,'#4ae04a');
+    R(x+5,y+3,1,1,'#4ae04a'); R(x+6,y+2,1,1,'#4ae04a');
+    R(x+7,y+1,1,1,'#2a8a2a');
+  }
+  // Stand
+  R(x+3, y+7, 4, 1, '#333');
+  R(x+2, y+8, 6, 1, '#2a2a2a');
+  // Monitor glow on desk surface
+  if (state === 'coding' || state === 'ci_failed') {
+    const gc = state === 'ci_failed' ? 'rgba(255,59,59,0.05)' : 'rgba(74,224,74,0.05)';
+    R(x-1, y+7, 12, 3, gc);
+  }
+  ctx.restore();
+}
+
+function drawCharacter(d, colorIdx, state) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const c = CHARS[colorIdx % CHARS.length];
+  const x = d.x * TILE, y = (d.y + 1) * TILE;
+  const sleeping = state === 'sleeping';
+  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
+  const celeb = state === 'merged';
+  const slumped = state === 'exited' || sleeping;
+  const walk = state === 'walking';
+  const bob = sitting ? 0 : (Math.sin(frame * 0.15) > 0 ? 0 : 1);
+  const oy = sitting ? (celeb ? -3 : slumped ? -1 : -2) : bob;
+
+  // Shadow
+  if (!sitting) {
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x+3, y+14+bob, 10, 2);
+  }
+
+  // Legs
+  ctx.fillStyle = c.pants;
+  if (sitting) { R(x+4, y+11+oy, 8, 2, c.pants); }
+  else {
+    const lo = walk ? (Math.sin(frame*0.3) > 0 ? 1 : -1) : 0;
+    R(x+5, y+11+oy, 2, 4, c.pants); R(x+9, y+11+oy+lo, 2, 4, c.pants);
+    // Shoes
+    R(x+4, y+15+oy, 3, 1, '#222');
+    R(x+9, y+15+oy+lo, 3, 1, '#222');
+  }
+  // Torso
+  R(x+4, y+6+oy, 8, 5, c.shirt);
+  R(x+4, y+6+oy, 8, 1, c.shirtD); // collar shadow
+  R(x+4, y+10+oy, 8, 1, c.shirtD); // bottom shadow
+  // Zipper/center line
+  R(x+7, y+7+oy, 1, 3, c.shirtD);
+
+  // Head
+  R(x+5, y+1+oy, 6, 5, c.skin);
+  R(x+5, y+5+oy, 6, 1, c.skinD); // jaw shadow
+  // Ears
+  R(x+4, y+3+oy, 1, 2, c.skinD);
+  R(x+11, y+3+oy, 1, 2, c.skinD);
+  // Hair
+  R(x+5, y+oy, 6, 2, c.hair);
+  R(x+4, y+oy+1, 1, 1, c.hair); // side hair
+  R(x+11, y+oy+1, 1, 1, c.hair);
+  // Hoodie hood hint
+  R(x+4, y+3+oy, 1, 3, c.shirt);
+  R(x+11, y+3+oy, 1, 3, c.shirt);
+
+  // Headphones (coding agents only)
+  if (state === 'coding') {
+    R(x+3, y+2+oy, 1, 3, '#333');  // left earpiece
+    R(x+12, y+2+oy, 1, 3, '#333'); // right earpiece
+    R(x+3, y+3+oy, 1, 2, '#555');  // left pad
+    R(x+12, y+3+oy, 1, 2, '#555'); // right pad
+    R(x+4, y+oy, 8, 1, '#444');    // headband
+  }
+
+  // ZZZ bubble for sleeping agents
+  if (sleeping) {
+    const zf = frame % 90;
+    ctx.fillStyle = '#aaddff';
+    ctx.font = '3px "Press Start 2P"';
+    if (zf < 30) ctx.fillText('z', x+13, y+oy);
+    else if (zf < 60) ctx.fillText('zZ', x+12, y+oy-2);
+    else ctx.fillText('zZz', x+11, y+oy-4);
+  }
+
+  // Arms
+  if (state === 'coding') {
+    const ab = frame % 6 < 3 ? 0 : 1;
+    R(x+2, y+7+oy, 2, 3, c.shirt);
+    R(x+12, y+7+oy+ab, 2, 3, c.shirt);
+    R(x+2, y+10+oy, 2, 1, c.skin); R(x+12, y+10+oy+ab, 2, 1, c.skin);
+  } else if (celeb) {
+    R(x+2, y+1+oy, 2, 4, c.shirt);
+    R(x+12, y+1+oy, 2, 4, c.shirt);
+    R(x+2, y+oy, 2, 1, c.skin); R(x+12, y+oy, 2, 1, c.skin);
+  } else if (state === 'review_waiting') {
+    const w2 = frame % 40 < 20 ? 0 : 1;
+    R(x+2, y+6+oy, 2, 4, c.shirt);
+    R(x+12, y+oy-1+w2, 2, 6, c.shirt);
+    R(x+12, y+oy-2+w2, 2, 1, c.skin);
+  } else if (slumped) {
+    R(x+2, y+8+oy, 2, 4, c.shirt); R(x+12, y+8+oy, 2, 4, c.shirt);
+  } else {
+    R(x+2, y+6+oy, 2, 4, c.shirt); R(x+12, y+6+oy, 2, 4, c.shirt);
+  }
+
+  // Eyes — white sclera + dark pupil
+  const blink = frame % 60 < 3;
+  if (slumped) {
+    R(x+6, y+4+oy, 2, 1, '#222'); R(x+9, y+4+oy, 2, 1, '#222');
+  } else if (!blink) {
+    // White sclera
+    R(x+6, y+3+oy, 2, 2, '#fff'); R(x+9, y+3+oy, 2, 2, '#fff');
+    // Pupils (look at screen when coding)
+    const px = state === 'coding' ? 0 : (Math.sin(frame*0.02) > 0 ? 0 : 1);
+    R(x+6+px, y+3+oy, 1, 1, '#111'); R(x+9+px, y+3+oy, 1, 1, '#111');
+    // Eye shine
+    R(x+6, y+3+oy, 1, 1, '#ddf');
+    R(x+9, y+3+oy, 1, 1, '#ddf');
+  }
+  ctx.restore();
+}
+
+function drawBubble(d, text, color = '#fff') {
+  const px = d.x * S, py = (d.y * TILE - 10) * SCALE;
+  R(px - 1, py - 13, text.length * 5.5 + 12, 13, 'rgba(0,0,0,0.8)');
+  R(px + S/2 - 2, py, 4, 3, 'rgba(0,0,0,0.8)');
+  ctx.fillStyle = color;
+  ctx.font = '8px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, px + S/2, py - 3);
+  ctx.textAlign = 'left';
+}
+
+function drawPrBadge(d, num, merged) {
+  const x = d.x * S + S - 6, y = d.y * S - 2;
+  R(x, y, 22, 12, merged ? '#d1a128' : '#2f9a3d');
+  R(x, y, 22, 1, merged ? '#e8c848' : '#4ae04a'); // highlight
+  ctx.fillStyle = '#111';
+  ctx.font = '7px "Press Start 2P"';
+  ctx.fillText(`#${num}`, x + 2, y + 9);
+}
+
+function drawTokenBar(d, pct) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 1, y = (d.y + 1) * TILE + TILE - 2, w = TILE - 2;
+  R(x, y, w, 2, '#0b0b12');
+  const color = pct > 80 ? '#c13c3c' : pct > 50 ? '#d1a128' : '#2f9a3d';
+  R(x, y, Math.floor(w * pct / 100), 2, color);
+  // Shine
+  R(x, y, Math.floor(w * pct / 100), 1, pct > 80 ? '#e05050' : pct > 50 ? '#e8c040' : '#4ae04a');
+  ctx.restore();
+}
+
+function drawCoffee(d, count) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 12, y = d.y * TILE + 7;
+  for (let i = 0; i < Math.min(count, 3); i++) {
+    const cx = x + i * 4;
+    R(cx, y, 3, 4, PAL.cup);
+    R(cx, y, 3, 1, PAL.cupDark);
+    R(cx+3, y+1, 1, 2, PAL.cupDark); // handle
+    R(cx, y+1, 3, 1, PAL.coffee);
+    // Steam wisps
+    if (i === 0) {
+      const st = (frame + i * 7) % 16;
+      if (st < 8) {
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(cx+1, y-1-Math.floor(st/3), 1, 1);
+        if (st > 3) ctx.fillRect(cx, y-2-Math.floor(st/4), 1, 1);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawFire(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE - 6;
+  // Multi-layer fire
+  const layers = [
+    { colors: [PAL.fire1, '#cc0033'], count: 4, yOff: 4, h: 4 },
+    { colors: [PAL.fire2, '#dd5500'], count: 5, yOff: 2, h: 6 },
+    { colors: [PAL.fire3, PAL.fire4], count: 4, yOff: 0, h: 4 },
+  ];
+  layers.forEach(layer => {
+    for (let i = 0; i < layer.count; i++) {
+      ctx.fillStyle = layer.colors[Math.floor(Math.random() * layer.colors.length)];
+      const fx = x + 2 + Math.floor(Math.random() * 12);
+      const fy = y + layer.yOff + Math.floor(Math.random() * layer.h);
+      ctx.fillRect(fx, fy, 2, 2);
+    }
+  });
+  // Embers floating up
+  for (let i = 0; i < 4; i++) {
+    const age = (frame * 2 + i * 37) % 60;
+    if (age < 30) {
+      ctx.fillStyle = `rgba(255,136,0,${0.6 - age/50})`;
+      const ex = x + 4 + Math.sin(age * 0.3 + i) * 4;
+      const ey = y - age / 4;
+      ctx.fillRect(ex, ey, 1, 1);
+    }
+  }
+  // Fire glow on surrounding area
+  R(x-2, y+8, TILE+4, 4, 'rgba(255,68,0,0.04)');
+  ctx.restore();
+}
+
+function drawTombstone(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = (d.y + 1) * TILE + 2;
+  // Shadow
+  R(x+1, y+11, 10, 1, 'rgba(0,0,0,0.2)');
+  // Stone body
+  R(x+2, y, 8, 10, PAL.tombstone);
+  R(x+3, y-1, 6, 1, PAL.tombstone);
+  R(x+4, y-2, 4, 1, PAL.tombstoneLight); // rounded top
+  R(x+3, y, 6, 1, PAL.tombstoneLight); // highlight
+  R(x+2, y+9, 8, 1, '#555'); // shadow bottom
+  // Cross
+  R(x+5, y+1, 2, 1, '#888'); R(x+4, y+2, 4, 1, '#888'); R(x+5, y+3, 2, 3, '#888');
+  // RIP text
+  ctx.fillStyle = '#e0dfd8';
+  ctx.font = '4px "Press Start 2P"';
+  ctx.fillText('RIP', x+3, y+9);
+  ctx.restore();
+}
+
+function drawDivider(col) {
+  const x = (2 + col * 5 - 1) * S + S/2;
+  ctx.strokeStyle = PAL.divider;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(x, S); ctx.lineTo(x, ROWS * S - S);
+  ctx.stroke(); ctx.setLineDash([]);
+}
+
+function drawGroupLabel(tx, ty, text) {
+  ctx.fillStyle = '#f0c04066';
+  ctx.font = '7px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, tx * S + S/2, ty * S - 4);
+  ctx.textAlign = 'left';
+}
+
+function drawConfetti(d) {
+  const cx = d.x * S + S/2, cy = d.y * S;
+  const colors = ['#f0c040', '#4ae04a', '#fff', '#d1a128', '#ff5a9a', '#00e5ff'];
+  for (let i = 0; i < 15; i++) {
+    const a = (i / 15) * Math.PI * 2 + frame * 0.04;
+    const dist = 20 + Math.sin(frame * 0.08 + i * 1.3) * 14;
+    const size = 2 + (i % 2);
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fillRect(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist - 10, size, size);
+  }
+}
+
+function drawPlant(tx, ty) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = tx * TILE + 4, y = ty * TILE;
+  // Pot
+  R(x+2, y+10, 8, 6, PAL.plantPot);
+  R(x+1, y+10, 10, 2, PAL.plantPotDark);
+  R(x+3, y+10, 6, 1, PAL.plantPot); // highlight
+  // Leaves
+  R(x+4, y+4, 4, 6, PAL.plant);
+  R(x+2, y+2, 8, 4, PAL.plant);
+  R(x, y+4, 3, 3, PAL.plant);
+  R(x+9, y+3, 3, 4, PAL.plant);
+  // Highlights
+  R(x+3, y+2, 2, 1, PAL.plantLight);
+  R(x+7, y+3, 2, 1, PAL.plantLight);
+  R(x+1, y+4, 1, 1, PAL.plantLight);
+  ctx.restore();
+}
+
+// Walking agent
+let walkT = 0;
+function drawWalker() {
+  walkT = (walkT + 0.003) % 1.3;
+  if (walkT >= 1) return;
+  const sx = 1, sy = 7, ex = 12, ey = 5;
+  const wx = sx + (ex - sx) * walkT;
+  const wy = sy + (ey - sy) * Math.min(1, walkT * 1.5);
+  drawCharacter({ x: wx, y: wy - 1 }, 5, 'walking');
+}
+
+// Tumbleweed — rolls across when visible
+let tumbleX = -20;
+function drawTumbleweed() {
+  tumbleX = (tumbleX + 0.4) % (COLS * S + 40);
+  const ty = (ROWS - 1) * S - 8 + Math.sin(tumbleX * 0.03) * 4;
+  const rot = frame * 0.06;
+  ctx.save();
+  ctx.translate(tumbleX, ty);
+  ctx.rotate(rot);
+  ctx.fillStyle = '#6a5a30';
+  ctx.beginPath();
+  ctx.arc(0, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#8a7a40';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    const a = i * Math.PI / 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a) * 5, Math.sin(a) * 5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// === AGENTS DATA ===
+const AGENTS = [
+  { desk: 0, ci: 0, state: 'coding',    pr: null, tokens: 24, coffee: 1, label: 'zall#7',    group: 'zall' },
+  { desk: 1, ci: 1, state: 'pr_open',   pr: 42,   tokens: 61, coffee: 2, label: 'zall#12',   group: 'zall' },
+  { desk: 2, ci: 2, state: 'ci_failed', pr: null, tokens: 85, coffee: 3, label: 'lasso#29',  group: 'lasso' },
+  { desk: 3, ci: 3, state: 'ci_failed', pr: 88,   tokens: 65, coffee: 2, label: 'corral#1',  group: 'corral' },
+  { desk: 4, ci: 0, state: 'merged',    pr: 61,   tokens: 3,  coffee: 0, label: 'zall#15',   group: 'zall' },
+  { desk: 5, ci: 2, state: 'exited',    pr: null, tokens: 45, coffee: 1, label: 'corral#3',  group: 'corral', dead: true },
+  { desk: 8, ci: 4, state: 'sleeping',  pr: 77,   tokens: 92, coffee: 4, label: 'claude#8',  group: 'lasso' },
+];
+
+function render() {
+  frame++;
+  ctx.clearRect(0, 0, 640, 384);
+
+  // === ENVIRONMENT ===
+  drawFloor();
+  drawWalls();
+  drawGarageFrame();
+  drawWindow();
+  drawDoor();
+  drawNeonSign();
+  drawWhiteboard();
+
+  // Wall decorations
+  drawWallMonitor(25, 3);
+  drawPosterRocket(270, 2);
+
+  // Lamp glows (ceiling)
+  drawLampGlow(5, 0);
+  drawLampGlow(15, 0);
+
+  // Dividers
+  drawDivider(2);
+  drawDivider(3);
+
+  // Group labels
+  drawGroupLabel(DESKS[0].x + 2, DESKS[0].y, 'zall');
+  drawGroupLabel(DESKS[2].x, DESKS[2].y, 'lasso');
+  drawGroupLabel(DESKS[3].x, DESKS[3].y, 'corral');
+
+  // Draw desks + agents
+  DESKS.forEach(d => { drawDesk(d); drawChair(d); });
+
+  AGENTS.forEach(a => {
+    const d = DESKS[a.desk];
+    const screenState = a.state === 'ci_failed' ? 'ci_failed' :
+      a.state === 'coding' ? 'coding' :
+      a.state === 'merged' ? 'merged' : 'pr_open';
+    drawMonitor(d, screenState);
+
+    if (a.dead) {
+      drawTombstone(d);
+    } else {
+      const charState = a.state === 'pr_open' ? 'reading' :
+        a.state === 'pr_closed' ? 'reading' : a.state;
+      drawCharacter(d, a.ci, charState);
+    }
+
+    drawTokenBar(d, a.tokens);
+    if (a.coffee > 0) drawCoffee(d, a.coffee);
+    if (a.state === 'ci_failed') drawFire(d);
+    if (a.pr) drawPrBadge(d, a.pr, a.state === 'merged');
+
+    const bc = a.state === 'ci_failed' ? '#f66' : (a.state === 'merged' ? '#f0c040' : '#fff');
+    drawBubble(d, a.label, bc);
+    if (a.state === 'merged') drawConfetti(d);
+  });
+
+  drawWalker();
+
+  // Tumbleweed rolls across the floor
+  drawTumbleweed();
+
+  // === FLOOR PROPS (Silicon Valley style) ===
+  drawPlant(0, 2);
+  drawPlant(0, 9);
+  drawPlant(COLS - 1, 4);
+
+  // Pizza boxes on floor
+  drawPizzaBox(1 * TILE + 6, 10 * TILE + 4);
+
+  // Red Bull cans
+  drawRedBullCans(18 * TILE + 2, 11 * TILE + 6);
+
+  // Rubber duck debugging companion
+  drawRubberDuck(8 * TILE + 2, 10 * TILE + 8);
+
+  // Power strip with cables
+  drawPowerStrip(10 * TILE, 11 * TILE + 2);
+
+  // Cables snaking across floor
+  drawCable(10 * TILE + 6, 11 * TILE + 4, 7 * TILE, 8 * TILE + 12);
+  drawCable(10 * TILE + 8, 11 * TILE + 4, 13 * TILE, 8 * TILE + 12);
+
+  // Server rack in corner
+  drawServerRack((COLS - 1) * TILE - 4, 6 * TILE);
+
+  requestAnimationFrame(render);
+}
+
+// Status log rotation
+const LOGS = [
+  '▸ codex-1 wrote src/validate.js — +42 lines, -3 — 8s ago',
+  '▸ claude-3 CI retry #2: running test suite... — 3s ago',
+  '▸ codex-5 merged! zall#15 → main 🎉',
+  '▸ codex-4 escalated: 3/3 CI retries exhausted ⚠',
+  '▸ lasso poll: 7 sessions, 2 reactions sent, 1 dead detected',
+  '▸ claude-6 exited (no PR) — tombstone placed 💀',
+  '▸ claude-8 sleeping 💤 — 6h runtime, head on desk',
+  '▸ DAYS WITHOUT INCIDENT: 0 — reset by CI failure 🔥',
+  '▸ 🌭 Not Hotdog scanner: analyzing agent output...',
+];
+let logIdx = 0;
+setInterval(() => {
+  logIdx = (logIdx + 1) % LOGS.length;
+  document.getElementById('statusLog').textContent = LOGS[logIdx];
+}, 3000);
+
+// Clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+}, 1000);
+
+requestAnimationFrame(render);
+
+// === SIDEBAR RESIZE ===
+(function() {
+  const sidebar = document.getElementById('sidebar');
+  const handle = document.getElementById('resizeHandle');
+  let dragging = false;
+  let startX, startW;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    startX = e.clientX;
+    startW = sidebar.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const newW = Math.max(200, Math.min(600, startW + dx));
+    sidebar.style.width = newW + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    // Save preference
+    try { localStorage.setItem('corral-sidebar-w', sidebar.offsetWidth); } catch {}
+  });
+
+  // Restore saved width
+  try {
+    const saved = localStorage.getItem('corral-sidebar-w');
+    if (saved) sidebar.style.width = saved + 'px';
+  } catch {}
+})();
+</script>
+</body>
+</html>
