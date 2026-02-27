@@ -367,6 +367,159 @@
 
   /* No-data message */
   .no-data { color: #555; font-size: 7px; text-align: center; padding: 12px; }
+
+  /* Mobile menu button — hidden on desktop */
+  .mobile-menu-btn { display: none; }
+
+  /* Mobile overlay backdrop — hidden by default */
+  .mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 49;
+  }
+
+  /* === MOBILE (<768px) === */
+  @media (max-width: 767px) {
+    body {
+      overflow-y: auto;
+      height: auto;
+      min-height: 100vh;
+    }
+
+    .mobile-menu-btn { display: inline-block; }
+
+    /* Top bar: wrap stats to next line */
+    .top-bar {
+      flex-wrap: wrap;
+      height: auto;
+      padding: 6px 10px;
+      gap: 4px;
+    }
+    .top-title { font-size: 11px; }
+    .top-stats {
+      order: 3;
+      width: 100%;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      padding: 4px 0 2px;
+      border-top: 1px solid #2a2a4a;
+      margin-top: 2px;
+    }
+
+    /* Main layout: vertical stack */
+    .main {
+      flex-direction: column;
+      height: auto;
+      min-height: calc(100vh - 70px);
+    }
+
+    /* Sidebar: collapsible overlay on mobile */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 85vw;
+      max-width: 360px;
+      min-width: 0;
+      height: 100vh;
+      z-index: 50;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      border-right: 3px solid #f0c040;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sidebar.mobile-open {
+      transform: translateX(0);
+    }
+    .mobile-overlay.visible {
+      display: block;
+    }
+
+    /* Hide desktop resize handle on mobile */
+    .resize-handle { display: none; }
+
+    /* Agent cards: larger touch targets */
+    .agent-card {
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .ac-top { gap: 8px; margin-bottom: 8px; }
+    .ac-pulse { width: 10px; height: 10px; }
+    .ac-name { font-size: 10px; }
+    .ac-time { font-size: 8px; }
+    .ac-detail { font-size: 9px; line-height: 2.2; }
+
+    /* Sidebar sections: more padding */
+    .sb-section { padding: 12px 14px; }
+    .sb-header { font-size: 10px; margin-bottom: 12px; }
+
+    /* Scene area: responsive */
+    .scene-wrap {
+      flex: none;
+      width: 100%;
+    }
+    .canvas-area {
+      width: 100%;
+      aspect-ratio: 640 / 384;
+      min-height: 0;
+    }
+    .canvas-area canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Status bar: wrap text, fixed at bottom */
+    .status-bar {
+      flex-wrap: wrap;
+      height: auto;
+      padding: 6px 10px;
+      gap: 4px;
+      font-size: 6px;
+    }
+    .sb-log {
+      max-width: 100%;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    /* Usage cards: slightly larger text */
+    .usage-card { padding: 10px; }
+    .uc-title { font-size: 9px; }
+    .uc-row { font-size: 8px; }
+
+    /* Timeline: slightly larger */
+    .tl-row { font-size: 7px; gap: 6px; }
+    .tl-label { width: 48px; font-size: 7px; }
+    .tl-track { height: 8px; }
+
+    /* Agent card tap-to-expand */
+    .agent-card .ac-detail { max-height: 2.2em; overflow: hidden; transition: max-height 0.2s ease; }
+    .agent-card.mobile-expanded .ac-detail { max-height: 20em; }
+    .agent-card.mobile-expanded { border-color: #f0c040; }
+  }
+
+  /* === SMALL MOBILE (<480px) === */
+  @media (max-width: 479px) {
+    .top-title { font-size: 9px; }
+    .top-title .ver { font-size: 6px; }
+    .top-stats { font-size: 6px; gap: 6px 10px; }
+    .top-btn { font-size: 7px; padding: 2px 5px; }
+
+    .sidebar {
+      width: 90vw;
+    }
+
+    .sb-header { font-size: 9px; }
+    .agent-card { padding: 10px 12px; }
+    .ac-name { font-size: 9px; }
+    .ac-detail { font-size: 8px; }
+
+    .status-bar { font-size: 5px; }
+  }
 </style>
 </head>
 <body>
@@ -403,10 +556,14 @@
     <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
     <button class="top-btn" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
     <button class="top-btn" id="cleanBtn" onclick="cleanAgents()">🧹</button>
+    <button class="top-btn mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
   </div>
 </div>
 
 <div class="main">
+
+  <!-- Mobile overlay -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileSidebar()"></div>
 
   <!-- SIDEBAR -->
   <div class="sidebar" id="sidebar">
@@ -1432,6 +1589,40 @@ function render() {
   });
   try { const saved = localStorage.getItem('corral-sidebar-w'); if (saved) sidebar.style.width = saved + 'px'; } catch {}
 })();
+
+// === MOBILE SIDEBAR TOGGLE ===
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobileOverlay');
+  const isOpen = sidebar.classList.contains('mobile-open');
+  if (isOpen) {
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('visible');
+  } else {
+    sidebar.classList.add('mobile-open');
+    overlay.classList.add('visible');
+  }
+}
+
+// Close sidebar on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar.classList.contains('mobile-open')) toggleMobileSidebar();
+  }
+});
+
+// Agent card tap-to-expand on mobile (touch devices)
+document.addEventListener('click', (e) => {
+  if (window.innerWidth >= 768) return;
+  const card = e.target.closest('.agent-card');
+  if (!card) return;
+  // Toggle expanded state
+  const wasExpanded = card.classList.contains('mobile-expanded');
+  // Collapse all other cards first
+  document.querySelectorAll('.agent-card.mobile-expanded').forEach(c => c.classList.remove('mobile-expanded'));
+  if (!wasExpanded) card.classList.add('mobile-expanded');
+});
 
 // === START ===
 requestAnimationFrame(render);
