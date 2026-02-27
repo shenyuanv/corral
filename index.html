@@ -1133,6 +1133,25 @@ function mergeTimelineEntries(activeAgents, historyList) {
       isActive: true,
       source: agent,
     };
+    // For terminal statuses, derive endedAt so the bar stops
+    const mergedStatus = entry.status;
+    const mergedActivity = entry.activity;
+    if (isTerminalStatus(mergedStatus, mergedActivity)) {
+      const histEnd = historyEntry && coerceMs(historyEntry.endedAt);
+      const agentEnd = coerceMs(agent.endedAt);
+      if (agentEnd) {
+        entry.endedAt = new Date(agentEnd).toISOString();
+      } else if (histEnd) {
+        entry.endedAt = new Date(histEnd).toISOString();
+      } else if (entry.statusHistory.length > 0) {
+        // Use the timestamp of the last terminal status event
+        const lastEvent = entry.statusHistory[entry.statusHistory.length - 1];
+        const lastAt = coerceMs(lastEvent.at);
+        if (lastAt && isTerminalStatus(lastEvent.status, lastEvent.activity)) {
+          entry.endedAt = new Date(lastAt).toISOString();
+        }
+      }
+    }
     merged.push(entry);
     historyMap.delete(id);
   });
@@ -2385,6 +2404,25 @@ function timelineStatusLabel(status, activity) {
   return status || activity || 'Unknown';
 }
 
+function isTerminalStatus(status, activity) {
+  const s = (status || '').toLowerCase();
+  const a = (activity || '').toLowerCase();
+  return (
+    s.includes('merged') || a.includes('merged') ||
+    s.includes('pr_closed') || a.includes('pr_closed') ||
+    s.includes('dead') || s.includes('exited') || s.includes('archived') ||
+    a.includes('dead') || a.includes('exited') || a.includes('archived')
+  );
+}
+
+function terminalEndColor(status, activity) {
+  const s = (status || '').toLowerCase();
+  const a = (activity || '').toLowerCase();
+  if (s.includes('merged') || a.includes('merged')) return TIMELINE_COLORS.merged;
+  if (s.includes('pr_closed') || a.includes('pr_closed')) return TIMELINE_COLORS.prClosed;
+  return TIMELINE_COLORS.dead;
+}
+
 function timelineColorForStatus(status, activity) {
   const s = (status || '').toLowerCase();
   const a = (activity || '').toLowerCase();
@@ -2425,12 +2463,24 @@ function buildTimelineEvents(entry, now) {
     events.push({ at: createdAt, status: entry.status || '', activity: entry.activity || '' });
   }
   events.sort((a, b) => a.at - b.at);
+  // Ensure a "working" event exists at createdAt if the earliest event is later
+  const createdAt = coerceMs(entry.createdAt);
+  if (createdAt && events.length > 0 && events[0].at > createdAt + 60000) {
+    events.unshift({ at: createdAt, status: 'working', activity: '' });
+  }
   return events;
 }
 
 function buildTimelineSegments(entry, now) {
   const events = buildTimelineEvents(entry, now);
-  const endedAt = coerceMs(entry.endedAt);
+  let endedAt = coerceMs(entry.endedAt);
+  // Infer endedAt from the last terminal event in statusHistory
+  if (!endedAt && events.length > 0) {
+    const lastEvent = events[events.length - 1];
+    if (isTerminalStatus(lastEvent.status, lastEvent.activity)) {
+      endedAt = lastEvent.at;
+    }
+  }
   const endTs = endedAt || now;
   const segments = [];
   for (let i = 0; i < events.length; i++) {
@@ -2457,6 +2507,8 @@ function buildTimelineMarkers(entry, events, now) {
   let sawCiFail = false;
   let sawCiPass = false;
   let sawMerge = false;
+  let sawClosed = false;
+  let sawExited = false;
   events.forEach((event) => {
     const status = (event.status || '').toLowerCase();
     if (!sawPr && status.includes('pr_open')) {
@@ -2475,9 +2527,17 @@ function buildTimelineMarkers(entry, events, now) {
       sawMerge = true;
       markers.push({ at: event.at, type: 'merged', label: 'Merged', color: TIMELINE_COLORS.merged });
     }
+    if (!sawClosed && status.includes('pr_closed')) {
+      sawClosed = true;
+      markers.push({ at: event.at, type: 'pr_closed', label: 'PR Closed', color: TIMELINE_COLORS.prClosed });
+    }
+    if (!sawExited && (status.includes('exited') || status.includes('dead'))) {
+      sawExited = true;
+      markers.push({ at: event.at, type: 'exited', label: 'Exited', color: TIMELINE_COLORS.dead });
+    }
   });
   const endedAt = coerceMs(entry.endedAt);
-  if (endedAt && !sawMerge) {
+  if (endedAt && !sawMerge && !sawClosed && !sawExited) {
     markers.push({ at: endedAt, type: 'ended', label: 'Ended', color: TIMELINE_COLORS.dead });
   }
   return markers;
@@ -2666,12 +2726,38 @@ function drawTimeline(now) {
       }
     });
 
-    // End marker for finished agents
+    // Color-coded end marker for finished agents
     const endedAt = coerceMs(entry.endedAt);
     if (endedAt && endedAt >= start && endedAt <= end) {
       const endX = barX + ((endedAt - start) / range) * barW;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(endX - 1, barY - 1, 2, TIMELINE_BAR_HEIGHT + 2);
+      const endColor = terminalEndColor(entry.status, entry.activity);
+      const cy = barY + Math.floor(TIMELINE_BAR_HEIGHT / 2);
+      ctx.fillStyle = endColor;
+      // Merged: filled diamond
+      const s = (entry.status || '').toLowerCase();
+      if (s.includes('merged')) {
+        ctx.beginPath();
+        ctx.moveTo(endX, cy - 4);
+        ctx.lineTo(endX + 4, cy);
+        ctx.lineTo(endX, cy + 4);
+        ctx.lineTo(endX - 4, cy);
+        ctx.closePath();
+        ctx.fill();
+      // PR Closed: filled square
+      } else if (s.includes('pr_closed')) {
+        ctx.fillRect(endX - 3, cy - 3, 6, 6);
+      // Dead/Exited: X mark
+      } else {
+        ctx.strokeStyle = endColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(endX - 3, cy - 3);
+        ctx.lineTo(endX + 3, cy + 3);
+        ctx.moveTo(endX + 3, cy - 3);
+        ctx.lineTo(endX - 3, cy + 3);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
     }
 
     // Start/end time labels on bars
@@ -3337,24 +3423,46 @@ function loadDemo() {
       createdAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
       endedAt: new Date(now - 10 * 60 * 1000).toISOString(),
     },
+    {
+      id: 'claude-7',
+      repo: 'lasso',
+      issueId: '35',
+      issueTitle: 'Refactor config loader',
+      status: 'pr_closed',
+      agentType: 'claude',
+      prNumber: 77,
+      tokensUsed: 52100,
+      createdAt: new Date(now - 4 * 60 * 60 * 1000).toISOString(),
+      endedAt: new Date(now - 60 * 60 * 1000).toISOString(),
+    },
   ];
   const demoHistory = demoAgents.map((agent) => {
     const createdAt = agent.createdAt;
     const createdTs = Date.parse(createdAt);
+    const s = (agent.status || '').toLowerCase();
     const statusHistory = [
       { status: 'working', activity: '', at: createdAt },
     ];
-    if ((agent.status || '').includes('pr_open')) {
+    // Build multi-stage histories depending on final status
+    if (s.includes('pr_open') || s.includes('ci') || s.includes('merged') || s.includes('pr_closed')) {
       statusHistory.push({ status: 'pr_open', activity: '', at: new Date(createdTs + 45 * 60 * 1000).toISOString() });
     }
-    if ((agent.status || '').includes('ci')) {
+    if (s.includes('ci')) {
       statusHistory.push({ status: 'ci_failed', activity: '', at: new Date(createdTs + 75 * 60 * 1000).toISOString() });
     }
-    if ((agent.status || '').includes('merged')) {
+    if (s.includes('merged')) {
+      statusHistory.push({ status: 'ci_passed', activity: '', at: new Date(createdTs + 55 * 60 * 1000).toISOString() });
       statusHistory.push({ status: 'merged', activity: '', at: new Date(createdTs + 70 * 60 * 1000).toISOString() });
     }
+    if (s.includes('pr_closed')) {
+      statusHistory.push({ status: 'pr_closed', activity: '', at: new Date(createdTs + 90 * 60 * 1000).toISOString() });
+    }
+    if (s.includes('exited') || s.includes('dead')) {
+      statusHistory.push({ status: 'pr_open', activity: '', at: new Date(createdTs + 60 * 60 * 1000).toISOString() });
+      statusHistory.push({ status: 'exited', activity: '', at: new Date(createdTs + 120 * 60 * 1000).toISOString() });
+    }
     const endedAt = agent.endedAt
-      || (statusHistory[statusHistory.length - 1].status === 'merged'
+      || (isTerminalStatus(statusHistory[statusHistory.length - 1].status, '')
         ? statusHistory[statusHistory.length - 1].at
         : null);
     return {
