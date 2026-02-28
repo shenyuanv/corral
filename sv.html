@@ -1236,6 +1236,28 @@ const PAL = {
   neonCyan: '#00e5ff', neonCyanGlow: 'rgba(0,229,255,0.08)',
   wb: '#d8d8c8', wbFrame: '#888',
   pizza: '#c49b2a', pizzaDark: '#8b6914',
+  // SV environment upgrades
+  svFloor1: '#3a3648', svFloor2: '#363244', svFloor3: '#332f40', svFloor4: '#38344a',
+  svFloorWarm: 'rgba(255,200,100,0.03)',
+  svBrick: '#6a3a2a', svBrickDark: '#5a2e20', svBrickMortar: '#4a3830',
+  svConduit: '#555', svConduitLight: '#666',
+  svFluor: '#c8e8ff', svFluorGlow: 'rgba(200,232,255,0.06)',
+  svDeskFrame: '#606060', svDeskFrameLight: '#707070', svDeskFrameDark: '#505050',
+  svDeskSurface: '#d4c8b0', svDeskSurfaceDark: '#b8aa90',
+  svKeyboard: '#2a2a2a', svKeyboardKey: '#3a3a3a',
+  svMouse: '#333', svCable: '#2a2a2a',
+  svMonitor2: '#222', svMonitor2Bezel: '#2e2e2e',
+  svLaptop: '#2a2a2a', svLaptopScreen: '#1a1a2e',
+  svChairMesh: '#3a3a3a', svChairFrame: '#555', svChairWheel: '#444',
+  svChairColors: ['#2e5a2e', '#2e2e5a', '#5a2e2e', '#5a5a2e', '#2e5a5a', '#5a2e5a'],
+  svPizzaBox: '#b08030', svPizzaBoxDark: '#8a6020',
+  svEnergy: '#40e060', svEnergyDark: '#30b048', svEnergyCan: '#ccc',
+  svSticky: ['#ffee55', '#55eeff', '#ff88aa', '#88ff88'],
+  svPoster: '#e8e0d0', svPosterText: '#222',
+  svSkateDeck: '#8844aa', svSkateWheel: '#ddd', svSkateTruck: '#999',
+  svCardboard: '#b09060', svCardboardDark: '#907040',
+  svBeanBag: '#cc4466',  svBeanBagDark: '#aa3350',
+  svFridge: '#ddd', svFridgeDark: '#bbb', svFridgeHandle: '#999',
 };
 
 const CHARS = [
@@ -1712,6 +1734,354 @@ function drawTumbleweed() {
   ctx.restore();
 }
 
+// ============================================================
+// SV Environment Upgrade — new draw functions
+// ============================================================
+
+function drawFloorSV() {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      // Concrete/epoxy floor with subtle checkerboard + noise texture
+      const checker = (c + r) % 2;
+      const noise = Math.sin(c * 7 + r * 13) * 0.5 + 0.5;
+      let base;
+      if (checker === 0) base = noise > 0.3 ? PAL.svFloor1 : PAL.svFloor2;
+      else base = noise > 0.5 ? PAL.svFloor3 : PAL.svFloor4;
+      tileRect(c, r, 1, 1, base);
+    }
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Warm ambient tint
+  ctx.fillStyle = PAL.svFloorWarm;
+  ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
+  // Concrete cracks
+  ctx.fillStyle = '#2e2845';
+  for (let i = 0; i < 18; i++) ctx.fillRect(30 + i * 2, 95 + (Math.sin(i * 1.3) * 2 | 0), 2, 1);
+  for (let i = 0; i < 12; i++) ctx.fillRect(170 + i * 2, 140 + (i % 3 === 0 ? 1 : 0), 1, 1);
+  for (let i = 0; i < 8; i++) ctx.fillRect(100 + i * 3, 60 + (Math.sin(i * 0.7) | 0), 2, 1);
+  // Floor stains (spilled coffee, etc)
+  ctx.fillStyle = 'rgba(60,40,20,0.12)';
+  ctx.fillRect(85, 125, 6, 5);
+  ctx.fillRect(195, 105, 5, 4);
+  ctx.fillRect(145, 160, 4, 3);
+  // Epoxy shine spots
+  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  ctx.fillRect(50, 80, 20, 15);
+  ctx.fillRect(150, 50, 15, 12);
+  ctx.fillRect(240, 120, 18, 10);
+  ctx.restore();
+}
+
+function drawWallsSV() {
+  // Base wall
+  for (let c = 0; c < COLS; c++) tileRect(c, 0, 1, 1, PAL.wall);
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Exposed brick sections on left and right walls
+  const brickW = 4, brickH = 2;
+  for (let section = 0; section < 3; section++) {
+    const sx = [8, 140, 260][section];
+    const sw = [40, 50, 40][section];
+    for (let by = 1; by < TILE - 3; by += brickH + 1) {
+      const offset = (by % 4 === 1) ? 0 : 2;
+      for (let bx = sx + offset; bx < sx + sw; bx += brickW + 1) {
+        const bColor = Math.random() > 0.3 ? PAL.svBrick : PAL.svBrickDark;
+        ctx.fillStyle = bColor;
+        ctx.fillRect(bx, by, Math.min(brickW, sx + sw - bx), brickH);
+        // Mortar
+        ctx.fillStyle = PAL.svBrickMortar;
+        ctx.fillRect(bx + brickW, by, 1, brickH);
+        ctx.fillRect(bx, by + brickH, brickW + 1, 1);
+      }
+    }
+  }
+  // Baseboard
+  ctx.fillStyle = '#3a3028'; ctx.fillRect(0, TILE - 2, COLS * TILE, 2);
+  ctx.fillStyle = '#4a4038'; ctx.fillRect(0, TILE - 2, COLS * TILE, 1);
+  // Electrical conduit lines running along wall
+  ctx.fillStyle = PAL.svConduit;
+  ctx.fillRect(0, TILE - 4, COLS * TILE, 1);
+  ctx.fillStyle = PAL.svConduitLight;
+  for (let x = 0; x < COLS * TILE; x += 30) {
+    ctx.fillRect(x, TILE - 5, 1, 3); // conduit brackets
+  }
+  // Fluorescent light strips on ceiling
+  for (let i = 0; i < 4; i++) {
+    const lx = 30 + i * 70, ly = 0;
+    ctx.fillStyle = PAL.svFluor;
+    ctx.fillRect(lx, ly, 30, 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(lx + 2, ly, 26, 1);
+    // Glow below
+    ctx.fillStyle = PAL.svFluorGlow;
+    ctx.fillRect(lx - 4, ly + 2, 38, 8);
+  }
+  ctx.restore();
+}
+
+function drawDeskSV(d, idx) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE + 8;
+  const isStanding = idx % 3 === 0; // every 3rd desk is standing
+  const isLaptop = idx % 4 === 1; // every 4th desk has laptop combo
+
+  if (isStanding) {
+    // Standing desk — taller frame, adjustable legs
+    R(x, y - 2, TILE, 2, PAL.svDeskSurface); R(x, y - 2, TILE, 1, PAL.svDeskFrameLight);
+    R(x, y, TILE, 1, PAL.svDeskSurfaceDark);
+    // Height-adjustable frame legs (double lines)
+    R(x + 1, y + 1, 1, 10, PAL.svDeskFrame); R(x + 2, y + 1, 1, 10, PAL.svDeskFrameDark);
+    R(x + TILE - 3, y + 1, 1, 10, PAL.svDeskFrame); R(x + TILE - 2, y + 1, 1, 10, PAL.svDeskFrameDark);
+    // Crossbar
+    R(x + 2, y + 6, TILE - 4, 1, PAL.svDeskFrameDark);
+  } else {
+    // Regular desk — wider, L-shaped modern desk
+    R(x, y, TILE, 2, PAL.svDeskSurface); R(x, y, TILE, 1, '#d8ccb4');
+    for (let gx = x + 2; gx < x + TILE - 1; gx += 3) R(gx, y + 1, 2, 1, PAL.svDeskSurfaceDark);
+    R(x, y + 2, TILE, 3, PAL.svDeskFrame); R(x, y + 2, TILE, 1, PAL.svDeskFrameLight);
+    // Metal legs
+    R(x + 1, y + 5, 1, 7, PAL.svDeskFrameDark); R(x + TILE - 2, y + 5, 1, 7, PAL.svDeskFrameDark);
+    R(x + 1, y + 11, 3, 1, PAL.svDeskFrame); R(x + TILE - 4, y + 11, 3, 1, PAL.svDeskFrame);
+  }
+
+  // Keyboard on desk surface
+  const ky = isStanding ? y - 1 : y + 1;
+  R(x + 3, ky, 6, 2, PAL.svKeyboard);
+  for (let kx = x + 3; kx < x + 9; kx += 2) R(kx, ky, 1, 1, PAL.svKeyboardKey);
+  // Mouse
+  R(x + 11, ky, 2, 2, PAL.svMouse);
+  R(x + 11, ky, 2, 1, '#444');
+
+  // Cable mess under desk
+  ctx.fillStyle = PAL.svCable;
+  const cableY = isStanding ? y + 8 : y + 8;
+  for (let i = 0; i < 4; i++) {
+    const cx = x + 3 + i * 3;
+    const cy = cableY + Math.sin(i * 2.1) * 1.5;
+    ctx.fillRect(cx, cy, 2, 1);
+    ctx.fillRect(cx + 1, cy + 1, 2, 1);
+  }
+  ctx.restore();
+}
+
+function drawMonitorSV(d, state, monitorText, idx) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 1, y = d.y * TILE;
+  const isLaptop = idx % 4 === 1;
+
+  // Primary monitor — slightly wider
+  R(x, y, 12, 8, PAL.monitorBezel); R(x + 1, y, 10, 1, PAL.monitor);
+  const sc = state === 'ci_failed' ? '#3a0808' : (state === 'coding' ? '#0a200a' : '#0a0a0a');
+  R(x + 1, y + 1, 10, 6, sc);
+  // Monitor stand
+  R(x + 4, y + 8, 4, 1, '#333'); R(x + 3, y + 9, 6, 1, '#2a2a2a');
+
+  if (isLaptop) {
+    // Laptop beside primary monitor
+    R(x + 13, y + 5, 3, 3, PAL.svLaptop);
+    R(x + 13, y + 5, 3, 2, PAL.svLaptopScreen);
+    R(x + 13, y + 4, 4, 1, PAL.svLaptop); // lid
+  } else {
+    // Secondary monitor (smaller, slightly offset)
+    R(x + 13, y + 1, 3, 5, PAL.svMonitor2Bezel);
+    R(x + 13, y + 1, 3, 1, PAL.svMonitor2);
+    R(x + 13, y + 2, 3, 3, sc === '#0a0a0a' ? '#0c0c0c' : sc);
+    R(x + 14, y + 6, 1, 1, '#333');
+  }
+
+  // Screen content on primary monitor
+  if (state === 'coding') {
+    const colors = ['#4ae04a', '#2a8a2a', '#6af06a', '#3aaa3a'];
+    for (let line = 0; line < 5; line++) {
+      const indent = line === 2 ? 2 : (line === 4 ? 1 : 0);
+      const len = 2 + (line * 3 + frame) % 5;
+      R(x + 2 + indent, y + 1 + line, Math.min(len, 8 - indent), 1, colors[line % colors.length]);
+    }
+    if (frame % 10 < 5) R(x + 9, y + 5, 1, 1, '#4ae04a');
+  } else if (state === 'ci_failed') {
+    const bright = Math.sin(frame * 0.1) > 0;
+    const c = bright ? '#ff3b3b' : '#aa2222';
+    R(x + 3, y + 1, 1, 1, c); R(x + 7, y + 1, 1, 1, c);
+    R(x + 4, y + 2, 1, 1, c); R(x + 6, y + 2, 1, 1, c); R(x + 5, y + 3, 1, 1, c);
+    R(x + 4, y + 4, 1, 1, c); R(x + 6, y + 4, 1, 1, c);
+    R(x + 3, y + 5, 1, 1, c); R(x + 7, y + 5, 1, 1, c);
+  } else if (state === 'merged') {
+    R(x + 5, y + 1, 2, 1, '#f0c040'); R(x + 4, y + 2, 4, 1, '#f0c040');
+    R(x + 3, y + 3, 6, 1, '#d8a820'); R(x + 4, y + 4, 4, 1, '#f0c040');
+  } else {
+    R(x + 4, y + 3, 1, 1, '#4ae04a'); R(x + 5, y + 4, 1, 1, '#4ae04a');
+    R(x + 6, y + 3, 1, 1, '#4ae04a'); R(x + 7, y + 2, 1, 1, '#4ae04a');
+  }
+
+  // Scrolling issue title text on monitor screen
+  if (monitorText) {
+    ctx.restore();
+    const sx = (x + 1) * SCALE, sy = (y + 1) * SCALE, sw = 10 * SCALE, sh = 6 * SCALE;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
+    ctx.fillStyle = state === 'ci_failed' ? '#ff6666' : (state === 'coding' ? '#4ae04a' : '#8888ff');
+    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.textBaseline = 'middle';
+    const textWidth = ctx.measureText(monitorText).width;
+    const totalScroll = textWidth + sw + 4;
+    const scroll = (frame * 0.6) % totalScroll;
+    ctx.fillText(monitorText, sx + sw - scroll, sy + sh / 2);
+    ctx.restore();
+    ctx.save(); ctx.scale(SCALE, SCALE);
+  }
+
+  // Monitor glow on desk/floor
+  if (state === 'coding' || state === 'ci_failed') {
+    const glowColor = state === 'ci_failed' ? 'rgba(255,59,59,0.06)' : 'rgba(74,224,74,0.06)';
+    R(x - 1, y + 9, 14, 4, glowColor);
+  }
+  ctx.restore();
+}
+
+function drawChairSV(d, idx) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = d.y * TILE + 10;
+  const chairColor = PAL.svChairColors[idx % PAL.svChairColors.length];
+  const chairDark = '#1a1a1a';
+
+  // Seat (mesh texture - striped)
+  R(x, y, 10, 2, chairColor);
+  for (let mx = x; mx < x + 10; mx += 2) R(mx, y, 1, 2, chairDark + '44');
+  R(x, y, 10, 1, chairColor);
+
+  // Backrest (mesh outline with pattern)
+  R(x, y - 7, 10, 3, chairColor);
+  for (let mx = x + 1; mx < x + 9; mx += 2) R(mx, y - 6, 1, 2, chairDark + '44');
+  R(x, y - 7, 10, 1, PAL.svChairFrame); // top edge
+  R(x, y - 4, 10, 1, PAL.svChairFrame); // bottom edge
+
+  // Armrests
+  R(x - 1, y - 2, 2, 1, PAL.svChairFrame);
+  R(x + 9, y - 2, 2, 1, PAL.svChairFrame);
+  // Side supports
+  R(x, y - 4, 1, 5, chairDark);
+  R(x + 9, y - 4, 1, 5, chairDark);
+
+  // Center post
+  R(x + 4, y + 2, 2, 2, PAL.svChairFrame);
+  // Star base
+  R(x + 1, y + 4, 8, 1, PAL.svChairFrame);
+  // Wheels (small dots at base)
+  R(x, y + 5, 2, 1, PAL.svChairWheel);
+  R(x + 4, y + 5, 2, 1, PAL.svChairWheel);
+  R(x + 8, y + 5, 2, 1, PAL.svChairWheel);
+  ctx.restore();
+}
+
+function drawPropsSV() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+
+  // 1. Pizza boxes — stacked near bottom-left corner
+  const pzX = 22, pzY = TILE * (ROWS - 2) + 4;
+  for (let i = 0; i < 3; i++) {
+    R(pzX, pzY - i * 3, 12, 3, PAL.svPizzaBox);
+    R(pzX, pzY - i * 3, 12, 1, PAL.svPizzaBoxDark);
+    R(pzX + 1, pzY - i * 3 + 1, 10, 1, '#c89838'); // lid line
+  }
+  // Top box slightly open
+  R(pzX + 1, pzY - 8, 10, 1, '#d8a848');
+
+  // 2. Energy drink cans — scattered
+  const cans = [[75, 42], [190, 75], [135, 108], [250, 42]];
+  cans.forEach(([cx, cy], i) => {
+    const canColor = i % 2 === 0 ? PAL.svEnergy : '#40c0ff';
+    R(cx, cy, 3, 5, PAL.svEnergyCan);
+    R(cx, cy + 1, 3, 3, canColor);
+    R(cx, cy, 3, 1, '#999'); // top rim
+  });
+
+  // 3. Sticky notes — colored squares on wall near whiteboard
+  const stickyX = 270, stickyY = 3;
+  PAL.svSticky.forEach((color, i) => {
+    const sx = stickyX + (i % 2) * 6;
+    const sy = stickyY + Math.floor(i / 2) * 6;
+    R(sx, sy, 5, 5, color);
+    // Tiny scribble lines
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(sx + 1, sy + 1, 3, 1);
+    ctx.fillRect(sx + 1, sy + 3, 2, 1);
+  });
+
+  // 4. "MOVE FAST" poster on wall
+  const postX = 200, postY = 2;
+  R(postX, postY, 16, 10, PAL.svPoster);
+  R(postX, postY, 16, 1, '#ccc');
+  ctx.fillStyle = PAL.svPosterText;
+  ctx.font = '2px "Press Start 2P"';
+  ctx.fillText('MOVE', postX + 2, postY + 5);
+  ctx.fillText('FAST', postX + 3, postY + 8);
+
+  // 5. Skateboard — leaning against wall near door
+  const skX = 22, skY = TILE - 1;
+  R(skX, skY, 10, 2, PAL.svSkateDeck);
+  R(skX + 1, skY + 2, 2, 1, PAL.svSkateTruck);
+  R(skX + 7, skY + 2, 2, 1, PAL.svSkateTruck);
+  R(skX, skY + 3, 2, 1, PAL.svSkateWheel);
+  R(skX + 8, skY + 3, 2, 1, PAL.svSkateWheel);
+
+  // 6. Cardboard boxes — stacked near entrance
+  const bxX = 28, bxY = TILE + 6;
+  R(bxX, bxY, 10, 8, PAL.svCardboard);
+  R(bxX, bxY, 10, 1, PAL.svCardboardDark);
+  R(bxX + 1, bxY + 3, 8, 1, PAL.svCardboardDark); // tape
+  // Second box on top, slightly offset
+  R(bxX + 2, bxY - 6, 8, 6, PAL.svCardboard);
+  R(bxX + 2, bxY - 6, 8, 1, PAL.svCardboardDark);
+  R(bxX + 3, bxY - 3, 6, 1, PAL.svCardboardDark);
+  // Arrow marking
+  ctx.fillStyle = '#666';
+  ctx.fillRect(bxX + 4, bxY + 4, 2, 3);
+  ctx.fillRect(bxX + 3, bxY + 4, 4, 1);
+
+  // 7. Bean bag — bottom-right corner area
+  const bbX = (COLS - 2) * TILE + 2, bbY = (ROWS - 2) * TILE + 2;
+  R(bbX + 1, bbY + 2, 10, 6, PAL.svBeanBag);
+  R(bbX, bbY + 4, 12, 4, PAL.svBeanBag);
+  R(bbX + 2, bbY + 1, 8, 2, PAL.svBeanBag);
+  R(bbX + 2, bbY + 2, 6, 1, PAL.svBeanBagDark);
+  R(bbX + 1, bbY + 6, 10, 2, PAL.svBeanBagDark);
+  // Highlight
+  R(bbX + 3, bbY + 2, 3, 1, '#dd5577');
+
+  // 8. Mini fridge — near server rack
+  const frX = (COLS - 1) * TILE - 14, frY = 6 * TILE + 2;
+  R(frX, frY, 8, 12, PAL.svFridge);
+  R(frX, frY, 8, 1, PAL.svFridgeDark);
+  R(frX, frY + 11, 8, 1, PAL.svFridgeDark);
+  R(frX + 7, frY + 3, 1, 4, PAL.svFridgeHandle);
+  // Magnetic sticker
+  R(frX + 2, frY + 2, 3, 3, '#ff5566');
+  R(frX + 2, frY + 6, 3, 3, '#55aaff');
+
+  ctx.restore();
+}
+
+function drawLightingSV() {
+  // Neon sign extended glow on nearby walls/floor
+  const neonCX = (55 + 24) * SCALE;
+  const neonCY = 5 * SCALE;
+  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 10, neonCX, neonCY + 80, 140);
+  neonGrad.addColorStop(0, 'rgba(255,45,123,0.07)');
+  neonGrad.addColorStop(0.5, 'rgba(0,229,255,0.03)');
+  neonGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = neonGrad;
+  ctx.fillRect(neonCX - 140, neonCY - 10, 280, 200);
+
+  // Fluorescent ceiling light glow pools on floor
+  for (let i = 0; i < 4; i++) {
+    const lx = (30 + i * 70 + 15) * SCALE;
+    const ly = 3 * S;
+    const flGrad = ctx.createRadialGradient(lx, ly, 5, lx, ly + 40, 80);
+    flGrad.addColorStop(0, 'rgba(200,232,255,0.04)');
+    flGrad.addColorStop(1, 'rgba(200,232,255,0)');
+    ctx.fillStyle = flGrad;
+    ctx.fillRect(lx - 80, ly, 160, 100);
+  }
+}
+
 // Map live agents to desk positions for canvas rendering
 function buildCanvasAgents() {
   return agents.slice(0, 12).map((agent, idx) => {
@@ -1746,12 +2116,14 @@ function render() {
   frame++;
   ctx.clearRect(0, 0, 640, 384);
 
-  drawFloor(); drawWalls(); drawGarageFrame(); drawWindow(); drawDoor();
+  drawFloorSV(); drawWallsSV(); drawGarageFrame(); drawWindow(); drawDoor();
   drawNeonSign(); drawWhiteboard();
+  drawLightingSV();
   drawLampGlow(5, 0); drawLampGlow(15, 0);
   drawDivider(2); drawDivider(3);
+  drawPropsSV();
 
-  DESKS.forEach(d => { drawDesk(d); drawChair(d); });
+  DESKS.forEach((d, idx) => { drawDeskSV(d, idx); drawChairSV(d, idx); });
 
   // Update walking transitions
   updateTransitions();
@@ -1766,7 +2138,7 @@ function render() {
       a.failing ? 'ci_failed' :
       a.state === 'coding' ? 'coding' :
       a.state === 'merged' ? 'merged' : 'pr_open';
-    drawMonitor(d, screenState, a.monitorText);
+    drawMonitorSV(d, screenState, a.monitorText, a.desk);
 
     if (isWalking) return;
 
