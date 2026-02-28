@@ -345,6 +345,23 @@
   .tt-row { display: flex; gap: 6px; }
   .tt-lbl { color: #7b8096; min-width: 54px; }
 
+  /* Canvas hover tooltip */
+  #canvasTooltip {
+    position: fixed;
+    z-index: 50;
+    display: none;
+    max-width: 280px;
+    padding: 8px 10px;
+    font-size: 8px;
+    line-height: 1.7;
+    color: #e6e6e6;
+    background: #1a1a2eee;
+    border: 3px solid #f0c040;
+    box-shadow: 0 0 0 3px #0b0b12, 4px 4px 0 #0b0b12;
+    pointer-events: none;
+    font-family: 'Press Start 2P', cursive;
+  }
+
   /* === STATUS BAR === */
   .status-bar {
     background: linear-gradient(180deg, #1a1a30, #121228);
@@ -624,6 +641,8 @@
     </div>
   </div>
 </div>
+
+<div id="canvasTooltip" role="tooltip" aria-hidden="true"></div>
 
 <script>
 // ============================================================
@@ -1674,14 +1693,86 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
+// === CANVAS HOVER TOOLTIP ===
+const canvasTooltip = document.getElementById('canvasTooltip');
+let hoveredDeskIdx = -1;
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+function buildCanvasTooltip(agent) {
+  if (!agent) return '';
+  const repoName = getRepoName(agent);
+  const issueId = getIssueId(agent);
+  const label = repoName && issueId ? escapeHtml(repoName + '#' + issueId) : escapeHtml(repoName || agent.id || 'agent');
+  const state = mapState(agent);
+  const statusText = escapeHtml(stateLabel(state));
+  const pulseClass = stateToPulseClass(state);
+  const agentType = escapeHtml(resolveAgentType(agent) || 'unknown');
+  const created = getCreatedAt(agent);
+  const uptime = created ? escapeHtml(formatDuration(Date.now() - created)) : '—';
+  const prNum = getPrNumber(agent);
+  const prUrl = agent.prUrl || '';
+  const prDisplay = prNum ? `PR #${escapeHtml(prNum)}` : '—';
+  const prLink = prUrl && prNum ? `<a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener" style="color:#88aaff;pointer-events:auto">${prDisplay}</a>` : prDisplay;
+  const issueTitle = agent.issueTitle ? escapeHtml(agent.issueTitle) : '';
+  const titleRow = issueTitle ? `<div class="tt-row"><span class="tt-lbl">Issue</span><span style="color:#999">${issueTitle}</span></div>` : '';
+  return `
+    <div class="tt-title"><span class="ac-pulse ${pulseClass}"></span><span>${label}</span></div>
+    <div class="tt-row"><span class="tt-lbl">Status</span><span class="${stateToColorClass(state)}">${statusText}</span></div>
+    <div class="tt-row"><span class="tt-lbl">Type</span><span>${agentType}</span></div>
+    <div class="tt-row"><span class="tt-lbl">Uptime</span><span>${uptime}</span></div>
+    <div class="tt-row"><span class="tt-lbl">PR</span><span>${prLink}</span></div>
+    ${titleRow}
+  `;
+}
+
+function positionCanvasTooltip(clientX, clientY) {
+  const pad = 14;
+  let left = clientX + pad;
+  let top = clientY + pad;
+  const { offsetWidth: w, offsetHeight: h } = canvasTooltip;
+  if (left + w > window.innerWidth - 8) left = clientX - w - pad;
+  if (top + h > window.innerHeight - 8) top = clientY - h - pad;
+  canvasTooltip.style.left = Math.max(8, left) + 'px';
+  canvasTooltip.style.top = Math.max(8, top) + 'px';
+}
+
+function showCanvasTooltip(agent, clientX, clientY) {
+  canvasTooltip.innerHTML = buildCanvasTooltip(agent);
+  canvasTooltip.style.display = 'block';
+  canvasTooltip.setAttribute('aria-hidden', 'false');
+  positionCanvasTooltip(clientX, clientY);
+}
+
+function hideCanvasTooltip() {
+  hoveredDeskIdx = -1;
+  canvasTooltip.style.display = 'none';
+  canvasTooltip.setAttribute('aria-hidden', 'true');
+}
+
 canvas.addEventListener('mousemove', (e) => {
+  if (isTouchDevice) return;
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
   const cx = (e.clientX - rect.left) * scaleX;
   const cy = (e.clientY - rect.top) * scaleY;
   const idx = hitTestAgent(cx, cy);
-  canvas.style.cursor = (idx >= 0 && idx < agents.length) ? 'pointer' : '';
+  if (idx >= 0 && idx < agents.length) {
+    canvas.style.cursor = 'pointer';
+    if (idx !== hoveredDeskIdx) {
+      hoveredDeskIdx = idx;
+      showCanvasTooltip(agents[idx], e.clientX, e.clientY);
+    } else {
+      positionCanvasTooltip(e.clientX, e.clientY);
+    }
+  } else {
+    canvas.style.cursor = '';
+    if (hoveredDeskIdx >= 0) hideCanvasTooltip();
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (hoveredDeskIdx >= 0) hideCanvasTooltip();
 });
 
 // === START ===
