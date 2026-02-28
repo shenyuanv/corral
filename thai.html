@@ -1,0 +1,3399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corral 🤠 — Thai Beach</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/snes.css@1.0.1/dist/snes.min.css" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0c0c1a;
+    font-family: 'Press Start 2P', cursive;
+    color: #c0c0c0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* === TOP BAR === */
+  .top-bar {
+    background: linear-gradient(180deg, #1e1e3a, #14142a);
+    border-bottom: 3px solid #2a2a4a;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 44px;
+  }
+  .top-title {
+    color: #f0c040;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  .top-title .ver { color: #555; font-size: 7px; font-weight: normal; }
+  .top-stats {
+    display: flex;
+    gap: 18px;
+    font-size: 7px;
+    color: #666;
+    align-items: center;
+  }
+  .top-stats .val { color: #5dfc5d; text-shadow: 0 0 6px #5dfc5d33; }
+  .top-stats .val-warn { color: #d1a128; }
+  .top-stats .val-bad { color: #e76e55; }
+  .top-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .conn-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    border: 2px solid #0b0b12;
+  }
+  .conn-dot.connected { background: #2f9a3d; box-shadow: 0 0 6px #2f9a3d88; }
+  .conn-dot.connecting { background: #d1a128; box-shadow: 0 0 6px #d1a12888; }
+  .conn-dot.disconnected { background: #6c6c6c; }
+  .top-btn {
+    background: #1b1b2b;
+    color: #ccc;
+    border: 2px solid #3a3a5c;
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .top-btn:hover { background: #24243a; }
+  .top-btn.active { color: #f0c040; border-color: #6d6d8f; }
+
+  /* === MAIN LAYOUT === */
+  .main {
+    display: flex;
+    height: calc(100vh - 44px);
+  }
+
+  /* === SIDEBAR === */
+  .sidebar {
+    width: 300px;
+    min-width: 200px;
+    max-width: 600px;
+    background: linear-gradient(180deg, rgba(18,18,38,0.97), rgba(10,10,22,0.99));
+    border-right: 3px solid #2a2a4a;
+    overflow-y: auto;
+    font-size: 8px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Drag handle */
+  .resize-handle {
+    position: absolute;
+    top: 0; right: -5px;
+    width: 10px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .resize-handle::after {
+    content: '';
+    width: 3px;
+    height: 40px;
+    background: #3a3a5c;
+    border-radius: 2px;
+    transition: background 0.2s, height 0.2s;
+  }
+  .resize-handle:hover::after,
+  .resize-handle.dragging::after {
+    background: #f0c040;
+    height: 60px;
+    box-shadow: 0 0 8px #f0c04044;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .sb-section {
+    padding: 10px 12px;
+    border-bottom: 2px solid #1a1a30;
+  }
+  .sb-section:last-child { border-bottom: none; flex: 1; }
+
+  .sb-header {
+    color: #f0c040;
+    font-size: 9px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-shadow: 0 0 8px #f0c04022;
+  }
+  .sb-header .count { color: #666; font-size: 7px; }
+
+  /* Agent cards */
+  .agent-card {
+    background: linear-gradient(135deg, #1a1a30, #141428);
+    border: 2px solid #2a2a4a;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+  .agent-card.st-coding::before { background: #2f9a3d; box-shadow: 0 0 6px #2f9a3d88; }
+  .agent-card.st-coding { border-color: #2a5a2a; }
+  .agent-card.st-pr::before { background: #3b7cff; box-shadow: 0 0 6px #3b7cff88; }
+  .agent-card.st-pr { border-color: #2a3a6a; }
+  .agent-card.st-ci::before { background: #e76e55; box-shadow: 0 0 6px #e76e5588; }
+  .agent-card.st-ci { border-color: #6a2a2a; }
+  .agent-card.st-merged::before { background: #f0c040; box-shadow: 0 0 6px #f0c04088; }
+  .agent-card.st-merged { border-color: #6a5a20; opacity: 0.85; }
+  .agent-card.st-dead::before { background: #6c6c6c; }
+  .agent-card.st-dead { border-color: #3a3a3a; opacity: 0.7; }
+  .agent-card.st-closed::before { background: #8855aa; box-shadow: 0 0 6px #8855aa88; }
+  .agent-card.st-closed { border-color: #4a2a5a; opacity: 0.8; }
+
+  .ac-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .ac-pulse {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .ac-pulse.green { background: #2f9a3d; box-shadow: 0 0 4px #2f9a3d; animation: pulse 2s infinite; }
+  .ac-pulse.blue { background: #3b7cff; box-shadow: 0 0 4px #3b7cff; animation: pulse 2s infinite; }
+  .ac-pulse.red { background: #e76e55; box-shadow: 0 0 4px #e76e55; animation: pulse-fast 0.8s infinite; }
+  .ac-pulse.gold { background: #f0c040; animation: none; }
+  .ac-pulse.gray { background: #6c6c6c; animation: none; }
+  .ac-pulse.purple { background: #8855aa; animation: none; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
+  @keyframes pulse-fast { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
+
+  .ac-name { font-size: 9px; }
+  .ac-time { color: #444; font-size: 7px; margin-left: auto; }
+
+  .ac-detail { color: #666; line-height: 2; }
+  .ac-detail .repo { color: #88aaff; }
+  .ac-detail .issue { color: #999; }
+
+  .v-green { color: #5dfc5d; }
+  .v-blue { color: #3b7cff; }
+  .v-red { color: #e76e55; }
+  .v-gold { color: #f0c040; }
+  .v-gray { color: #6c6c6c; }
+  .v-purple { color: #8855aa; }
+  .v-cyan { color: #00e5ff; }
+
+  /* === NOTIFICATION BALLOONS === */
+  #notificationArea {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .notif-balloon {
+    font-size: 7px;
+    line-height: 1.8;
+    padding: 8px 10px;
+    animation: notifIn 0.3s ease-out;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    word-break: break-word;
+  }
+  .notif-balloon.fade-out {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  @keyframes notifIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .notif-balloon .notif-text-blue { color: #3b7cff; }
+  .notif-balloon .notif-text-red { color: #e76e55; }
+  .notif-balloon .notif-text-gold { color: #f0c040; }
+  .notif-balloon .notif-text-gray { color: #6c6c6c; }
+  .notif-balloon .notif-text-green { color: #5dfc5d; }
+
+  .progress-bar {
+    height: 3px;
+    background: #1a1a30;
+    margin-top: 6px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar .fill { height: 100%; border-radius: 2px; }
+  .fill-green { background: linear-gradient(90deg, #1a5a1a, #2f9a3d); }
+  .fill-blue { background: linear-gradient(90deg, #1a2a5a, #3b7cff); }
+  .fill-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
+  .fill-gold { background: linear-gradient(90deg, #5a4a10, #f0c040); }
+
+  /* Usage section */
+  .usage-card {
+    background: #0f0f1a;
+    border: 1px solid #2a2a3f;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-radius: 2px;
+  }
+  .usage-card.warn { border-color: #d1a128; }
+  .usage-card.alert { border-color: #c13c3c; }
+  .usage-card.exhausted { border-color: #c13c3c; background: #1a0a0a; }
+  .uc-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 8px;
+  }
+  .uc-pill {
+    font-size: 6px;
+    padding: 1px 5px;
+    border: 1px solid #2a2a3f;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .pill-ok { border-color: #2f9a3d; color: #bfe6c7; }
+  .pill-warn { border-color: #d1a128; color: #f3e2a2; }
+  .pill-alert { border-color: #c13c3c; color: #f5b3b3; }
+  .pill-est { border-color: #666; color: #aaa; }
+  .pill-exhausted { border-color: #c13c3c; color: #f5b3b3; background: #3a1010; }
+  .uc-row {
+    display: flex;
+    justify-content: space-between;
+    color: #999;
+    font-size: 7px;
+    margin-bottom: 3px;
+  }
+  .uc-bar {
+    height: 5px;
+    background: #1b1b2b;
+    border: 1px solid #222;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .uc-fill { height: 100%; }
+  .uf-green { background: linear-gradient(90deg, #1a4a1a, #2f9a3d); }
+  .uf-yellow { background: linear-gradient(90deg, #5a4a10, #d1a128); }
+  .uf-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
+  .uc-note { color: #555; font-size: 6px; margin-top: 4px; }
+
+  /* Quest Log feed */
+  .ql-feed {
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #333 #111;
+  }
+  .ql-feed::-webkit-scrollbar { width: 4px; }
+  .ql-feed::-webkit-scrollbar-track { background: #111; }
+  .ql-feed::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .ql-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #1a1a2e;
+    font-size: 7px;
+  }
+  a.ql-entry {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(136, 170, 255, 0.3);
+    touch-action: manipulation;
+    min-height: 44px;
+  }
+  a.ql-entry:hover { background: rgba(136, 170, 255, 0.08); }
+  a.ql-entry .ql-name { color: #88aaff; }
+  a.ql-entry:hover .ql-name { color: #aaccff; text-decoration: underline; }
+  .ql-entry:last-child { border-bottom: none; }
+  .ql-icon { flex-shrink: 0; font-size: 9px; line-height: 1; }
+  .ql-body { flex: 1; min-width: 0; }
+  .ql-head { display: flex; align-items: baseline; gap: 4px; }
+  .ql-name { color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ql-status { white-space: nowrap; font-size: 6px; }
+  .ql-time { flex-shrink: 0; color: #555; font-size: 6px; margin-left: auto; }
+  .ql-title { color: #666; font-size: 6px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Queue */
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: #0f0f1a;
+    border: 1px dashed #2a2a3f;
+    margin-bottom: 4px;
+    font-size: 7px;
+    color: #666;
+  }
+  .qi-num { color: #88aaff; }
+
+  /* === SCENE AREA === */
+  .scene-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .canvas-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 40%, #151530, #0c0c1a 70%);
+    min-height: 0;
+  }
+  .canvas-area canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 6px);
+    pointer-events: none;
+  }
+
+  /* Mock tooltip */
+  .mock-tooltip {
+    position: absolute;
+    top: 55%;
+    right: 8%;
+    padding: 8px 10px;
+    font-size: 8px;
+    line-height: 1.7;
+    color: #e6e6e6;
+    background: #15151fee;
+    border: 3px solid #4a4a62;
+    box-shadow: 0 0 0 3px #0b0b12, 4px 4px 0 #0b0b12;
+    z-index: 10;
+    min-width: 180px;
+    display: none;
+  }
+  .tt-title { color: #f0c040; font-size: 9px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+  .tt-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .tt-row { display: flex; gap: 6px; }
+  .tt-lbl { color: #7b8096; min-width: 54px; }
+
+  /* Canvas hover tooltip */
+  #canvasTooltip {
+    position: fixed;
+    z-index: 50;
+    display: none;
+    max-width: 280px;
+    padding: 8px 10px;
+    font-size: 8px;
+    line-height: 1.7;
+    color: #e6e6e6;
+    background: #1a1a2eee;
+    border: 3px solid #f0c040;
+    box-shadow: 0 0 0 3px #0b0b12, 4px 4px 0 #0b0b12;
+    pointer-events: none;
+    font-family: 'Press Start 2P', cursive;
+  }
+
+  /* === STATUS BAR === */
+  .status-bar {
+    background: linear-gradient(180deg, #1a1a30, #121228);
+    border-top: 3px solid #2a2a4a;
+    padding: 0 14px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7px;
+    color: #555;
+  }
+  .sb-log {
+    color: #5dfc5d;
+    text-shadow: 0 0 4px #5dfc5d22;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+
+  /* No-data message */
+  .no-data { color: #555; font-size: 7px; text-align: center; padding: 12px; }
+
+  /* === SNES.CSS DARK THEME OVERRIDES === */
+  .snes-container {
+    background: #1a1a2e;
+    padding: 8px 10px;
+    margin-bottom: 0;
+    position: relative;
+    border-image-outset: 3px;
+    border-width: 6px;
+  }
+  .snes-container::before {
+    background-color: rgba(0,0,0,0.3);
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-container::after {
+    background-color: rgba(100,100,160,0.25);
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-container > .snes-container-title {
+    color: #f0c040;
+    font-size: 9px;
+    text-shadow: 0 0 8px #f0c04022;
+    letter-spacing: 0;
+    word-spacing: normal;
+    margin-bottom: 8px;
+  }
+  .snes-container > .snes-container-title::after {
+    background-color: #f0c040;
+    height: 3px;
+    bottom: -4px;
+  }
+  /* Custom badges (SNES.css has no badge component) */
+  .snes-badge { white-space: nowrap; display: inline-block; }
+  .snes-badge span {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 6px;
+    padding: 2px 6px;
+    border: 2px solid;
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .snes-badge .is-success { border-color: #4bb244; color: #4bb244; background: rgba(75,178,68,0.15); }
+  .snes-badge .is-primary { border-color: #4eb6d9; color: #4eb6d9; background: rgba(78,182,217,0.15); }
+  .snes-badge .is-warning { border-color: #f2c019; color: #f2c019; background: rgba(242,192,25,0.15); }
+  .snes-badge .is-error { border-color: #ff6f00; color: #ff6f00; background: rgba(255,111,0,0.15); }
+  /* SNES-styled progress bars (RPG stat bars) */
+  .snes-progress {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    width: 100%;
+    border: 2px solid #2a2a4a;
+    background: #0f0f1a;
+    display: block;
+  }
+  .snes-progress::-webkit-progress-bar { background: #0f0f1a; }
+  .snes-progress::-webkit-progress-value { transition: width 0.3s ease; }
+  .snes-progress.is-success::-webkit-progress-value { background: linear-gradient(90deg, #1a4a1a, #4bb244); }
+  .snes-progress.is-primary::-webkit-progress-value { background: linear-gradient(90deg, #1a2a5a, #4eb6d9); }
+  .snes-progress.is-warning::-webkit-progress-value { background: linear-gradient(90deg, #5a4a10, #f2c019); }
+  .snes-progress.is-error::-webkit-progress-value { background: linear-gradient(90deg, #5a1a1a, #ff6f00); }
+  .snes-progress::-moz-progress-bar { transition: width 0.3s ease; }
+  .snes-progress.is-success::-moz-progress-bar { background: linear-gradient(90deg, #1a4a1a, #4bb244); }
+  .snes-progress.is-primary::-moz-progress-bar { background: linear-gradient(90deg, #1a2a5a, #4eb6d9); }
+  .snes-progress.is-warning::-moz-progress-bar { background: linear-gradient(90deg, #5a4a10, #f2c019); }
+  .snes-progress.is-error::-moz-progress-bar { background: linear-gradient(90deg, #5a1a1a, #ff6f00); }
+  /* SNES button overrides for compact dark UI */
+  .snes-button {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    padding: 4px 10px;
+    border-image-outset: 3px;
+    border-width: 6px;
+    line-height: 1;
+    color: #fff;
+  }
+  .snes-button::before {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-button::after {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  /* SNES blockquote overrides for notification balloons */
+  .snes-blockquote.notif-balloon {
+    text-align: left;
+    border-image-outset: 3px;
+    border-width: 6px;
+    padding: 8px 10px;
+    margin-bottom: 0;
+  }
+  .snes-blockquote.notif-balloon::before {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-blockquote.notif-balloon::after {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+
+  /* Mobile menu button — hidden on desktop */
+  .mobile-menu-btn { display: none; }
+
+  /* Mobile overlay backdrop — hidden by default */
+  .mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 49;
+  }
+
+  /* === MOBILE (<768px) === */
+  @media (max-width: 767px) {
+    body {
+      overflow-y: auto;
+      height: auto;
+      min-height: 100vh;
+    }
+
+    .mobile-menu-btn { display: none; }
+    .mobile-overlay { display: none !important; }
+
+    /* Top bar: wrap stats to next line */
+    .top-bar {
+      flex-wrap: wrap;
+      height: auto;
+      padding: 6px 10px;
+      gap: 4px;
+    }
+    .top-title { font-size: 11px; }
+    .top-stats {
+      order: 3;
+      width: 100%;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      padding: 4px 0 2px;
+      border-top: 1px solid #2a2a4a;
+      margin-top: 2px;
+    }
+
+    /* Main layout: vertical stack */
+    .main {
+      flex-direction: column;
+      height: auto;
+      min-height: calc(100vh - 70px);
+    }
+
+    /* Canvas first on mobile, sidebar below */
+    .scene-wrap { order: 1; }
+    .sidebar {
+      order: 2;
+      position: static;
+      width: 100%;
+      max-width: none;
+      min-width: 0;
+      height: auto;
+      z-index: auto;
+      transform: none;
+      transition: none;
+      border-right: none;
+      border-top: 2px solid #f0c040;
+      overflow-y: visible;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Sidebar section order: PARTY → QUEST LOG → INVENTORY */
+    .sidebar > .sb-section:nth-child(2) { order: 3; } /* INVENTORY → last */
+    .sidebar > .sb-section:nth-child(3) { order: 2; } /* QUEST LOG → middle */
+    .sidebar > .sb-section:nth-child(4) { order: 1; } /* PARTY → first */
+
+    /* Hide desktop resize handle on mobile */
+    .resize-handle { display: none; }
+
+    /* Agent cards: larger touch targets */
+    .agent-card {
+      padding: 10px 12px !important;
+      margin-bottom: 10px;
+    }
+    .ac-detail { font-size: 9px; line-height: 2.2; }
+
+    /* SNES.css mobile overrides */
+    .snes-container {
+      padding: 8px 10px;
+    }
+    .snes-container > .snes-container-title {
+      font-size: 8px;
+    }
+    .snes-badge span { font-size: 5px; }
+    .snes-button { font-size: 7px; padding: 3px 6px; }
+    .snes-progress { height: 6px; }
+
+    /* Sidebar sections: more padding */
+    .sb-section { padding: 10px 12px; }
+    .sb-header { font-size: 10px; margin-bottom: 12px; }
+
+    /* Scene area: responsive — fill width, auto height from aspect ratio */
+    .scene-wrap {
+      flex: none;
+      width: 100%;
+      min-height: 200px;
+    }
+    .canvas-area {
+      width: 100%;
+      height: 0;
+      padding-bottom: 60%; /* 768/1280 = 60% aspect ratio */
+      position: relative;
+      overflow: hidden;
+    }
+    .canvas-area canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Status bar: wrap text, fixed at bottom */
+    .status-bar {
+      flex-wrap: wrap;
+      height: auto;
+      padding: 6px 10px;
+      gap: 4px;
+      font-size: 6px;
+    }
+    .sb-log {
+      max-width: 100%;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    /* Usage cards: slightly larger text */
+    .usage-card { padding: 10px; }
+    .uc-title { font-size: 9px; }
+    .uc-row { font-size: 8px; }
+
+    /* Quest Log feed: slightly larger on mobile */
+    .ql-feed { max-height: 240px; }
+    .ql-entry { font-size: 8px; gap: 8px; padding: 5px 0; min-height: 44px; }
+    .ql-status { font-size: 7px; }
+    .ql-time { font-size: 7px; }
+    .ql-title { font-size: 7px; }
+
+    /* Agent card tap-to-expand */
+    .agent-card .ac-detail { max-height: 2.2em; overflow: hidden; transition: max-height 0.2s ease; }
+    .agent-card.mobile-expanded .ac-detail { max-height: 20em; }
+    .agent-card.mobile-expanded { border-color: #f0c040; }
+  }
+
+  /* === SMALL MOBILE (<480px) === */
+  @media (max-width: 479px) {
+    .top-title { font-size: 9px; }
+    .top-title .ver { font-size: 6px; }
+    .top-stats { font-size: 6px; gap: 6px 10px; }
+    .snes-button { font-size: 6px; padding: 2px 4px; }
+
+    .sb-header { font-size: 9px; }
+    .agent-card { padding: 8px 10px !important; }
+    .ac-detail { font-size: 8px; }
+
+    .status-bar { font-size: 5px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- UI MODE REDIRECT -->
+<script>
+(function() {
+  var pref = null;
+  try { pref = localStorage.getItem('corral-ui-mode'); } catch(e) {}
+  if (pref === 'classic') {
+    window.location.replace('/');
+    return;
+  }
+  if (pref === 'sv') {
+    window.location.replace('/sv');
+    return;
+  }
+  // Set preference to thai if not already set
+  try { localStorage.setItem('corral-ui-mode', 'thai'); } catch(e) {}
+})();
+</script>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="top-title">
+    <span style="font-size:16px">🤠</span>
+    <span>CORRAL</span>
+    <span class="ver">thai</span>
+  </div>
+  <div class="top-stats" id="topStats">
+    <span>AGENTS <span class="val" id="statAgents">0</span>/<span style="color:#555">12</span></span>
+    <span>PRs <span class="val" id="statPRs">0</span></span>
+    <span>MERGED <span class="val" id="statMerged">0</span></span>
+    <span>DEAD <span class="val-bad" id="statDead">0</span></span>
+    <span>UPTIME <span class="val" id="statUptime">0:00:00</span></span>
+  </div>
+  <div class="top-controls">
+    <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
+    <button class="snes-button" id="soundToggleBtn" onclick="toggleSound()" title="Sound off (S)">🔇</button>
+    <button class="snes-button has-ocean-color" id="toggleViewBtn" onclick="switchToSV()" title="Switch to SV view">🏢 SV</button>
+    <button class="snes-button has-ember-color" id="cleanBtn" onclick="cleanAgents()">🧹</button>
+    <button class="snes-button mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Mobile overlay -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="resize-handle" id="resizeHandle"></div>
+
+    <!-- Usage / Inventory -->
+    <div class="sb-section">
+      <section class="snes-container">
+        <p class="snes-container-title has-ember-underline">⚔️ INVENTORY <span class="count" id="usageUpdated" style="font-size:7px;color:#666">—</span></p>
+        <div id="usageCards">
+          <div class="no-data">Loading usage data...</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Timeline / Quest Log -->
+    <div class="sb-section">
+      <section class="snes-container">
+        <p class="snes-container-title has-sunshine-underline">📜 QUEST LOG <span class="count" id="timelineRange" style="font-size:7px;color:#666">—</span></p>
+
+        <div id="timelineRows" class="ql-feed">
+          <div class="no-data">No quests yet...</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Agents / Party -->
+    <div class="sb-section">
+      <section class="snes-container">
+        <p class="snes-container-title has-nature-underline">⚡ PARTY <span class="count" id="agentCount" style="font-size:7px;color:#666">—</span></p>
+        <div id="notificationArea"></div>
+        <div id="agentCards">
+          <div class="no-data">Waiting for agent data...</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- SCENE -->
+  <div class="scene-wrap">
+    <div class="canvas-area">
+      <canvas id="office" width="1280" height="768"></canvas>
+      <div class="scanlines"></div>
+    </div>
+    <div class="status-bar" style="padding:0 14px;margin:0">
+      <span class="sb-log" id="statusLog">▸ Connecting to server...</span>
+      <span>POLL 5s │ <span id="agentCountBar">0</span> agents │ <span id="clock"></span></span>
+    </div>
+  </div>
+</div>
+
+<div id="canvasTooltip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+// ============================================================
+// SV UI — Live data integration
+// ============================================================
+
+// --- State ---
+let agents = [];
+let historyData = [];
+let usageData = null;
+let canvasUsage = { claude: null, codex: null };
+let connectionState = 'connecting';
+let polling = false;
+const startTime = Date.now();
+
+// --- Sound state ---
+let soundEnabled = false;
+let audioCtx = null;
+const soundedNewAgent = new Set();
+const soundedPrOpen = new Set();
+const soundedCiFailed = new Set();
+const soundedDead = new Set();
+const soundedMerged = new Set();
+const previousAgentsByKey = new Map();
+
+// --- Walk animation state ---
+let transitions = [];    // { key, deskIdx, path, progress, colorIdx, startTime }
+let walkOuts = [];       // { key, deskIdx, path, progress, colorIdx, startTime, agentType, exitState }
+let prevAgentKeys = new Set();
+let prevAgentMapStates = new Map(); // key -> state string for walk-out detection
+let hasInitialized = false;
+
+// --- Notification balloon state ---
+let prevAgentStates = new Map(); // agentId -> { state, prNumber, ciFailing }
+const MAX_BALLOONS = 3;
+const BALLOON_DURATION = 8000;
+
+function showNotification(emoji, message, colorClass) {
+  const area = document.getElementById('notificationArea');
+  if (!area) return;
+
+  // Enforce max 3 balloons — remove oldest first
+  while (area.children.length >= MAX_BALLOONS) {
+    area.removeChild(area.firstChild);
+  }
+
+  const balloon = document.createElement('div');
+  balloon.className = 'snes-blockquote has-phantom-bg notif-balloon';
+  balloon.innerHTML = '<span class="' + colorClass + '">' + emoji + ' ' + escapeHtml(message) + '</span>';
+  area.appendChild(balloon);
+
+  setTimeout(() => {
+    balloon.classList.add('fade-out');
+    setTimeout(() => { if (balloon.parentNode) balloon.parentNode.removeChild(balloon); }, 500);
+  }, BALLOON_DURATION);
+}
+
+function detectStateChanges() {
+  if (!hasInitialized) return; // skip initial load
+  const currentStates = new Map();
+
+  agents.forEach(agent => {
+    const id = agent.id || '';
+    if (!id) return;
+    const state = mapState(agent);
+    const prNum = getPrNumber(agent);
+    const ciFail = isCiFailing(agent);
+    const repo = getRepoName(agent);
+    const name = id.length > 16 ? id.slice(0, 16) + '..' : id;
+    const repoLabel = repo ? repo + (prNum ? '#' + prNum : '') : name;
+
+    currentStates.set(id, { state, prNumber: prNum, ciFailing: ciFail });
+
+    const prev = prevAgentStates.get(id);
+    if (!prev) {
+      // New agent appeared (not on first load since hasInitialized check above)
+      showNotification('\u{1F6B6}', 'New agent: ' + name, 'notif-text-green');
+      return;
+    }
+
+    // Detect state transitions
+    if (state === 'merged' && prev.state !== 'merged') {
+      showNotification('\u2705', repoLabel + ' PR merged!', 'notif-text-gold');
+    } else if (ciFail && !prev.ciFailing) {
+      showNotification('\u274C', repoLabel + ' CI failed', 'notif-text-red');
+    } else if (prNum && !prev.prNumber) {
+      showNotification('\u{1F500}', repoLabel + ' PR opened', 'notif-text-blue');
+    } else if ((state === 'dead' || state === 'exited') && prev.state !== 'dead' && prev.state !== 'exited') {
+      showNotification('\u{1F480}', name + ' died', 'notif-text-gray');
+    }
+  });
+
+  prevAgentStates = currentStates;
+}
+
+// --- Helpers ---
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => {
+    switch (c) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return c;
+    }
+  });
+}
+
+function getRepoName(agent) {
+  if (!agent) return '';
+  return (agent.repo || '').split('/').pop() || '';
+}
+
+function getIssueId(agent) {
+  if (!agent) return '';
+  return agent.issueId ?? agent.issue ?? agent.issueID ?? '';
+}
+
+function resolveAgentType(agent) {
+  if (!agent) return '';
+  return (agent.agentType || agent.agent || agent.type || '').toLowerCase();
+}
+
+function mapState(agent) {
+  if (!agent) return 'idle';
+  const status = (agent.status || '').toLowerCase();
+  const activity = (agent.activity || '').toLowerCase();
+  // Check explicit status FIRST, before endedAt
+  if (status.includes('merged') || activity.includes('merged')) return 'merged';
+  if (status.includes('pr_closed') || activity.includes('pr_closed')) return 'pr_closed';
+  if (status.includes('exited') || activity.includes('exited') ||
+      status.includes('archived') || activity.includes('archived')) return 'exited';
+  if (status.includes('dead') || activity.includes('dead')) return 'dead';
+  // endedAt as fallback for agents with no clear status
+  if (agent.endedAt || agent.ended_at) return 'exited';
+  if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
+  if (status.includes('pr_open') && agent.alive === false) return 'review_waiting';
+  if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
+  if (status.includes('working') || activity.includes('active')) return 'coding';
+  return 'idle';
+}
+
+function stateLabel(state) {
+  switch(state) {
+    case 'coding': return 'coding';
+    case 'reading': return 'review';
+    case 'review_waiting': return 'needs review';
+    case 'waiting': return 'PR open';
+    case 'merged': return 'merged ✓';
+    case 'pr_closed': return 'PR closed';
+    case 'exited': return 'exited';
+    case 'dead': return 'dead';
+    default: return 'idle';
+  }
+}
+
+function isDoneState(state) {
+  return state === 'dead' || state === 'merged' || state === 'exited' || state === 'pr_closed';
+}
+
+function stateToCardClass(state) {
+  if (state === 'coding') return 'st-coding';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'st-pr';
+  if (state === 'merged') return 'st-merged';
+  if (state === 'exited' || state === 'dead') return 'st-dead';
+  if (state === 'pr_closed') return 'st-closed';
+  return '';
+}
+
+function stateToPulseClass(state) {
+  if (state === 'coding') return 'green';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'blue';
+  if (state === 'merged') return 'gold';
+  if (state === 'exited' || state === 'dead') return 'gray';
+  if (state === 'pr_closed') return 'purple';
+  return 'gray';
+}
+
+function stateToColorClass(state) {
+  if (state === 'coding') return 'v-green';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'v-blue';
+  if (state === 'merged') return 'v-gold';
+  if (state === 'exited' || state === 'dead') return 'v-gray';
+  if (state === 'pr_closed') return 'v-purple';
+  return 'v-gray';
+}
+
+function stateToFillClass(state) {
+  if (state === 'coding') return 'fill-green';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'fill-blue';
+  if (state === 'merged') return 'fill-gold';
+  return '';
+}
+
+function stateToBadgeClass(state) {
+  if (state === 'coding') return 'is-success';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'is-primary';
+  if (state === 'merged') return 'is-warning';
+  if (state === 'exited' || state === 'dead') return 'is-error';
+  if (state === 'pr_closed') return 'is-error';
+  return 'is-primary';
+}
+
+function stateToProgressClass(state) {
+  if (state === 'coding') return 'is-success';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'is-primary';
+  if (state === 'merged') return 'is-warning';
+  return 'is-success';
+}
+
+function formatDuration(ms) {
+  const totalMins = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hours > 0) return hours + 'h ' + mins + 'm';
+  return mins + 'm';
+}
+
+function getCreatedAt(agent) {
+  const keys = ['createdAt','created_at','startedAt','started_at','startTime','start_time','spawnedAt','spawned_at'];
+  for (const k of keys) { if (agent[k]) return new Date(agent[k]).getTime(); }
+  return null;
+}
+
+function coffeeCount(agent) {
+  const created = getCreatedAt(agent);
+  if (!created) return 0;
+  const hours = (Date.now() - created) / 3600000;
+  if (hours < 0.5) return 0;
+  if (hours < 1) return 1;
+  if (hours < 2) return 2;
+  return 3;
+}
+
+function getTokens(agent) {
+  return agent.tokensUsed || agent.tokens_used || agent.tokens || 0;
+}
+
+function getPrNumber(agent) {
+  return agent.prNumber || agent.pr_number || agent.pr || null;
+}
+
+function isCiFailing(agent) {
+  const status = (agent.status || '').toLowerCase();
+  return status.includes('ci_failed') || status.includes('failed');
+}
+
+// --- Connection indicator ---
+function setConnection(state) {
+  connectionState = state;
+  const dot = document.getElementById('connDot');
+  if (!dot) return;
+  dot.className = 'conn-dot ' + state;
+  dot.title = state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting...' : 'Disconnected';
+}
+
+// --- View toggle ---
+function switchToSV() {
+  try { localStorage.setItem('corral-ui-mode', 'sv'); } catch(e) {}
+  window.location.href = '/sv';
+}
+
+// --- Clean button ---
+async function cleanAgents() {
+  const btn = document.getElementById('cleanBtn');
+  if (btn) btn.disabled = true;
+  try {
+    await fetch('/api/clean', { method: 'POST' });
+    await refreshFromLasso();
+  } catch(e) {}
+  if (btn) btn.disabled = false;
+}
+
+// --- Sound ---
+function initAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audioCtx = AC ? new AC() : null;
+  }
+}
+
+function updateSoundButton() {
+  const btn = document.getElementById('soundToggleBtn');
+  if (!btn) return;
+  btn.textContent = soundEnabled ? '🔊' : '🔇';
+  btn.title = soundEnabled ? 'Sound on (S)' : 'Sound off (S)';
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  try { localStorage.setItem('corral-sound', soundEnabled ? '1' : '0'); } catch {}
+  updateSoundButton();
+  if (soundEnabled) {
+    initAudio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    playConfirmation();
+  }
+}
+
+function playTone(freq, endFreq, duration, type, vol, delay) {
+  initAudio();
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const t = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'square';
+  osc.frequency.setValueAtTime(freq, t);
+  osc.frequency.exponentialRampToValueAtTime(endFreq, t + duration * 0.4);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(vol || 0.08, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + duration + 0.01);
+}
+
+function playConfirmation() {
+  playTone(660, 880, 0.15, 'square', 0.05);
+}
+
+// New agent arrives — ascending chiptune arpeggio (~0.5s)
+function playNewAgent() {
+  if (!soundEnabled) return;
+  playTone(523, 523, 0.12, 'square', 0.06, 0);
+  playTone(659, 659, 0.12, 'square', 0.06, 0.12);
+  playTone(784, 784, 0.12, 'square', 0.06, 0.24);
+  playTone(1047, 1047, 0.12, 'square', 0.05, 0.36);
+}
+
+// PR opened — 3 rising notes, Zelda item get (~0.8s)
+function playPrCreated() {
+  if (!soundEnabled) return;
+  playTone(587, 587, 0.2, 'square', 0.06, 0);
+  playTone(740, 740, 0.2, 'square', 0.06, 0.22);
+  playTone(880, 880, 0.35, 'triangle', 0.07, 0.44);
+}
+
+// CI failed — descending minor chord, warning (~0.5s)
+function playCiFailed() {
+  if (!soundEnabled) return;
+  playTone(440, 330, 0.25, 'sawtooth', 0.05, 0);
+  playTone(330, 220, 0.25, 'sawtooth', 0.05, 0.2);
+}
+
+// Agent died — low rumble + descending tone (~1s)
+function playAgentDied() {
+  if (!soundEnabled) return;
+  playTone(260, 100, 0.6, 'sine', 0.06, 0);
+  playTone(180, 80, 0.5, 'sawtooth', 0.03, 0.3);
+}
+
+// PR merged — victory fanfare, celebration arpeggio (~1.5s)
+function playPrMerged() {
+  if (!soundEnabled) return;
+  playTone(523, 523, 0.15, 'square', 0.06, 0);
+  playTone(659, 659, 0.15, 'square', 0.06, 0.15);
+  playTone(784, 784, 0.15, 'square', 0.06, 0.30);
+  playTone(1047, 1047, 0.3, 'square', 0.07, 0.45);
+  playTone(880, 880, 0.15, 'triangle', 0.05, 0.80);
+  playTone(1047, 1047, 0.5, 'triangle', 0.07, 0.95);
+}
+
+// --- Top stats bar ---
+function updateTopStats() {
+  const active = agents.filter(a => !isDoneState(mapState(a)));
+  const prs = agents.filter(a => {
+    const s = mapState(a);
+    return s === 'waiting' || s === 'reading' || s === 'review_waiting';
+  });
+  const merged = agents.filter(a => mapState(a) === 'merged');
+  const dead = agents.filter(a => {
+    const s = mapState(a);
+    return s === 'dead' || s === 'exited';
+  });
+
+  const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  el('statAgents', active.length);
+  el('statPRs', prs.length);
+  el('statMerged', merged.length);
+  el('statDead', dead.length);
+  el('agentCountBar', agents.length);
+
+  // Uptime
+  const upMs = Date.now() - startTime;
+  const h = Math.floor(upMs / 3600000);
+  const m = Math.floor((upMs % 3600000) / 60000);
+  const s = Math.floor((upMs % 60000) / 1000);
+  el('statUptime', h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0'));
+}
+
+// --- Agent cards ---
+function renderAgentCards() {
+  const container = document.getElementById('agentCards');
+  const countEl = document.getElementById('agentCount');
+  if (!container) return;
+
+  if (agents.length === 0) {
+    container.innerHTML = '<div class="no-data">No agents connected</div>';
+    if (countEl) countEl.textContent = '—';
+    return;
+  }
+
+  const active = agents.filter(a => !isDoneState(mapState(a)));
+  const terminal = agents.filter(a => isDoneState(mapState(a)));
+  if (countEl) countEl.textContent = active.length + ' active' + (terminal.length ? ' · ' + terminal.length + ' terminal' : '');
+
+  container.innerHTML = agents.map(agent => {
+    const state = mapState(agent);
+    const cardClass = stateToCardClass(state);
+    const colorClass = stateToColorClass(state);
+    const badgeClass = stateToBadgeClass(state);
+    const progressClass = stateToProgressClass(state);
+    const name = escapeHtml(agent.id || 'agent');
+    const repo = escapeHtml(getRepoName(agent));
+    const issueId = getIssueId(agent);
+    const issueTitle = escapeHtml(agent.issueTitle || '');
+    const tokens = getTokens(agent);
+    const tokensLabel = tokens > 1000 ? Math.round(tokens / 1000) + 'K' : tokens;
+    const prNum = getPrNumber(agent);
+    const created = getCreatedAt(agent);
+    const elapsed = created ? formatDuration(Date.now() - created) : '—';
+    const failing = isCiFailing(agent);
+    const tokenPct = Math.min(100, Math.max(0, tokens / 2000));
+    const agentType = resolveAgentType(agent);
+    const typeIcon = agentType.includes('codex') ? '🪙' :
+                     agentType.includes('claude') ? '⭐' : '';
+
+    const titleLabel = repo && issueId ? repo + '#' + escapeHtml(String(issueId)) : (repo || name);
+
+    let detailLine = '';
+    if (issueTitle) detailLine += `<span style="color:#999">${issueTitle}</span><br>`;
+    if (prNum) detailLine += `PR <span class="v-green">#${escapeHtml(String(prNum))}</span> · `;
+    if (failing) detailLine += `<span class="v-red">CI ✗</span> · `;
+    detailLine += `<span style="color:#666">${elapsed}</span>`;
+    if (tokens) detailLine += ` · ${tokensLabel} tok`;
+
+    return `
+      <section class="snes-container agent-card ${cardClass}" style="margin-bottom:8px;padding:6px 8px">
+        <p class="snes-container-title" style="font-size:8px">${typeIcon} ${escapeHtml(titleLabel)}</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span class="snes-badge"><span class="${badgeClass}">${escapeHtml(stateLabel(state).toUpperCase())}</span></span>
+        </div>
+        <div class="ac-detail" style="margin-bottom:4px">${detailLine}</div>
+        ${tokens ? `<progress class="snes-progress ${progressClass}" value="${Math.round(tokenPct)}" max="100" style="height:8px"></progress>` : ''}
+      </section>
+    `;
+  }).join('');
+}
+
+// --- Canvas usage bars ---
+function updateCanvasUsage() {
+  canvasUsage = { claude: null, codex: null };
+  if (!usageData || !Array.isArray(usageData.providers)) return;
+  usageData.providers.forEach(provider => {
+    const id = (provider.id || provider.name || '').toLowerCase();
+    const isExhausted = provider.quotaStatus && provider.quotaStatus.exhausted;
+    if (isExhausted) {
+      const key = id.includes('codex') ? 'codex' : 'claude';
+      canvasUsage[key] = { pct: 0, exhausted: true, name: provider.name || id };
+      return;
+    }
+    if (provider.status === 'error' || provider.status === 'unavailable') {
+      const key = id.includes('codex') ? 'codex' : 'claude';
+      canvasUsage[key] = { pct: null, exhausted: false, error: true, name: provider.name || id };
+      return;
+    }
+    const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
+    const percents = metrics.map(m => {
+      if (m.utilization !== null && m.utilization !== undefined) return Number(m.utilization) / 100;
+      if (m.used == null || m.limit == null || m.limit === 0) return null;
+      return Math.min(1, Math.max(0, m.used / m.limit));
+    }).filter(p => p !== null);
+    const highest = percents.length ? Math.max(...percents) : null;
+    const remaining = highest !== null ? Math.round((1 - highest) * 100) : null;
+    const key = id.includes('codex') ? 'codex' : 'claude';
+    canvasUsage[key] = { pct: remaining, exhausted: false, name: provider.name || id };
+  });
+}
+
+// --- Usage panel ---
+function renderUsageCards() {
+  updateCanvasUsage();
+  const container = document.getElementById('usageCards');
+  const updatedEl = document.getElementById('usageUpdated');
+  if (!container) return;
+
+  if (!usageData || (!Array.isArray(usageData.providers) && !Array.isArray(usageData.usage))) {
+    container.innerHTML = '<div class="no-data">Usage unavailable</div>';
+    if (updatedEl) updatedEl.textContent = '—';
+    return;
+  }
+
+  const providers = Array.isArray(usageData.providers) ? usageData.providers : usageData.usage;
+  if (!providers || providers.length === 0) {
+    container.innerHTML = '<div class="no-data">' + escapeHtml(usageData.error || 'No usage data') + '</div>';
+    return;
+  }
+
+  if (updatedEl && usageData.fetchedAt) {
+    const d = new Date(usageData.fetchedAt);
+    const ago = Math.round((Date.now() - d.getTime()) / 60000);
+    updatedEl.textContent = ago <= 1 ? 'just now' : ago + 'm ago';
+  }
+
+  container.innerHTML = providers.map(provider => {
+    const name = escapeHtml(provider.name || provider.id || 'Usage');
+    const isExhausted = provider.quotaStatus && provider.quotaStatus.exhausted;
+
+    if (isExhausted) {
+      const resetLabel = provider.quotaStatus.resetAt
+        ? 'Resets ' + new Date(provider.quotaStatus.resetAt).toLocaleString()
+        : 'Reset time unknown';
+      return `
+        <div class="usage-card exhausted">
+          <div class="uc-title"><span>${name}</span><span class="snes-badge"><span class="is-error">EXHAUSTED</span></span></div>
+          <div class="uc-row" style="color:#f5b3b3">💀 HP: 0/100</div>
+          <progress class="snes-progress is-error" value="100" max="100" style="height:8px"></progress>
+          <div class="uc-note">${escapeHtml(resetLabel)}</div>
+        </div>`;
+    }
+
+    const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
+    const percents = metrics.map(m => {
+      if (m.utilization !== null && m.utilization !== undefined) return Number(m.utilization) / 100;
+      if (m.used == null || m.limit == null || m.limit === 0) return null;
+      return Math.min(1, Math.max(0, m.used / m.limit));
+    }).filter(p => p !== null);
+    const highest = percents.length ? Math.max(...percents) : null;
+    const level = highest === null ? 'unknown' : highest >= 0.95 ? 'alert' : highest >= 0.8 ? 'warn' : 'ok';
+    const badgeClass = level === 'alert' ? 'is-error' : level === 'warn' ? 'is-warning' : 'is-success';
+    const resetNote = provider.resetAt ? 'Resets ' + new Date(provider.resetAt).toLocaleString() : '';
+
+    const metricsHtml = metrics.map(m => {
+      const label = escapeHtml(m.label || m.id || 'Metric');
+      let pct = null;
+      if (m.utilization !== null && m.utilization !== undefined) pct = Number(m.utilization) / 100;
+      else if (m.used != null && m.limit != null && m.limit > 0) pct = Math.min(1, m.used / m.limit);
+      const fillWidth = pct === null ? 0 : Math.round(pct * 100);
+      const progressClass = pct === null ? 'is-success' : pct >= 0.95 ? 'is-error' : pct >= 0.8 ? 'is-warning' : 'is-success';
+      const remaining = pct !== null ? Math.max(0, Math.round((1 - pct) * 100)) : 100;
+      const hearts = remaining >= 75 ? '❤️❤️❤️' : remaining >= 50 ? '❤️❤️🖤' : remaining >= 25 ? '❤️🖤🖤' : '🖤🖤🖤';
+
+      let valStr = '—';
+      if (m.unit === '%' && m.limit === 100 && m.used != null) valStr = 'HP: ' + (100 - m.used) + '/100';
+      else if (m.limit != null) valStr = 'HP: ' + (m.limit - (m.used || 0)) + '/' + m.limit + (m.unit ? ' ' + m.unit : '');
+      else if (m.used != null) valStr = m.used + (m.unit ? ' ' + m.unit : '');
+
+      return `
+        <div class="uc-row"><span>${label}</span><span>${hearts} ${escapeHtml(valStr)}</span></div>
+        <progress class="snes-progress ${progressClass}" value="${fillWidth}" max="100" style="height:8px"></progress>`;
+    }).join('');
+
+    return `
+      <div class="usage-card" style="border:none;background:transparent">
+        <div class="uc-title"><span>${name}</span><span class="snes-badge"><span class="${badgeClass}">${level.toUpperCase()}</span></span></div>
+        ${metricsHtml || '<div class="uc-note">No metrics</div>'}
+        ${resetNote ? '<div class="uc-note">' + escapeHtml(resetNote) + '</div>' : ''}
+      </div>`;
+  }).join('');
+}
+
+// --- Timeline (Quest Log event feed) ---
+function questIcon(state) {
+  switch (state) {
+    case 'merged': return '🎉';
+    case 'pr_closed': return '🚫';
+    case 'exited': case 'dead': return '💀';
+    case 'waiting': return '🔀';
+    case 'review_waiting': return '🔀';
+    case 'reading': return '🔀';
+    case 'coding': return '☕';
+    default: return '☕';
+  }
+}
+
+function questStatusLabel(state) {
+  switch (state) {
+    case 'merged': return 'MERGED';
+    case 'pr_closed': return 'CLOSED';
+    case 'exited': return 'EXITED';
+    case 'dead': return 'DEAD';
+    case 'waiting': return 'PR OPEN';
+    case 'review_waiting': return 'REVIEW';
+    case 'reading': return 'REVIEW';
+    case 'coding': return 'WORKING';
+    default: return 'IDLE';
+  }
+}
+
+function questTimeAgo(ms) {
+  if (ms < 60000) return 'just now';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours / 24);
+  return days + 'd ago';
+}
+
+function renderTimeline() {
+  const container = document.getElementById('timelineRows');
+  const rangeEl = document.getElementById('timelineRange');
+  if (!container) return;
+
+  const items = historyData.length ? historyData : agents;
+  if (!items.length) {
+    container.innerHTML = '<div class="no-data">No quests yet...</div>';
+    return;
+  }
+
+  const now = Date.now();
+  if (rangeEl) rangeEl.textContent = 'last 6h';
+
+  // Build event list: extract most recent event time for each item
+  const events = items.map(item => {
+    const state = mapState(item);
+    const statusHistory = item.statusHistory || [];
+    // Most recent event time: last statusHistory entry, or lastUpdatedAt, or createdAt
+    let eventTime = null;
+    if (statusHistory.length) {
+      const last = statusHistory[statusHistory.length - 1];
+      if (last.at) eventTime = new Date(last.at).getTime();
+    }
+    if (!eventTime) {
+      const updated = item.lastUpdatedAt || item.updatedAt || item.updated_at;
+      if (updated) eventTime = new Date(updated).getTime();
+    }
+    if (!eventTime) eventTime = getCreatedAt(item) || now;
+
+    const repoName = getRepoName(item);
+    const issueId = getIssueId(item);
+    const name = repoName && issueId ? repoName + '#' + issueId : (repoName || escapeHtml((item.id || '').substring(0, 12)));
+    const title = item.issueTitle || item.issue_title || '';
+
+    // Build link URL: PR if available, otherwise issue
+    const prUrl = item.prUrl || '';
+    const prNum = getPrNumber(item);
+    let url = '';
+    if (prUrl) url = prUrl;
+    else if (repoName && prNum) url = 'https://github.com/' + repoName + '/pull/' + prNum;
+    else if (repoName && issueId) url = 'https://github.com/' + repoName + '/issues/' + issueId;
+
+    return { state, eventTime, name, title, item, url };
+  });
+
+  // Sort by most recent event first
+  events.sort((a, b) => b.eventTime - a.eventTime);
+
+  const rows = events.slice(0, 12).map(ev => {
+    const icon = questIcon(ev.state);
+    const label = questStatusLabel(ev.state);
+    const color = timelineColor(ev.item.status || '');
+    const timeAgo = questTimeAgo(now - ev.eventTime);
+    const titleLine = ev.title
+      ? `<div class="ql-title">${escapeHtml(ev.title)}</div>`
+      : '';
+
+    const tag = ev.url ? 'a' : 'div';
+    const linkAttrs = ev.url ? ` href="${escapeHtml(ev.url)}" target="_blank" rel="noopener"` : '';
+
+    return `<${tag}${linkAttrs} class="ql-entry">
+      <span class="ql-icon">${icon}</span>
+      <div class="ql-body">
+        <div class="ql-head">
+          <span class="ql-name">${escapeHtml(ev.name)}</span>
+          <span class="ql-status" style="color:${color}">${label}</span>
+          <span class="ql-time">${timeAgo}</span>
+        </div>
+        ${titleLine}
+      </div>
+    </${tag}>`;
+  });
+
+  container.innerHTML = rows.join('');
+}
+
+function timelineColor(status) {
+  const s = (status || '').toLowerCase();
+  if (s.includes('merged')) return '#f0c040';
+  if (s.includes('pr_closed')) return '#8855aa';
+  if (s.includes('exited') || s.includes('dead') || s.includes('archived')) return '#6c6c6c';
+  if (s.includes('ci_failed') || s.includes('failed')) return '#ff5c5c';
+  if (s.includes('pr_open') || s.includes('ci')) return '#3adf7a';
+  if (s.includes('working') || s.includes('coding') || s.includes('active')) return '#3b7cff';
+  return '#3b7cff';
+}
+
+// --- Status log ---
+const logMessages = [];
+function addLog(msg) {
+  logMessages.push(msg);
+  if (logMessages.length > 20) logMessages.shift();
+  const el = document.getElementById('statusLog');
+  if (el) el.textContent = msg;
+}
+
+// --- Data fetching ---
+async function refreshFromLasso() {
+  try {
+    const [agentsResp, historyResp] = await Promise.all([
+      fetch('/api/agents'),
+      fetch('/api/history'),
+    ]);
+    if (!agentsResp.ok) throw new Error('Agents fetch failed');
+    const data = await agentsResp.json();
+    agents = Array.isArray(data) ? data : (data.sessions || []);
+    detectStateChanges();
+    detectNewAgents();
+    detectWalkOuts();
+    detectSoundEvents();
+
+    if (historyResp.ok) {
+      const hData = await historyResp.json();
+      historyData = Array.isArray(hData.history) ? hData.history : [];
+    }
+
+    setConnection('connected');
+    updateAll();
+
+    // Log latest agent activity
+    if (agents.length) {
+      const a = agents[0];
+      addLog('▸ ' + (a.id || 'agent') + ' — ' + (a.status || 'active') + ' — poll OK');
+    } else {
+      addLog('▸ Poll OK — no active agents');
+    }
+  } catch(err) {
+    setConnection('disconnected');
+    addLog('▸ Connection failed — ' + err.message);
+  }
+}
+
+async function refreshUsage() {
+  try {
+    const resp = await fetch('/api/usage');
+    if (!resp.ok) throw new Error('Usage fetch failed');
+    usageData = await resp.json();
+    renderUsageCards();
+  } catch(err) {
+    usageData = { error: err.message, providers: [] };
+    renderUsageCards();
+  }
+}
+
+function updateAll() {
+  updateTopStats();
+  renderAgentCards();
+  renderTimeline();
+}
+
+async function startPolling() {
+  if (polling) return;
+  polling = true;
+  setConnection('connecting');
+  // Initial fetch
+  await refreshFromLasso();
+  await refreshUsage();
+  // Poll loop
+  while (polling) {
+    await new Promise(r => setTimeout(r, 5000));
+    await refreshFromLasso();
+    // Usage less frequently
+    if (Date.now() % 30000 < 6000) await refreshUsage();
+  }
+}
+
+// --- Clock ---
+setInterval(() => {
+  const el = document.getElementById('clock');
+  if (el) el.textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+  updateTopStats(); // update uptime counter
+}, 1000);
+
+// ============================================================
+// Canvas — reuse mockup rendering (pixel art office)
+// ============================================================
+const canvas = document.getElementById('office');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 16, SCALE = 4, S = TILE * SCALE;
+const COLS = 20, ROWS = 12;
+let frame = 0;
+
+const PAL = {
+  // Sand floor
+  sand1: '#f0d8a0', sand2: '#e8cc90', sand3: '#dcc080', sand4: '#f4dca8',
+  sandWet: '#c8b070', sandFoam: '#e0f8f8',
+  // Ocean
+  ocean1: '#20b2aa', ocean2: '#1a8a8a', ocean3: '#168080', oceanDeep: '#0e6868',
+  oceanFoam: '#c0f0f0', oceanHighlight: '#40d8d0',
+  // Sky (dynamic — set via getTimeOfDay)
+  // Palm tree
+  palmTrunk: '#8B5E3C', palmTrunkDark: '#6a4a2a', palmTrunkLight: '#a07048',
+  palmLeaf: '#2d8a1e', palmLeafLight: '#3aaa2a', palmLeafDark: '#1e6e14',
+  // Tiki/bamboo
+  tikiBamboo: '#c49b2a', tikiBambooDark: '#a07a18', tikiBambooLight: '#d8b040',
+  tikiThatch: '#b08030', tikiThatchDark: '#8a6020', tikiThatchLight: '#c89840',
+  // Thai accents
+  thaiGold: '#f0c040', thaiRed: '#cc2222', thaiBlue: '#1a6a9a',
+  // Furniture
+  desk: '#c49b2a', deskTop: '#d8b040', deskDark: '#a07a18',
+  monitor: '#1a1a1a', monitorBezel: '#2a2a2a',
+  // Coconut drinks (replaces coffee)
+  coconut: '#8B5E3C', coconutDark: '#6a4a2a', coconutMilk: '#f0f0e8',
+  straw: '#cc2222', strawAlt: '#f0c040',
+  // Fire / status
+  fire1: '#ff0044', fire2: '#ff6600', fire3: '#ffaa00', fire4: '#ffee44',
+  tombstone: '#c8b070', tombstoneLight: '#e0d098',
+  divider: 'rgba(0,0,0,0.06)',
+  // Tiki sign (replaces neon)
+  tikiSign: '#8B5E3C', tikiSignGlow: 'rgba(255,160,50,0.12)',
+  // Beach sign (replaces whiteboard)
+  beachSign: '#c49b2a', beachSignDark: '#8a6a18',
+  // Umbrella
+  umbrella1: '#cc2222', umbrella2: '#f0f0f0', umbrellaPost: '#aaa',
+  // Cooler (replaces fridge)
+  cooler: '#3388cc', coolerDark: '#2266aa', coolerLid: '#44aaee', coolerHandle: '#ddd',
+  // Surfboard
+  surfboard1: '#ff6633', surfboard2: '#ffcc00', surfboard3: '#33bbff',
+  // Hammock
+  hammock: '#cc8833', hammockDark: '#aa6622',
+  // Longtail boat
+  boat: '#8B5E3C', boatDark: '#6a4a2a', boatTrim: '#cc2222', boatSash: '#f0c040',
+  // Thai flag
+  flagRed: '#cc2222', flagWhite: '#f0f0f0', flagBlue: '#1a3a8a',
+  // Shell/starfish
+  shell: '#f0d8b0', shellDark: '#d0b890', starfish: '#cc6644',
+};
+
+const CHARS = [
+  { skin: '#f5c6a0', skinD: '#d4a080', hair: '#4a2800', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#3050a0' },
+  { skin: '#d4a373', skinD: '#b88855', hair: '#1a1a2e', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#2a2a4e' },
+  { skin: '#f5deb3', skinD: '#d4bc90', hair: '#c04000', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#404040' },
+  { skin: '#c49b6a', skinD: '#a07a48', hair: '#222',    shirt: '#f08b2e', shirtD: '#c06a18', pants: '#3a3a5c' },
+  { skin: '#f0d0b0', skinD: '#d0b090', hair: '#604020', shirt: '#3fbf3f', shirtD: '#2a8a2a', pants: '#333' },
+  { skin: '#e8c090', skinD: '#c8a070', hair: '#802020', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#2a2a4e' },
+];
+
+const CHARS_THAI = [
+  { skin: '#f5c6a0', skinH: '#ffe0c8', skinD: '#d4a080', hair: '#4a2800', hairH: '#6a4820', hairStyle: 0 },
+  { skin: '#d4a373', skinH: '#e8b888', skinD: '#b88855', hair: '#1a1a2e', hairH: '#3a3a4e', hairStyle: 1 },
+  { skin: '#f5deb3', skinH: '#fff0d0', skinD: '#d4bc90', hair: '#c04000', hairH: '#e06020', hairStyle: 2 },
+  { skin: '#c49b6a', skinH: '#d8b080', skinD: '#a07a48', hair: '#222',    hairH: '#444',    hairStyle: 3 },
+  { skin: '#f0d0b0', skinH: '#ffe8d0', skinD: '#d0b090', hair: '#604020', hairH: '#806040', hairStyle: 4 },
+  { skin: '#e8c090', skinH: '#f8d8a8', skinD: '#c8a070', hair: '#802020', hairH: '#a04040', hairStyle: 5 },
+];
+
+const DESKS = [];
+for (let r = 0; r < 3; r++)
+  for (let c = 0; c < 4; c++)
+    DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
+
+// --- Ambient particles (sand grains + seagulls + fireflies) ---
+const particles = [];
+(function initParticles() {
+  const W = COLS * TILE, H = ROWS * TILE;
+  // Sand grains — 10 small dots drifting right (wind)
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      type: 'sand',
+      x: Math.random() * W,
+      y: TILE * 4 + Math.random() * (H - TILE * 4),
+      vx: 0.1 + Math.random() * 0.15,
+      vy: (Math.random() - 0.5) * 0.05,
+      alpha: 0.12 + Math.random() * 0.1,
+      size: 1,
+    });
+  }
+  // Seagulls — 3 birds flying across
+  for (let i = 0; i < 3; i++) {
+    particles.push({
+      type: 'seagull',
+      x: Math.random() * W,
+      y: 4 + Math.random() * 20,
+      vx: 0.2 + Math.random() * 0.3,
+      wingPhase: Math.random() * Math.PI * 2,
+    });
+  }
+  // Fireflies — 6 slots, only visible at night
+  for (let i = 0; i < 6; i++) {
+    particles.push({
+      type: 'firefly',
+      x: TILE * 2 + Math.random() * (W - TILE * 4),
+      y: TILE * 4 + Math.random() * (H - TILE * 6),
+      life: Math.floor(Math.random() * 80),
+      maxLife: 60 + Math.random() * 60,
+      alpha: 0,
+      vx: (Math.random() - 0.5) * 0.2,
+      vy: (Math.random() - 0.5) * 0.2,
+    });
+  }
+})();
+
+// --- Walk animation ---
+const DOOR_TILE = { x: 0, y: 2 };
+const WALK_SPEED = 2; // tiles per second
+const ENTER_STAGGER = 0.5; // seconds between multiple entering agents
+
+function agentKey(agent, fallbackIndex) {
+  if (!agent) return 'agent-' + fallbackIndex;
+  const id = (agent.id || agent.label || agent.agentId || agent.name || '').toString().trim();
+  return id || ('agent-' + fallbackIndex);
+}
+
+function buildPath(start, end) {
+  const mid = { x: end.x, y: start.y };
+  const seg1 = Math.abs(mid.x - start.x) + Math.abs(mid.y - start.y);
+  const seg2 = Math.abs(end.x - mid.x) + Math.abs(end.y - mid.y);
+  return { start: { ...start }, mid, end: { ...end }, seg1, seg2, total: seg1 + seg2 };
+}
+
+function positionAlongPath(path, dist) {
+  if (path.total === 0) return { x: path.end.x, y: path.end.y };
+  if (dist <= path.seg1) {
+    const dx = path.mid.x - path.start.x;
+    const dy = path.mid.y - path.start.y;
+    return {
+      x: path.start.x + (dx === 0 ? 0 : Math.sign(dx) * dist),
+      y: path.start.y + (dy === 0 ? 0 : Math.sign(dy) * dist),
+    };
+  }
+  const remaining = dist - path.seg1;
+  const dx = path.end.x - path.mid.x;
+  const dy = path.end.y - path.mid.y;
+  return {
+    x: path.mid.x + (dx === 0 ? 0 : Math.sign(dx) * remaining),
+    y: path.mid.y + (dy === 0 ? 0 : Math.sign(dy) * remaining),
+  };
+}
+
+function updateTransitions() {
+  if (!transitions.length) return;
+  const now = Date.now();
+  const next = [];
+  transitions.forEach(t => {
+    if (t.path.total === 0) return;
+    const elapsed = Math.max(0, now - t.startTime) / 1000;
+    t.progress = Math.min(t.path.total, elapsed * WALK_SPEED);
+    if (t.progress >= t.path.total) return;
+    next.push(t);
+  });
+  transitions = next;
+}
+
+function detectNewAgents() {
+  const currentKeys = new Set();
+  agents.slice(0, 12).forEach((a, i) => currentKeys.add(agentKey(a, i)));
+
+  if (hasInitialized) {
+    let staggerIdx = 0;
+    const now = Date.now();
+    const existingTransitionKeys = new Set(transitions.map(t => t.key));
+    agents.slice(0, 12).forEach((agent, idx) => {
+      const key = agentKey(agent, idx);
+      if (!prevAgentKeys.has(key) && !existingTransitionKeys.has(key)) {
+        const desk = DESKS[idx];
+        if (!desk) return;
+        transitions.push({
+          key,
+          deskIdx: idx,
+          path: buildPath(DOOR_TILE, { x: desk.x, y: desk.y }),
+          progress: 0,
+          colorIdx: idx % CHARS.length,
+          startTime: now + staggerIdx * ENTER_STAGGER * 1000,
+          agentType: resolveAgentType(agent),
+        });
+        staggerIdx++;
+      }
+    });
+  }
+
+  hasInitialized = true;
+  prevAgentKeys = currentKeys;
+}
+
+const WALKOUT_DELAY_MERGED = 1500; // ms — celebration pose before walking out
+const WALKOUT_DELAY_EXITED = 500;  // ms — brief pause then walk out
+const WALKOUT_SPEED_MERGED = 1.5;  // tiles/sec (leisurely stroll)
+const WALKOUT_SPEED_EXITED = 2.5;  // tiles/sec (faster, they got fired)
+
+function detectWalkOuts() {
+  if (!hasInitialized) return;
+  const now = Date.now();
+  const existingWalkOutKeys = new Set(walkOuts.map(w => w.key));
+
+  agents.slice(0, 12).forEach((agent, idx) => {
+    const key = agentKey(agent, idx);
+    const state = mapState(agent);
+    const prevState = prevAgentMapStates.get(key);
+
+    if (prevState && prevState !== 'merged' && prevState !== 'exited' && prevState !== 'dead' &&
+        (state === 'merged' || state === 'exited' || state === 'dead') &&
+        !existingWalkOutKeys.has(key)) {
+      const desk = DESKS[idx];
+      if (!desk) return;
+      const isMerged = state === 'merged';
+      const delay = isMerged ? WALKOUT_DELAY_MERGED : WALKOUT_DELAY_EXITED;
+      walkOuts.push({
+        key,
+        deskIdx: idx,
+        path: buildPath({ x: desk.x, y: desk.y }, DOOR_TILE),
+        progress: 0,
+        colorIdx: idx % CHARS.length,
+        startTime: now + delay,
+        agentType: resolveAgentType(agent),
+        exitState: isMerged ? 'merged' : 'exited',
+      });
+    }
+
+    prevAgentMapStates.set(key, state);
+  });
+}
+
+function updateWalkOuts() {
+  if (!walkOuts.length) return;
+  const now = Date.now();
+  const next = [];
+  walkOuts.forEach(w => {
+    if (w.path.total === 0) return; // instant removal
+    if (now < w.startTime) { next.push(w); return; } // still in delay
+    const speed = w.exitState === 'merged' ? WALKOUT_SPEED_MERGED : WALKOUT_SPEED_EXITED;
+    const elapsed = Math.max(0, now - w.startTime) / 1000;
+    w.progress = Math.min(w.path.total, elapsed * speed);
+    if (w.progress >= w.path.total) return; // reached door, remove
+    next.push(w);
+  });
+  walkOuts = next;
+}
+
+function hasPrOpen(agent) {
+  const s = mapState(agent);
+  return s === 'waiting' || s === 'reading' || s === 'review_waiting';
+}
+
+function detectSoundEvents() {
+  if (!hasInitialized || previousAgentsByKey.size === 0) {
+    // First load — store state but don't play sounds
+    agents.slice(0, 12).forEach((a, i) => previousAgentsByKey.set(agentKey(a, i), a));
+    return;
+  }
+
+  let soundToPlay = null;
+  agents.slice(0, 12).forEach((agent, idx) => {
+    const key = agentKey(agent, idx);
+    const prev = previousAgentsByKey.get(key);
+
+    // New agent arrived (no previous state for this key)
+    if (!prev && !soundedNewAgent.has(key)) {
+      soundedNewAgent.add(key);
+      if (!soundToPlay) soundToPlay = 'new';
+    }
+
+    if (!prev) return;
+
+    // PR merged
+    if (!soundedMerged.has(key) && mapState(prev) !== 'merged' && mapState(agent) === 'merged') {
+      soundedMerged.add(key);
+      soundToPlay = 'merged'; // highest priority
+    }
+
+    // Agent died
+    if (!soundedDead.has(key) && mapState(prev) !== 'dead' && mapState(agent) === 'dead') {
+      soundedDead.add(key);
+      if (!soundToPlay || soundToPlay === 'new') soundToPlay = 'dead';
+    }
+
+    // CI failed
+    if (!soundedCiFailed.has(key) && !isCiFailing(prev) && isCiFailing(agent)) {
+      soundedCiFailed.add(key);
+      if (!soundToPlay || soundToPlay === 'pr' || soundToPlay === 'new') soundToPlay = 'ci';
+    }
+
+    // PR opened
+    if (!soundedPrOpen.has(key) && !hasPrOpen(prev) && hasPrOpen(agent)) {
+      soundedPrOpen.add(key);
+      if (!soundToPlay || soundToPlay === 'new') soundToPlay = 'pr';
+    }
+  });
+
+  if (soundToPlay === 'merged') playPrMerged();
+  else if (soundToPlay === 'dead') playAgentDied();
+  else if (soundToPlay === 'ci') playCiFailed();
+  else if (soundToPlay === 'pr') playPrCreated();
+  else if (soundToPlay === 'new') playNewAgent();
+
+  // Store current state for next comparison
+  previousAgentsByKey.clear();
+  agents.slice(0, 12).forEach((a, i) => previousAgentsByKey.set(agentKey(a, i), a));
+}
+
+function R(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+function tileRect(tx, ty, tw, th, color) { R(tx * S, ty * S, tw * S, th * S, color); }
+
+// === DAY/NIGHT CYCLE ===
+function getTimeOfDay() {
+  const now = new Date();
+  const h = now.getHours() + now.getMinutes() / 60;
+  // nightFactor: 0 = full day, 1 = full night
+  // Smooth sine-based transitions during dawn (6-8) and dusk (18-20)
+  let nightFactor;
+  if (h >= 8 && h < 18) {
+    nightFactor = 0; // day
+  } else if (h >= 20 || h < 6) {
+    nightFactor = 1; // night
+  } else if (h >= 6 && h < 8) {
+    // dawn: 1 → 0 over 2 hours
+    nightFactor = 0.5 + 0.5 * Math.cos((h - 6) / 2 * Math.PI);
+  } else {
+    // dusk (18-20): 0 → 1 over 2 hours
+    nightFactor = 0.5 - 0.5 * Math.cos((h - 18) / 2 * Math.PI);
+  }
+  // warmFactor peaks during dawn/dusk
+  let warmFactor = 0;
+  if (h >= 6 && h < 8) warmFactor = Math.sin((h - 6) / 2 * Math.PI);
+  else if (h >= 18 && h < 20) warmFactor = Math.sin((h - 18) / 2 * Math.PI);
+  return { nightFactor, warmFactor, hour: h };
+}
+
+function drawDayNightOverlay() {
+  const { nightFactor, warmFactor } = getTimeOfDay();
+  if (nightFactor <= 0 && warmFactor <= 0) return;
+  ctx.save();
+  // Night blue overlay — deeper ocean blue tint
+  if (nightFactor > 0) {
+    ctx.fillStyle = 'rgba(5,5,30,' + (0.25 * nightFactor).toFixed(3) + ')';
+    ctx.fillRect(0, 0, COLS * TILE * SCALE, ROWS * TILE * SCALE);
+  }
+  // Dawn/dusk warm overlay — golden sunset
+  if (warmFactor > 0) {
+    ctx.fillStyle = 'rgba(255,140,40,' + (0.12 * warmFactor).toFixed(3) + ')';
+    ctx.fillRect(0, 0, COLS * TILE * SCALE, ROWS * TILE * SCALE);
+  }
+  ctx.restore();
+}
+
+// Not used — Thai scene uses drawFloorThai/drawSkyThai
+function drawFloor() {}
+function drawWalls() {}
+
+// Not used — Thai scene is open air (no frame)
+function drawGarageFrame() {}
+
+// === THAI BEACH SCENE — Canvas Drawing Functions ===
+
+// --- Sky/Ocean (rows 0-3) ---
+function drawSkyThai() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const W = COLS * TILE, H = ROWS * TILE;
+  const { nightFactor, warmFactor, hour } = getTimeOfDay();
+
+  // Sky gradient — rows 0-1 (top 32px)
+  const skyTop = lerpColor(
+    lerpColor([70, 140, 220], [10, 15, 45], nightFactor),
+    [220, 120, 60], warmFactor * 0.6
+  );
+  const skyBot = lerpColor(
+    lerpColor([140, 200, 255], [20, 25, 60], nightFactor),
+    [255, 160, 80], warmFactor * 0.8
+  );
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, TILE * 2);
+  skyGrad.addColorStop(0, rgbStr(skyTop));
+  skyGrad.addColorStop(1, rgbStr(skyBot));
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, TILE * 2);
+
+  // Clouds — 3 pixel art clouds that drift
+  const cloudY = [4, 10, 6];
+  const cloudW = [18, 12, 15];
+  const cloudSpeed = [0.04, 0.06, 0.05];
+  const cloudAlpha = Math.max(0.3, 1 - nightFactor * 0.7);
+  ctx.fillStyle = 'rgba(255,255,255,' + cloudAlpha.toFixed(2) + ')';
+  for (let ci = 0; ci < 3; ci++) {
+    const cx = ((frame * cloudSpeed[ci] + ci * 110) % (W + 30)) - 15;
+    const cy = cloudY[ci];
+    const cw = cloudW[ci];
+    ctx.fillRect(cx + 2, cy, cw - 4, 3);
+    ctx.fillRect(cx, cy + 1, cw, 2);
+    ctx.fillRect(cx + 4, cy - 1, cw - 8, 1);
+  }
+
+  // Sun/Moon
+  if (nightFactor < 0.5) {
+    // Sun
+    const sunAlpha = (1 - nightFactor * 2).toFixed(2);
+    ctx.fillStyle = 'rgba(255,220,80,' + sunAlpha + ')';
+    ctx.fillRect(W - 30, 3, 6, 6);
+    ctx.fillStyle = 'rgba(255,240,160,' + sunAlpha + ')';
+    ctx.fillRect(W - 29, 4, 4, 4);
+    // Sun rays
+    ctx.fillStyle = 'rgba(255,220,80,' + (sunAlpha * 0.3).toFixed(2) + ')';
+    ctx.fillRect(W - 32, 5, 2, 2); ctx.fillRect(W - 23, 5, 2, 2);
+    ctx.fillRect(W - 28, 1, 2, 2); ctx.fillRect(W - 28, 9, 2, 2);
+  }
+  if (nightFactor > 0.3) {
+    // Moon
+    const moonAlpha = ((nightFactor - 0.3) / 0.7).toFixed(2);
+    ctx.fillStyle = 'rgba(240,240,220,' + moonAlpha + ')';
+    ctx.fillRect(W - 40, 4, 5, 5);
+    ctx.fillStyle = 'rgba(200,200,180,' + (moonAlpha * 0.7).toFixed(2) + ')';
+    ctx.fillRect(W - 39, 5, 3, 3);
+    // Stars
+    ctx.fillStyle = 'rgba(255,255,255,' + (nightFactor * 0.8).toFixed(2) + ')';
+    const stars = [[10,2],[30,5],[55,1],[80,4],[110,2],[140,6],[170,3],[200,1],[230,5],[250,3],[270,2],[290,4],[45,8],[150,7],[220,8]];
+    stars.forEach(([sx,sy]) => ctx.fillRect(sx % W, sy, 1, 1));
+    // Twinkle some stars
+    const twinkle = stars.filter((_, i) => (frame + i * 17) % 60 < 3);
+    ctx.fillStyle = 'rgba(255,255,200,' + (nightFactor * 0.5).toFixed(2) + ')';
+    twinkle.forEach(([sx,sy]) => { ctx.fillRect(sx % W - 1, sy, 3, 1); ctx.fillRect(sx % W, sy - 1, 1, 3); });
+  }
+
+  // Distant island silhouette (Koh Samet) on horizon
+  const islandColor = lerpColor([40, 80, 60], [15, 20, 35], nightFactor);
+  ctx.fillStyle = rgbStr(islandColor);
+  ctx.fillRect(60, 29, 20, 3);
+  ctx.fillRect(63, 27, 14, 2);
+  ctx.fillRect(66, 25, 8, 2);
+  ctx.fillRect(69, 24, 4, 1);
+  // Small island to the right
+  ctx.fillRect(200, 30, 10, 2);
+  ctx.fillRect(202, 28, 6, 2);
+  ctx.fillRect(204, 27, 3, 1);
+
+  // Ocean — rows 2-3 (32-64px) with wave animation
+  const oceanTop = lerpColor([32, 178, 170], [10, 60, 80], nightFactor);
+  const oceanBot = lerpColor([20, 120, 120], [8, 40, 60], nightFactor);
+  const oceanGrad = ctx.createLinearGradient(0, TILE * 2, 0, TILE * 4);
+  oceanGrad.addColorStop(0, rgbStr(oceanTop));
+  oceanGrad.addColorStop(1, rgbStr(oceanBot));
+  ctx.fillStyle = oceanGrad;
+  ctx.fillRect(0, TILE * 2, W, TILE * 2);
+
+  // Wave animation — sine-wave offset horizontal lines
+  for (let wy = TILE * 2; wy < TILE * 4; wy += 2) {
+    const waveOff = Math.sin(frame * 0.03 + wy * 0.3) * 2;
+    const highlight = ((wy + Math.floor(frame * 0.2)) % 8) < 2;
+    if (highlight) {
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(waveOff, wy, W, 1);
+    }
+  }
+
+  // Wave crests — white foam lines
+  const foamAlpha = (0.25 + warmFactor * 0.1).toFixed(2);
+  ctx.fillStyle = 'rgba(200,248,248,' + foamAlpha + ')';
+  for (let wx = 0; wx < W; wx += 2) {
+    const foamY = TILE * 2 + 2 + Math.sin(frame * 0.04 + wx * 0.15) * 1.5;
+    if ((wx + Math.floor(frame * 0.1)) % 6 < 4)
+      ctx.fillRect(wx, foamY | 0, 2, 1);
+  }
+  // Second wave crest
+  ctx.fillStyle = 'rgba(200,248,248,' + (foamAlpha * 0.6).toFixed(2) + ')';
+  for (let wx = 0; wx < W; wx += 2) {
+    const foamY = TILE * 3 + Math.sin(frame * 0.035 + wx * 0.12 + 1) * 1.5;
+    if ((wx + Math.floor(frame * 0.08) + 3) % 8 < 4)
+      ctx.fillRect(wx, foamY | 0, 2, 1);
+  }
+
+  // Shoreline foam — row 3 bottom edge
+  ctx.fillStyle = 'rgba(230,248,248,0.35)';
+  for (let wx = 0; wx < W; wx++) {
+    const foamY = TILE * 4 - 2 + Math.sin(frame * 0.025 + wx * 0.2) * 1;
+    if ((wx + Math.floor(frame * 0.06)) % 4 < 2)
+      ctx.fillRect(wx, foamY | 0, 1, 2);
+  }
+
+  // Wet sand strip at shoreline
+  ctx.fillStyle = PAL.sandWet;
+  ctx.fillRect(0, TILE * 4 - 1, W, 3);
+
+  // Longtail boat — drifting slowly on ocean
+  drawLongtailBoat(((frame * 0.08 + 30) % (W + 40)) - 20, TILE * 2 + 8);
+  drawLongtailBoat(((frame * 0.05 + 160) % (W + 60)) - 30, TILE * 3 + 2);
+
+  ctx.restore();
+}
+
+function drawLongtailBoat(bx, by) {
+  const bob = Math.sin(frame * 0.04 + bx * 0.1) * 0.5;
+  const iy = (by + bob) | 0;
+  // Hull
+  ctx.fillStyle = PAL.boat;
+  ctx.fillRect(bx, iy, 14, 3);
+  ctx.fillStyle = PAL.boatDark;
+  ctx.fillRect(bx + 1, iy + 2, 12, 1);
+  // Bow (pointed front)
+  ctx.fillStyle = PAL.boat;
+  ctx.fillRect(bx + 14, iy + 1, 3, 1);
+  ctx.fillRect(bx + 17, iy + 1, 1, 1);
+  // Sash/garland
+  ctx.fillStyle = PAL.boatSash;
+  ctx.fillRect(bx + 13, iy - 1, 1, 2);
+  ctx.fillStyle = PAL.boatTrim;
+  ctx.fillRect(bx + 14, iy - 1, 1, 1);
+  // Longtail pole
+  ctx.fillStyle = '#888';
+  ctx.fillRect(bx - 4, iy + 1, 5, 1);
+  ctx.fillRect(bx - 5, iy + 2, 2, 1);
+  // Canopy
+  ctx.fillStyle = PAL.tikiThatch;
+  ctx.fillRect(bx + 3, iy - 3, 8, 1);
+  ctx.fillRect(bx + 2, iy - 2, 10, 1);
+  ctx.fillStyle = PAL.tikiThatchDark;
+  ctx.fillRect(bx + 4, iy - 1, 1, 1);
+  ctx.fillRect(bx + 9, iy - 1, 1, 1);
+}
+
+function lerpColor(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ];
+}
+function rgbStr(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+
+function drawFloorThai() {
+  const W = COLS * TILE, H = ROWS * TILE;
+  // Sand floor — rows 4-11
+  const sandColors = [PAL.sand1, PAL.sand2, PAL.sand3, PAL.sand4];
+  for (let r = 4; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const noise = ((c * 7 + r * 13 + c * r) % 4);
+      tileRect(c, r, 1, 1, sandColors[noise]);
+    }
+  }
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Sand texture — subtle grain variation
+  ctx.fillStyle = 'rgba(180,140,60,0.06)';
+  for (let r = 4; r < ROWS; r++) {
+    const ry = r * TILE;
+    for (let x = 0; x < W; x += 3) {
+      const skip = Math.sin(x * 0.7 + r * 2.3) > 0.6;
+      if (!skip) ctx.fillRect(x, ry + (x * 3 + r * 7) % TILE, 1, 1);
+    }
+  }
+  // Footprints — scattered pairs
+  ctx.fillStyle = 'rgba(160,120,50,0.12)';
+  const footprints = [[40, 80], [100, 110], [180, 95], [250, 130], [60, 150], [200, 165]];
+  footprints.forEach(([fx, fy]) => {
+    if (fy >= TILE * 4) {
+      ctx.fillRect(fx, fy, 2, 3); ctx.fillRect(fx + 4, fy + 1, 2, 3);
+    }
+  });
+  // Shells and starfish
+  ctx.fillStyle = PAL.shell;
+  ctx.fillRect(90, TILE * 5 + 4, 3, 2); ctx.fillRect(91, TILE * 5 + 3, 1, 1);
+  ctx.fillRect(220, TILE * 8 + 2, 2, 2);
+  ctx.fillStyle = PAL.starfish;
+  ctx.fillRect(160, TILE * 7 + 6, 3, 1); ctx.fillRect(161, TILE * 7 + 5, 1, 3);
+  ctx.fillRect(50, TILE * 10 + 2, 3, 1); ctx.fillRect(51, TILE * 10 + 1, 1, 3);
+  // Depth gradient — slightly darker near water
+  const depthGrad = ctx.createLinearGradient(0, TILE * 4, 0, TILE * 6);
+  depthGrad.addColorStop(0, 'rgba(0,0,20,0.04)');
+  depthGrad.addColorStop(1, 'rgba(0,0,20,0)');
+  ctx.fillStyle = depthGrad;
+  ctx.fillRect(0, TILE * 4, W, TILE * 2);
+  ctx.restore();
+}
+
+// Not used in Thai scene (sky replaces window)
+function drawWindow() {}
+
+function drawDoor() {
+  // Beach path entrance — sandy trail from left edge
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 2, y = TILE * 2 + 4;
+  // Path stones
+  ctx.fillStyle = '#b0a070';
+  ctx.fillRect(x, y + 8, 10, 14);
+  ctx.fillStyle = '#c0b080';
+  ctx.fillRect(x + 1, y + 9, 8, 12);
+  // Path direction indicator
+  ctx.fillStyle = '#908060';
+  ctx.fillRect(x + 3, y + 12, 4, 1);
+  ctx.fillRect(x + 4, y + 15, 3, 1);
+  // Small jungle/vegetation at edge
+  ctx.fillStyle = PAL.palmLeaf;
+  ctx.fillRect(x - 2, y, 6, 8);
+  ctx.fillRect(x, y - 2, 4, 4);
+  ctx.fillStyle = PAL.palmLeafLight;
+  ctx.fillRect(x - 1, y + 1, 2, 2);
+  ctx.fillRect(x + 2, y - 1, 2, 2);
+  ctx.restore();
+}
+
+function drawTikiSign() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const nx = 55, ny = 10;
+  const { nightFactor } = getTimeOfDay();
+  // Wooden sign board
+  R(nx - 2, ny - 2, 44, 14, PAL.tikiBamboo);
+  R(nx - 2, ny - 2, 44, 2, PAL.tikiBambooLight);
+  R(nx - 2, ny + 10, 44, 2, PAL.tikiBambooDark);
+  // Support posts
+  R(nx - 2, ny + 12, 3, 4, PAL.palmTrunk);
+  R(nx + 38, ny + 12, 3, 4, PAL.palmTrunk);
+  // "HACK" letters carved in wood
+  const H = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[1,2],[2,2]];
+  const A = [[6,0],[7,0],[5,1],[5,2],[5,3],[5,4],[5,5],[8,1],[8,2],[8,3],[8,4],[8,5],[6,3],[7,3]];
+  const C = [[11,0],[12,0],[13,0],[10,1],[10,2],[10,3],[10,4],[11,5],[12,5],[13,5]];
+  const K = [[15,0],[15,1],[15,2],[15,3],[15,4],[15,5],[18,0],[17,1],[16,2],[16,3],[17,4],[18,5]];
+  const letterColor = nightFactor > 0.3 ? '#f0c040' : '#5a3a1a';
+  [H, A, C, K].forEach(letter => { letter.forEach(([lx, ly]) => R(nx + lx * 2, ny + ly, 2, 1, letterColor)); });
+  // Tiki torch glow at night
+  if (nightFactor > 0.3) {
+    const glowAlpha = (nightFactor * 0.15).toFixed(3);
+    R(nx - 6, ny - 6, 52, 24, 'rgba(255,160,50,' + glowAlpha + ')');
+  }
+  ctx.restore();
+}
+
+function drawNeonSign() { drawTikiSign(); }
+
+function drawBeachSign() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = 218, y = 6, w = 44, h = 20;
+  // Bamboo frame
+  R(x, y, w, h, PAL.tikiBamboo);
+  R(x, y, w, 2, PAL.tikiBambooLight);
+  R(x, y + h - 2, w, 2, PAL.tikiBambooDark);
+  R(x, y, 2, h, PAL.tikiBambooLight);
+  R(x + w - 2, y, 2, h, PAL.tikiBambooDark);
+  // Inner board
+  R(x + 2, y + 2, w - 4, h - 4, '#f0e8d0');
+  // Text
+  ctx.fillStyle = '#5a3a1a'; ctx.font = '3px "Press Start 2P"';
+  ctx.fillText('WELCOME TO', x + 4, y + 7);
+  ctx.fillStyle = PAL.thaiGold; ctx.font = '4px "Press Start 2P"';
+  ctx.fillText('KOH SAMET', x + 4, y + 13);
+  // Small Thai flag
+  R(x + 4, y + 15, 8, 1, PAL.flagRed);
+  R(x + 4, y + 16, 8, 1, PAL.flagWhite);
+  R(x + 4, y + 17, 8, 1, PAL.flagBlue);
+  ctx.restore();
+}
+
+function drawWhiteboard() { drawBeachSign(); }
+
+// --- Tiki Desk ---
+function drawDeskThai(d, idx, agentType) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE + 8;
+  // Bamboo table top
+  R(x, y, TILE, 2, PAL.tikiBambooLight);
+  R(x, y, TILE, 1, PAL.tikiBamboo);
+  for (let gx = x + 1; gx < x + TILE - 1; gx += 2) R(gx, y + 1, 1, 1, PAL.tikiBambooDark);
+  // Bamboo legs
+  R(x + 1, y + 2, 2, 10, PAL.tikiBamboo);
+  R(x + 1, y + 2, 1, 10, PAL.tikiBambooLight);
+  R(x + TILE - 3, y + 2, 2, 10, PAL.tikiBamboo);
+  R(x + TILE - 3, y + 2, 1, 10, PAL.tikiBambooLight);
+  // Cross bar
+  R(x + 3, y + 7, TILE - 6, 1, PAL.tikiBambooDark);
+  // Bamboo joint rings
+  R(x + 1, y + 5, 2, 1, PAL.tikiBambooDark);
+  R(x + TILE - 3, y + 5, 2, 1, PAL.tikiBambooDark);
+  ctx.restore();
+}
+
+function drawDeskSV(d, idx, agentType) { drawDeskThai(d, idx, agentType); }
+function drawDesk(d) { drawDeskThai(d, 0, ''); }
+
+// --- Beach Chair ---
+function drawChairThai(d, idx) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = d.y * TILE + 10;
+  const stripeColors = ['#cc2222', '#f0f0f0', '#2266aa', '#f0c040', '#2d8a1e', '#cc6622'];
+  const sc1 = stripeColors[idx % stripeColors.length];
+  const sc2 = '#f0f0f0';
+  // Seat — striped fabric
+  R(x, y, 10, 2, sc1);
+  R(x + 2, y, 2, 2, sc2);
+  R(x + 6, y, 2, 2, sc2);
+  // Backrest — striped
+  R(x, y - 7, 10, 4, sc1);
+  R(x + 2, y - 7, 2, 4, sc2);
+  R(x + 6, y - 7, 2, 4, sc2);
+  // Bamboo frame
+  R(x - 1, y - 7, 1, 12, PAL.tikiBamboo);
+  R(x + 10, y - 7, 1, 12, PAL.tikiBamboo);
+  // Leg supports
+  R(x + 1, y + 2, 2, 4, PAL.tikiBamboo);
+  R(x + 7, y + 2, 2, 4, PAL.tikiBamboo);
+  // Front crossbar
+  R(x, y + 5, 10, 1, PAL.tikiBambooDark);
+  ctx.restore();
+}
+
+function drawChairSV(d, idx) { drawChairThai(d, idx); }
+function drawChair(d) { drawChairThai(d, 0); }
+
+// --- Laptop on Tiki Desk ---
+function drawMonitorThai(d, state, monitorText, idx, agentType) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 2, y = d.y * TILE;
+  // Laptop body — slightly tilted screen
+  R(x, y, 12, 8, '#2a2a2a'); // laptop casing
+  R(x + 1, y, 10, 1, '#333'); // top bezel
+  const sc = state === 'ci_failed' ? '#3a0808' : (state === 'coding' ? '#0a200a' : '#0a0a0a');
+  R(x + 1, y + 1, 10, 6, sc); // screen
+  // Laptop base (keyboard area)
+  R(x, y + 8, 12, 2, '#333');
+  R(x + 1, y + 8, 10, 1, '#3a3a3a');
+  // Trackpad
+  R(x + 5, y + 9, 2, 1, '#444');
+
+  // Screen content
+  if (state === 'coding') {
+    const colors = ['#4ae04a', '#2a8a2a', '#6af06a', '#3aaa3a', '#2f9a3d'];
+    const indents = [0, 1, 2, 2, 1, 0, 1, 3, 0, 2];
+    const lengths = [6, 4, 3, 5, 7, 2, 4, 3, 5, 6];
+    const scrollOff = Math.floor(frame / 14) % 10;
+    for (let line = 0; line < 5; line++) {
+      const li = (line + scrollOff) % 10;
+      const indent = indents[li];
+      const len = lengths[li];
+      R(x + 2 + indent, y + 1 + line, Math.min(len, 8 - indent), 1, colors[li % colors.length]);
+    }
+    if (frame % 16 < 8) R(x + 9, y + 5, 1, 1, '#4ae04a');
+    if (frame % 300 < 2) R(x + 1, y + 1, 10, 6, 'rgba(200,255,200,0.2)');
+  } else if (state === 'ci_failed') {
+    const bright = Math.sin(frame * 0.1) > 0;
+    const c = bright ? '#ff3b3b' : '#aa2222';
+    R(x + 3, y + 1, 1, 1, c); R(x + 7, y + 1, 1, 1, c);
+    R(x + 4, y + 2, 1, 1, c); R(x + 6, y + 2, 1, 1, c); R(x + 5, y + 3, 1, 1, c);
+    R(x + 4, y + 4, 1, 1, c); R(x + 6, y + 4, 1, 1, c);
+    R(x + 3, y + 5, 1, 1, c); R(x + 7, y + 5, 1, 1, c);
+  } else if (state === 'merged') {
+    R(x + 5, y + 1, 2, 1, '#f0c040'); R(x + 4, y + 2, 4, 1, '#f0c040');
+    R(x + 3, y + 3, 6, 1, '#d8a820'); R(x + 4, y + 4, 4, 1, '#f0c040');
+  } else {
+    R(x + 4, y + 3, 1, 1, '#4ae04a'); R(x + 5, y + 4, 1, 1, '#4ae04a');
+    R(x + 6, y + 3, 1, 1, '#4ae04a'); R(x + 7, y + 2, 1, 1, '#4ae04a');
+  }
+
+  // Scrolling issue title text on screen
+  if (monitorText) {
+    ctx.restore();
+    const sx = (x + 1) * SCALE, sy = (y + 1) * SCALE, sw = 10 * SCALE, sh = 6 * SCALE;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
+    ctx.fillStyle = state === 'ci_failed' ? '#ff6666' : (state === 'coding' ? '#4ae04a' : '#8888ff');
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textBaseline = 'middle';
+    const textWidth = ctx.measureText(monitorText).width;
+    const totalScroll = textWidth + sw + 8;
+    const scroll = (frame * 0.6) % totalScroll;
+    ctx.fillText(monitorText, sx + sw - scroll, sy + sh / 2);
+    ctx.restore();
+    ctx.save(); ctx.scale(SCALE, SCALE);
+  }
+
+  // Screen glow on desk
+  if (state === 'coding' || state === 'ci_failed') {
+    const gcx = x + 6, gcy = y + 10;
+    const gr = state === 'ci_failed' ? 'rgba(255,59,59,' : 'rgba(74,224,74,';
+    const glow = ctx.createRadialGradient(gcx, gcy, 1, gcx, gcy + 3, 10);
+    glow.addColorStop(0, gr + '0.1)');
+    glow.addColorStop(1, gr + '0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 4, y + 6, 20, 12);
+  }
+  ctx.restore();
+}
+
+function drawMonitorSV(d, state, monitorText, idx, agentType) { drawMonitorThai(d, state, monitorText, idx, agentType); }
+function drawMonitor(d, state, monitorText) { drawMonitorThai(d, state, monitorText, 0, ''); }
+
+// --- Thai Beach Character (Hawaiian shirt + sunglasses) ---
+function drawCharacterThai(d, colorIdx, state, agentType) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const ch = CHARS_THAI[colorIdx % CHARS_THAI.length];
+  const x = d.x * TILE;
+  const y = (d.y + 1) * TILE;
+  const isCodex = (agentType || '').includes('codex');
+  // Hawaiian shirt palette (green=Codex, orange=Claude)
+  const hM = isCodex ? '#2d8a1e' : '#e87030';
+  const hL = isCodex ? '#3aaa2a' : '#ff9050';
+  const hD = isCodex ? '#1e6e14' : '#c05020';
+  const hX = isCodex ? '#165a10' : '#a03818';
+  // Hawaiian pattern accent
+  const hP = isCodex ? '#f0c040' : '#f0c040';
+  const f = Math.floor(frame / 8) % 4;
+  const sleeping = state === 'sleeping';
+  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
+  const celeb = state === 'merged';
+  const slumped = state === 'exited' || sleeping;
+  const walk = state === 'walking';
+  const coding = state === 'coding';
+  const bob = sitting ? 0 : [0, -1, 0, -1][f];
+  const oy = sitting ? (celeb ? -6 : slumped ? -2 : -4) : bob;
+  // Shadow for standing/walking
+  if (!sitting) { ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fillRect(x + 2, y + 19, 12, 2); }
+  // --- LEGS (shorts for beach) ---
+  if (sitting) {
+    R(x + 4, y + 13 + oy, 3, 2, '#c8a870'); R(x + 9, y + 13 + oy, 3, 2, '#c8a870');
+    R(x + 4, y + 14 + oy, 3, 1, '#b89860'); R(x + 9, y + 14 + oy, 3, 1, '#b89860');
+  } else if (walk) {
+    const wc = [[0, 0, 0, 0], [-1, -1, 1, 0], [0, 0, 0, 0], [1, 0, -1, -1]][f];
+    R(x + 4 + wc[0], y + 14 + oy, 3, 3, '#c8a870'); R(x + 4 + wc[0], y + 14 + oy, 3, 1, '#b89860');
+    R(x + 9 + wc[2], y + 14 + oy, 3, 3, '#c8a870'); R(x + 9 + wc[2], y + 14 + oy, 3, 1, '#b89860');
+    // Sandals (instead of shoes)
+    R(x + 3 + wc[0], y + 17 + oy + wc[1], 5, 1, '#8B5E3C'); R(x + 8 + wc[2], y + 17 + oy + wc[3], 5, 1, '#8B5E3C');
+  } else {
+    R(x + 4, y + 14 + oy, 3, 3, '#c8a870'); R(x + 4, y + 14 + oy, 3, 1, '#b89860');
+    R(x + 9, y + 14 + oy, 3, 3, '#c8a870'); R(x + 9, y + 14 + oy, 3, 1, '#b89860');
+    R(x + 3, y + 17 + oy, 5, 1, '#8B5E3C'); R(x + 8, y + 17 + oy, 5, 1, '#8B5E3C');
+  }
+  // --- TORSO (Hawaiian shirt) ---
+  R(x + 3, y + 7 + oy, 10, 6, hM);
+  R(x + 3, y + 7 + oy, 10, 1, hL);
+  R(x + 3, y + 12 + oy, 10, 1, hD);
+  R(x + 4, y + 8 + oy, 1, 4, hL);
+  R(x + 12, y + 8 + oy, 1, 4, hD);
+  R(x + 5, y + 7 + oy, 6, 1, hD);
+  // Hawaiian pattern — small flower/leaf dots
+  R(x + 5, y + 9 + oy, 1, 1, hP); R(x + 8, y + 8 + oy, 1, 1, hP);
+  R(x + 6, y + 11 + oy, 1, 1, hP); R(x + 10, y + 10 + oy, 1, 1, hP);
+  R(x + 4, y + 10 + oy, 1, 1, '#ff6060');
+  R(x + 9, y + 9 + oy, 1, 1, '#ff6060');
+  // Agent type indicator
+  if (isCodex) { R(x + 10, y + 9 + oy, 2, 2, '#f0c040'); R(x + 10, y + 9 + oy, 1, 1, '#d4a020'); }
+  else { R(x + 10, y + 9 + oy, 1, 1, '#f0c040'); R(x + 9, y + 10 + oy, 3, 1, '#f0c040'); R(x + 10, y + 11 + oy, 1, 1, '#f0c040'); }
+  // --- HEAD ---
+  const hob = coding ? (Math.floor(frame / 24) % 4 === 1 ? 1 : 0) : 0;
+  const hy = oy + hob;
+  R(x + 4, y + 2 + hy, 8, 5, ch.skin);
+  R(x + 4, y + 2 + hy, 8, 1, ch.skinH);
+  R(x + 4, y + 6 + hy, 8, 1, ch.skinD);
+  R(x + 3, y + 3 + hy, 1, 2, ch.skin); R(x + 3, y + 3 + hy, 1, 1, ch.skinH);
+  R(x + 12, y + 3 + hy, 1, 2, ch.skinD);
+  // --- EYES ---
+  const blink = frame % 80 < 3;
+  if (slumped) {
+    R(x + 5, y + 4 + hy, 2, 1, '#222'); R(x + 9, y + 4 + hy, 2, 1, '#222');
+  } else if (!blink) {
+    R(x + 5, y + 3 + hy, 2, 2, '#fff'); R(x + 9, y + 3 + hy, 2, 2, '#fff');
+    const px = coding ? (Math.floor(frame / 30) % 3 === 2 ? 1 : 0) : (Math.sin(frame * 0.02) > 0 ? 0 : 1);
+    R(x + 5 + px, y + 3 + hy, 1, 2, '#111'); R(x + 9 + px, y + 3 + hy, 1, 2, '#111');
+    R(x + 5, y + 3 + hy, 1, 1, '#ddf'); R(x + 9, y + 3 + hy, 1, 1, '#ddf');
+    if (celeb) { R(x + 5, y + 2 + hy, 2, 1, ch.hair); R(x + 9, y + 2 + hy, 2, 1, ch.hair); }
+  }
+  // Sunglasses when coding (instead of headset)
+  if (coding && !blink) {
+    R(x + 4, y + 3 + hy, 3, 2, '#222'); R(x + 8, y + 3 + hy, 3, 2, '#222');
+    R(x + 7, y + 3 + hy, 1, 1, '#333'); // bridge
+    R(x + 4, y + 3 + hy, 3, 1, '#111'); R(x + 8, y + 3 + hy, 3, 1, '#111');
+  }
+  if (celeb) R(x + 7, y + 5 + hy, 2, 1, '#c06060');
+  else if (slumped) R(x + 7, y + 5 + hy, 2, 1, '#888');
+  else if (coding) R(x + 7, y + 5 + hy, 1, 1, ch.skinD);
+  // --- HAIR ---
+  const hs = ch.hairStyle;
+  R(x + 4, y + 1 + hy, 8, 2, ch.hair); R(x + 4, y + 1 + hy, 8, 1, ch.hairH);
+  R(x + 3, y + 2 + hy, 1, 1, ch.hair); R(x + 12, y + 2 + hy, 1, 1, ch.hair);
+  if (hs === 0) {
+    R(x + 5, y + hy, 2, 1, ch.hair); R(x + 8, y + hy, 2, 1, ch.hair);
+    R(x + 6, y + hy - 1, 1, 1, ch.hairH); R(x + 9, y + hy - 1, 1, 1, ch.hairH); R(x + 11, y + hy, 1, 1, ch.hair);
+  } else if (hs === 1) {
+    R(x + 12, y + 1 + hy, 2, 1, ch.hair); R(x + 13, y + 2 + hy, 2, 2, ch.hair); R(x + 13, y + 2 + hy, 1, 1, ch.hairH);
+  } else if (hs === 2) {
+    R(x + 3, y + hy, 10, 2, '#cc3333'); R(x + 3, y + hy, 10, 1, '#ee5555'); R(x + 2, y + 1 + hy, 12, 1, '#aa2222');
+  } else if (hs === 3) {
+    R(x + 3, y + hy, 10, 2, ch.hair);
+    R(x + 2, y + 2 + hy, 2, 3, '#555'); R(x + 2, y + 2 + hy, 2, 1, '#777');
+    R(x + 12, y + 2 + hy, 2, 3, '#555'); R(x + 12, y + 2 + hy, 2, 1, '#777');
+    R(x + 3, y + hy, 10, 1, '#666');
+  } else if (hs === 4) {
+    R(x + 4, y + hy, 8, 1, '#4a4a8a'); R(x + 3, y + 1 + hy, 10, 1, '#3a3a7a');
+    R(x + 5, y + hy - 1, 6, 1, '#5a5a9a'); R(x + 7, y + hy - 2, 2, 1, '#4a4a8a');
+  } else {
+    R(x + 4, y + hy, 8, 2, ch.hair); R(x + 4, y + hy, 8, 1, ch.hairH);
+  }
+  // --- ARMS ---
+  if (coding) {
+    const ab = f % 2;
+    R(x + 1, y + 8 + oy, 2, 4, hM); R(x + 1, y + 8 + oy, 2, 1, hL); R(x + 1, y + 12 + oy + (1 - ab), 2, 1, ch.skin);
+    R(x + 13, y + 8 + oy, 2, 4, hM); R(x + 13, y + 8 + oy, 2, 1, hL); R(x + 13, y + 12 + oy + ab, 2, 1, ch.skin);
+  } else if (celeb) {
+    R(x + 1, y + 2 + oy, 2, 5, hM); R(x + 1, y + 2 + oy, 2, 1, hL); R(x + 1, y + 1 + oy, 2, 1, ch.skin);
+    R(x + 13, y + 2 + oy, 2, 5, hM); R(x + 13, y + 2 + oy, 2, 1, hL); R(x + 13, y + 1 + oy, 2, 1, ch.skin);
+  } else if (slumped) {
+    R(x + 1, y + 8 + oy, 2, 6, hM); R(x + 13, y + 8 + oy, 2, 6, hM);
+  } else if (walk) {
+    const as = [1, 0, -1, 0][f];
+    R(x + 1, y + 8 + oy, 2, 4 + as, hM); R(x + 1, y + 8 + oy, 2, 1, hL); R(x + 1, y + 12 + oy + as, 2, 1, ch.skin);
+    R(x + 13, y + 8 + oy, 2, 4 - as, hM); R(x + 13, y + 8 + oy, 2, 1, hL); R(x + 13, y + 12 + oy - as, 2, 1, ch.skin);
+  } else if (state === 'reading' || state === 'waiting') {
+    R(x + 1, y + 8 + oy, 2, 4, hM); R(x + 1, y + 8 + oy, 2, 1, hL);
+    R(x + 13, y + 7 + oy, 2, 2, hM); R(x + 13, y + 5 + oy, 2, 2, hM); R(x + 12, y + 5 + oy, 1, 1, ch.skin);
+  } else {
+    R(x + 1, y + 8 + oy, 2, 4, hM); R(x + 1, y + 8 + oy, 2, 1, hL);
+    R(x + 13, y + 8 + oy, 2, 4, hM); R(x + 13, y + 8 + oy, 2, 1, hL);
+  }
+  // Sleeping ZZZ
+  if (sleeping) {
+    const zf = frame % 90;
+    ctx.fillStyle = '#aaddff'; ctx.font = '3px "Press Start 2P"';
+    if (zf < 30) ctx.fillText('z', x + 14, y + oy + 2);
+    else if (zf < 60) ctx.fillText('zZ', x + 13, y + oy);
+    else ctx.fillText('zZz', x + 12, y + oy - 2);
+  }
+  ctx.restore();
+}
+
+function drawCharacterSV(d, colorIdx, state, agentType) { drawCharacterThai(d, colorIdx, state, agentType); }
+function drawCharacter(d, colorIdx, state) { drawCharacterThai(d, colorIdx, state, ''); }
+
+function drawKeyboardGlowThai(d, idx) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE + 8;
+  // Warm tropical glow under laptop
+  const rgbPhase = frame * 0.015;
+  for (let i = 0; i < 3; i++) {
+    const hue = (rgbPhase + i * 2.1) % (Math.PI * 2);
+    const r = Math.floor(180 + 40 * Math.sin(hue));
+    const g = Math.floor(140 + 40 * Math.sin(hue + 2.09));
+    const b = Math.floor(60 + 40 * Math.sin(hue + 4.19));
+    R(x + 3 + i * 3, y + 3, 2, 1, 'rgba(' + r + ',' + g + ',' + b + ',0.2)');
+  }
+  ctx.restore();
+}
+
+function drawKeyboardGlowSV(d, idx) { drawKeyboardGlowThai(d, idx); }
+
+function drawThoughtBubbleThai(d, deskIdx) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 4, y = (d.y + 1) * TILE - 12;
+  const symbols = ['...', '</>', '{ }'];
+  const cycleLen = 200;
+  const totalCycle = cycleLen * symbols.length;
+  const t = (frame + deskIdx * 67) % totalCycle;
+  const symIdx = Math.floor(t / cycleLen);
+  const symT = t % cycleLen;
+  let alpha;
+  if (symT < 30) alpha = symT / 30;
+  else if (symT > cycleLen - 30) alpha = (cycleLen - symT) / 30;
+  else alpha = 1;
+  if (alpha > 0.05) {
+    ctx.fillStyle = 'rgba(170,200,255,' + (alpha * 0.4).toFixed(2) + ')';
+    R(x + 10, y + 6, 1, 1, ctx.fillStyle);
+    R(x + 11, y + 4, 1, 1, ctx.fillStyle);
+    const sym = symbols[symIdx];
+    const bw = sym.length * 4 + 4;
+    // Cloud-shaped bubble
+    R(x + 8, y - 1, bw, 7, 'rgba(255,255,255,' + (alpha * 0.5).toFixed(2) + ')');
+    R(x + 7, y, bw + 2, 5, 'rgba(255,255,255,' + (alpha * 0.4).toFixed(2) + ')');
+    ctx.fillStyle = 'rgba(80,100,140,' + alpha.toFixed(2) + ')';
+    ctx.font = '3px "Press Start 2P"';
+    ctx.fillText(sym, x + 10, y + 4);
+  }
+  ctx.restore();
+}
+
+function drawThoughtBubbleSV(d, deskIdx) { drawThoughtBubbleThai(d, deskIdx); }
+
+// --- Coconut drinks (replaces coffee cups) ---
+function drawCoconutDrinks(d, count) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const baseX = d.x * TILE + TILE + 1;
+  const baseY = d.y * TILE + 10;
+  for (let i = 0; i < count; i++) {
+    const cx = baseX + i * 5;
+    // Coconut shell
+    R(cx, baseY, 3, 3, PAL.coconut);
+    R(cx, baseY + 3, 3, 1, PAL.coconutDark);
+    R(cx + 1, baseY, 1, 1, PAL.coconutDark);
+    // White top (coconut milk)
+    R(cx, baseY, 3, 1, PAL.coconutMilk);
+    // Straw
+    const strawColor = i % 2 === 0 ? PAL.straw : PAL.strawAlt;
+    R(cx + 2, baseY - 3, 1, 4, strawColor);
+  }
+  ctx.restore();
+}
+
+function drawCoffeeCups(d, count) { drawCoconutDrinks(d, count); }
+
+// --- Sand mound tombstone (replaces stone tombstone) ---
+function drawTombstone(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 3, y = (d.y + 1) * TILE + 2;
+  // Sand mound
+  R(x + 1, y + 8, 10, 3, PAL.sand3);
+  R(x + 2, y + 6, 8, 3, PAL.sand2);
+  R(x + 3, y + 5, 6, 2, PAL.sand1);
+  R(x + 4, y + 4, 4, 1, PAL.sand1);
+  // RIP stick
+  R(x + 5, y, 2, 6, '#8B5E3C');
+  R(x + 3, y + 1, 6, 1, '#8B5E3C');
+  // RIP text
+  ctx.fillStyle = '#f0e0c0'; ctx.font = '3px "Press Start 2P"'; ctx.fillText('RIP', x + 3, y + 10);
+  ctx.restore();
+}
+
+// --- Palm Trees ---
+function drawPalmTree(px, py, size) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const trunkH = size || 30;
+  // Trunk — with bark texture
+  for (let ty = 0; ty < trunkH; ty++) {
+    const sway = Math.sin(frame * 0.01 + py * 0.1) * 0.5;
+    const tx = px + (ty < trunkH / 2 ? 0 : Math.round(sway));
+    const barkColor = ty % 4 < 2 ? PAL.palmTrunk : PAL.palmTrunkDark;
+    ctx.fillStyle = barkColor;
+    ctx.fillRect(tx, py + trunkH - ty, 3, 1);
+    if (ty % 4 === 0) { ctx.fillStyle = PAL.palmTrunkLight; ctx.fillRect(tx, py + trunkH - ty, 3, 1); }
+  }
+  // Coconuts at top
+  ctx.fillStyle = PAL.coconut;
+  ctx.fillRect(px, py + 1, 2, 2);
+  ctx.fillRect(px + 2, py + 2, 2, 2);
+  // Fronds — swaying gently
+  const sway = Math.sin(frame * 0.015 + py * 0.1) * 1;
+  const leafTop = py - 2;
+  // Main fronds
+  for (let fi = 0; fi < 5; fi++) {
+    const angle = -2.5 + fi * 1.25;
+    const len = 10 + (fi === 2 ? 4 : 0);
+    const leafColor = fi % 2 === 0 ? PAL.palmLeaf : PAL.palmLeafLight;
+    ctx.fillStyle = leafColor;
+    for (let li = 0; li < len; li++) {
+      const lx = px + 1 + Math.round(angle * li / 4 + sway * li / len);
+      const ly = leafTop - Math.round(Math.max(0, 2 - Math.abs(li - len / 2) * 0.3));
+      ctx.fillRect(lx, ly + li * 0.3 | 0, 2, 1);
+    }
+  }
+  ctx.restore();
+}
+
+// --- Beach Umbrella ---
+function drawUmbrella(ux, uy) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  // Post
+  R(ux + 6, uy + 2, 1, 12, PAL.umbrellaPost);
+  // Canopy — alternating stripes
+  for (let i = 0; i < 14; i++) {
+    const color = i % 4 < 2 ? PAL.umbrella1 : PAL.umbrella2;
+    R(ux + i, uy + 1, 1, 2, color);
+  }
+  R(ux + 1, uy, 12, 1, PAL.umbrella1);
+  R(ux, uy + 2, 14, 1, 'rgba(0,0,0,0.1)');
+  ctx.restore();
+}
+
+// --- Tiki Torch ---
+function drawTikiTorch(tx, ty) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const { nightFactor } = getTimeOfDay();
+  // Post
+  R(tx, ty, 2, 14, PAL.tikiBamboo);
+  R(tx, ty, 1, 14, PAL.tikiBambooLight);
+  // Joint rings
+  R(tx - 1, ty + 4, 4, 1, PAL.tikiBambooDark);
+  R(tx - 1, ty + 8, 4, 1, PAL.tikiBambooDark);
+  // Bowl
+  R(tx - 1, ty - 2, 4, 3, PAL.tikiBambooDark);
+  R(tx, ty - 2, 2, 1, PAL.tikiBamboo);
+  // Flame — animated, brighter at night
+  if (nightFactor > 0.2 || frame % 120 < 100) {
+    const flickerH = 2 + Math.floor(Math.random() * 2);
+    const flickerOff = Math.random() > 0.5 ? 0 : 1;
+    R(tx + flickerOff, ty - 2 - flickerH, 2, flickerH, PAL.fire3);
+    R(tx + flickerOff, ty - 2 - flickerH + 1, 1, flickerH - 1, PAL.fire4);
+    if (flickerH > 2) R(tx + flickerOff, ty - 2 - flickerH, 1, 1, PAL.fire1);
+    // Glow at night
+    if (nightFactor > 0.3) {
+      const glowAlpha = (nightFactor * 0.08).toFixed(3);
+      const glow = ctx.createRadialGradient(tx + 1, ty - 3, 1, tx + 1, ty - 3, 12);
+      glow.addColorStop(0, 'rgba(255,160,50,' + glowAlpha + ')');
+      glow.addColorStop(1, 'rgba(255,160,50,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(tx - 12, ty - 15, 26, 26);
+    }
+  }
+  ctx.restore();
+}
+
+// --- Props ---
+function drawPropsThai() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const W = COLS * TILE, H = ROWS * TILE;
+
+  // 1. Surfboards leaning against nothing (near left edge)
+  const sbX = 22, sbY = TILE * 3;
+  // Board 1
+  R(sbX, sbY, 3, 14, PAL.surfboard1);
+  R(sbX, sbY, 3, 1, '#ff8855');
+  R(sbX + 1, sbY + 3, 1, 8, '#fff');
+  // Board 2
+  R(sbX + 5, sbY + 2, 3, 12, PAL.surfboard3);
+  R(sbX + 5, sbY + 2, 3, 1, '#55ddff');
+  R(sbX + 6, sbY + 5, 1, 6, '#fff');
+
+  // 2. Cooler box (near bottom-left)
+  const clX = 24, clY = TILE * (ROWS - 2) + 2;
+  R(clX, clY, 10, 6, PAL.cooler);
+  R(clX, clY, 10, 2, PAL.coolerLid);
+  R(clX, clY, 10, 1, PAL.coolerDark);
+  R(clX + 8, clY + 3, 1, 2, PAL.coolerHandle);
+
+  // 3. Hammock between two posts (background, near right)
+  const hmX = (COLS - 4) * TILE, hmY = TILE * 5;
+  // Posts
+  R(hmX, hmY - 4, 2, 20, PAL.tikiBamboo);
+  R(hmX + 24, hmY - 4, 2, 20, PAL.tikiBamboo);
+  // Hammock rope
+  ctx.fillStyle = PAL.hammock;
+  for (let hi = 0; hi < 24; hi++) {
+    const hy = hmY + 2 + Math.floor(Math.sin(hi * 0.14 - 0.5) * 4 + 4);
+    ctx.fillRect(hmX + hi, hy, 1, 2);
+  }
+  ctx.fillStyle = PAL.hammockDark;
+  for (let hi = 0; hi < 24; hi++) {
+    const hy = hmY + 4 + Math.floor(Math.sin(hi * 0.14 - 0.5) * 4 + 4);
+    ctx.fillRect(hmX + hi, hy, 1, 1);
+  }
+
+  // 4. Thai flag on post
+  const flX = TILE * 17 + 4, flY = TILE * 2 + 2;
+  R(flX, flY, 1, 12, PAL.tikiBamboo);
+  R(flX + 1, flY + 1, 8, 2, PAL.flagRed);
+  R(flX + 1, flY + 3, 8, 1, PAL.flagWhite);
+  R(flX + 1, flY + 4, 8, 2, PAL.flagBlue);
+  R(flX + 1, flY + 6, 8, 1, PAL.flagWhite);
+  R(flX + 1, flY + 7, 8, 2, PAL.flagRed);
+  // Wind flutter
+  const flutter = Math.sin(frame * 0.05) > 0.5 ? 1 : 0;
+  if (flutter) R(flX + 8, flY + 2, 1, 6, 'rgba(0,0,0,0.05)');
+
+  // 5. Seashell collection near a desk
+  const shX = 8 * TILE + 2, shY = TILE * 4 + 2;
+  ctx.fillStyle = PAL.shell;
+  ctx.fillRect(shX, shY, 3, 2); ctx.fillRect(shX + 4, shY + 1, 2, 2);
+  ctx.fillStyle = PAL.shellDark;
+  ctx.fillRect(shX + 1, shY + 1, 1, 1);
+
+  ctx.restore();
+}
+
+function drawPropsSV() { drawPropsThai(); }
+
+// --- Lighting ---
+function drawLightingThai() {
+  const { nightFactor, warmFactor, hour } = getTimeOfDay();
+  const W = COLS * TILE, H = ROWS * TILE;
+
+  // Sunset/sunrise glow on water
+  if (warmFactor > 0) {
+    const sunGlowAlpha = (warmFactor * 0.08).toFixed(3);
+    ctx.save(); ctx.scale(SCALE, SCALE);
+    const grad = ctx.createLinearGradient(W / 2, 0, W / 2, TILE * 4);
+    grad.addColorStop(0, 'rgba(255,140,40,' + sunGlowAlpha + ')');
+    grad.addColorStop(1, 'rgba(255,140,40,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, TILE * 4);
+    ctx.restore();
+  }
+
+  // Tiki torch glow pools at night
+  if (nightFactor > 0.2) {
+    const torchAlpha = (nightFactor * 0.06).toFixed(3);
+    // Torch positions (near edges)
+    const torches = [[12, TILE * 4], [W - 14, TILE * 4], [12, TILE * 8], [W - 14, TILE * 8]];
+    torches.forEach(([tx, ty]) => {
+      const g = ctx.createRadialGradient(tx * SCALE, ty * SCALE, 4, tx * SCALE, ty * SCALE + 60, 120);
+      g.addColorStop(0, 'rgba(255,160,50,' + torchAlpha + ')');
+      g.addColorStop(1, 'rgba(255,160,50,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect((tx - 15) * SCALE, (ty - 10) * SCALE, 30 * SCALE, 20 * SCALE);
+    });
+  }
+
+  // Laptop screen glow at night
+  if (nightFactor > 0.2) {
+    const monGlowAlpha = (nightFactor * 0.04).toFixed(3);
+    DESKS.forEach(d => {
+      const mx = (d.x * TILE + 6) * SCALE;
+      const my = (d.y * TILE + 10) * SCALE;
+      const mGrad = ctx.createRadialGradient(mx, my, 4, mx, my + 40, 80);
+      mGrad.addColorStop(0, 'rgba(74,224,74,' + monGlowAlpha + ')');
+      mGrad.addColorStop(1, 'rgba(74,224,74,0)');
+      ctx.fillStyle = mGrad;
+      ctx.fillRect(mx - 80, my - 10, 160, 100);
+    });
+  }
+}
+
+function drawLightingSV() { drawLightingThai(); }
+
+// --- Particles ---
+function drawParticles() {
+  const W = COLS * TILE, H = ROWS * TILE;
+  const { nightFactor } = getTimeOfDay();
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (p.type === 'sand') {
+      p.x += p.vx;
+      p.y += p.vy + Math.sin(frame * 0.03 + i) * 0.03;
+      if (p.x > W) { p.x = 0; p.y = TILE * 4 + Math.random() * (H - TILE * 4); }
+      ctx.fillStyle = 'rgba(200,180,120,' + p.alpha.toFixed(2) + ')';
+      ctx.fillRect(p.x | 0, p.y | 0, p.size, p.size);
+    } else if (p.type === 'seagull') {
+      p.x += p.vx;
+      p.wingPhase += 0.08;
+      if (p.x > W + 10) { p.x = -10; p.y = 4 + Math.random() * 20; }
+      const wing = Math.sin(p.wingPhase) * 1.5;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(p.x | 0, p.y | 0, 1, 1);
+      ctx.fillRect((p.x - 1) | 0, (p.y + wing) | 0, 1, 1);
+      ctx.fillRect((p.x + 1) | 0, (p.y + wing) | 0, 1, 1);
+    } else if (p.type === 'firefly') {
+      if (nightFactor < 0.3) continue;
+      p.life++;
+      p.x += p.vx + Math.sin(frame * 0.02 + i * 3) * 0.1;
+      p.y += p.vy + Math.cos(frame * 0.03 + i * 2) * 0.1;
+      if (p.x < TILE * 2) p.x = W - TILE * 2;
+      if (p.x > W - TILE * 2) p.x = TILE * 2;
+      if (p.y < TILE * 4) p.y = H - TILE * 2;
+      if (p.y > H - TILE * 2) p.y = TILE * 4;
+      if (p.life >= p.maxLife) {
+        p.life = 0;
+        p.maxLife = 60 + Math.random() * 60;
+      }
+      const t = p.life / p.maxLife;
+      p.alpha = (t < 0.3 ? t / 0.3 : (1 - t) / 0.7) * nightFactor;
+      if (p.alpha > 0.02) {
+        ctx.fillStyle = 'rgba(200,255,100,' + (p.alpha * 0.5).toFixed(2) + ')';
+        ctx.fillRect(p.x | 0, p.y | 0, 1, 1);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// --- Crab (replaces tumbleweed) ---
+let crabX = -20;
+let crabDir = 1;
+function drawCrab() {
+  crabX = (crabX + 0.4 * crabDir);
+  if (crabX > COLS * S + 20) { crabX = -20; crabDir = 1; }
+  if (crabX < -20) { crabX = COLS * S + 20; crabDir = -1; }
+  const cy = (ROWS - 1) * S - 8;
+  ctx.save();
+  ctx.translate(crabX, cy);
+  if (crabDir < 0) { ctx.scale(-1, 1); }
+  // Body
+  ctx.fillStyle = '#cc4422';
+  ctx.fillRect(-4, -2, 8, 4);
+  ctx.fillRect(-5, -1, 10, 2);
+  // Eyes
+  ctx.fillStyle = '#111';
+  ctx.fillRect(-2, -3, 1, 1);
+  ctx.fillRect(1, -3, 1, 1);
+  // Claws — animated
+  const clawOpen = Math.floor(frame / 20) % 2;
+  ctx.fillStyle = '#dd5533';
+  ctx.fillRect(-7, -2, 2, 2);
+  ctx.fillRect(5, -2, 2, 2);
+  if (clawOpen) {
+    ctx.fillRect(-8, -3, 1, 1);
+    ctx.fillRect(6, -3, 1, 1);
+  }
+  // Legs — 3 per side
+  ctx.fillStyle = '#aa3322';
+  for (let li = 0; li < 3; li++) {
+    const legOff = (frame + li * 5) % 10 < 5 ? 0 : 1;
+    ctx.fillRect(-6, li * 2, 1, 1 + legOff);
+    ctx.fillRect(5, li * 2, 1, 1 + legOff);
+  }
+  ctx.restore();
+}
+
+function drawTumbleweed() { drawCrab(); }
+
+// --- Decorative palm tree positions + tiki torches ---
+function drawSceneProps() {
+  // Palm trees at edges
+  drawPalmTree(4, TILE * 2 + 8, 28);
+  drawPalmTree(COLS * TILE - 10, TILE * 2 + 6, 32);
+  drawPalmTree(COLS * TILE - 22, TILE * 3, 24);
+  drawPalmTree(14, TILE * 6, 18);
+  // Tiki torches flanking the work area
+  drawTikiTorch(10, TILE * 4);
+  drawTikiTorch(COLS * TILE - 12, TILE * 4);
+  drawTikiTorch(10, TILE * 8);
+  drawTikiTorch(COLS * TILE - 12, TILE * 8);
+  // Umbrellas over desk clusters
+  drawUmbrella(DESKS[0].x * TILE - 2, DESKS[0].y * TILE - 6);
+  drawUmbrella(DESKS[2].x * TILE - 2, DESKS[2].y * TILE - 6);
+  drawUmbrella(DESKS[8].x * TILE - 2, DESKS[8].y * TILE - 6);
+  drawUmbrella(DESKS[10].x * TILE - 2, DESKS[10].y * TILE - 6);
+}
+
+function drawFloorSV() { drawFloorThai(); }
+function drawWallsSV() { drawSkyThai(); }
+
+function drawPlant(tx, ty) {
+  // Beach plants — small tropical bush
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = tx * TILE + 4, y = ty * TILE;
+  R(x + 2, y + 6, 8, 6, PAL.palmLeaf);
+  R(x, y + 4, 12, 4, PAL.palmLeaf);
+  R(x + 2, y + 2, 8, 4, PAL.palmLeafLight);
+  R(x + 4, y + 1, 4, 2, PAL.palmLeafLight);
+  // Small flowers
+  R(x + 3, y + 3, 1, 1, '#ff6688');
+  R(x + 8, y + 4, 1, 1, '#ffcc44');
+  ctx.restore();
+}
+
+function drawServerRack() {} // Not in beach scene
+function drawLampGlow() {} // Not needed — torch glow replaces it
+
+function drawDivider(col) {
+  // Subtle sand pattern divider instead of dashed lines
+  const x = (2 + col * 5 - 1) * S + S / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(160,130,80,0.08)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([12, 12]);
+  ctx.beginPath(); ctx.moveTo(x, 4 * S); ctx.lineTo(x, ROWS * S - S); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+// --- Fire (CI failed) ---
+function drawFire(d) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE, y = d.y * TILE - 6;
+  [[PAL.fire1,'#cc0033',4,4,4],[PAL.fire2,'#dd5500',5,2,6],[PAL.fire3,PAL.fire4,4,0,4]].forEach(([c1,c2,cnt,yOff,h]) => {
+    for (let i = 0; i < cnt; i++) {
+      ctx.fillStyle = Math.random() > 0.5 ? c1 : c2;
+      ctx.fillRect(x + 2 + Math.floor(Math.random() * 12), y + yOff + Math.floor(Math.random() * h), 2, 2);
+    }
+  });
+  for (let i = 0; i < 4; i++) {
+    const age = (frame * 2 + i * 37) % 60;
+    if (age < 30) {
+      ctx.fillStyle = 'rgba(255,136,0,' + (0.6 - age/50).toFixed(2) + ')';
+      ctx.fillRect(x + 4 + Math.sin(age * 0.3 + i) * 4, y - age / 4, 1, 1);
+    }
+  }
+  R(x-2, y+8, TILE+4, 4, 'rgba(255,68,0,0.04)');
+  ctx.restore();
+}
+
+function drawBubble(d, text, color) {
+  const px = d.x * S, py = (d.y * TILE - 10) * SCALE;
+  R(px - 2, py - 26, text.length * 11 + 24, 26, 'rgba(0,0,0,0.8)');
+  R(px + S/2 - 4, py, 8, 6, 'rgba(0,0,0,0.8)');
+  ctx.fillStyle = color || '#fff'; ctx.font = '16px "Press Start 2P"';
+  ctx.textAlign = 'center'; ctx.fillText(text, px + S/2, py - 6); ctx.textAlign = 'left';
+}
+
+function drawConfetti(d) {
+  // Flower petals / tropical confetti
+  const cx = d.x * S + S/2, cy = d.y * S;
+  const colors = ['#f0c040', '#ff6688', '#fff', '#ff9944', '#88ff88', '#ff44aa'];
+  for (let i = 0; i < 15; i++) {
+    const a = (i / 15) * Math.PI * 2 + frame * 0.04;
+    const dist = 40 + Math.sin(frame * 0.08 + i * 1.3) * 28;
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fillRect(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist - 20, 4 + (i % 2) * 2, 4 + (i % 2) * 2);
+  }
+}
+
+function drawPrBadge(d, num, merged) {
+  const x = d.x * S + S - 12, y = d.y * S - 4;
+  R(x, y, 44, 24, merged ? '#d1a128' : '#2f9a3d');
+  R(x, y, 44, 2, merged ? '#e8c848' : '#4ae04a');
+  ctx.fillStyle = '#111'; ctx.font = '14px "Press Start 2P"'; ctx.fillText('#' + num, x + 4, y + 18);
+}
+
+function drawTokenBar(d, pct) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const x = d.x * TILE + 1, y = (d.y + 1) * TILE + TILE - 2, w = TILE - 2;
+  R(x, y, w, 2, '#0b0b12');
+  const color = pct > 80 ? '#c13c3c' : pct > 50 ? '#d1a128' : '#2f9a3d';
+  R(x, y, Math.floor(w * pct / 100), 2, color);
+  ctx.restore();
+}
+
+// Map live agents to desk positions for canvas rendering
+function buildCanvasAgents() {
+  return agents.slice(0, 12).map((agent, idx) => {
+    const state = mapState(agent);
+    const canvasState = state === 'waiting' || state === 'reading' ? 'reading' :
+                        state === 'review_waiting' ? 'reading' :
+                        state === 'dead' ? 'exited' :
+                        state === 'pr_closed' ? 'sleeping' :
+                        state;
+    return {
+      desk: idx,
+      ci: idx % CHARS.length,
+      state: canvasState,
+      pr: getPrNumber(agent),
+      tokens: Math.min(100, Math.max(0, getTokens(agent) / 2000 * 100)),
+      dead: state === 'dead' || state === 'exited',
+      label: getRepoName(agent) + (getIssueId(agent) ? '#' + getIssueId(agent) : ''),
+      monitorText: (function() {
+        const title = (agent.issueTitle || '').toString().trim();
+        const repo = getRepoName(agent);
+        const id = getIssueId(agent);
+        const prefix = repo && id ? repo + '#' + id : (repo || '');
+        return title && prefix ? prefix + ' — ' + title : (title || prefix || '');
+      })(),
+      failing: isCiFailing(agent),
+      coffees: coffeeCount(agent),
+      agentType: resolveAgentType(agent),
+    };
+  });
+}
+
+function drawUsageBars() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const W = COLS * TILE;
+  const bgY = ROWS * TILE - 12, bgH = 11;
+  ctx.fillStyle = 'rgba(10,10,30,0.7)';
+  ctx.fillRect(0, bgY, W, bgH);
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(0, bgY + bgH, W, 1);
+
+  const barY = bgY + 3, barH = 5, barW = 88;
+  const entries = [
+    { key: 'claude', label: 'CLAUDE', iconColor: '#f0c040', x: 4 },
+    { key: 'codex', label: 'CODEX', iconColor: '#3adf7a', x: 160 },
+  ];
+
+  entries.forEach(e => {
+    const data = canvasUsage[e.key];
+    const labelX = e.x + 8;
+    const barX = e.x + 42;
+
+    if (e.key === 'claude') {
+      ctx.fillStyle = e.iconColor;
+      ctx.fillRect(e.x + 2, barY - 1, 1, 3);
+      ctx.fillRect(e.x, barY, 5, 1);
+      ctx.fillRect(e.x + 1, barY + 1, 3, 1);
+      ctx.fillRect(e.x + 1, barY - 2, 3, 1);
+    } else {
+      ctx.fillStyle = e.iconColor;
+      ctx.fillRect(e.x + 1, barY - 1, 3, 3);
+      ctx.fillRect(e.x, barY, 5, 1);
+      ctx.fillStyle = '#2a8a5a';
+      ctx.fillRect(e.x + 2, barY, 1, 1);
+    }
+
+    ctx.font = '3px "Press Start 2P"';
+    ctx.fillStyle = '#c0c0d0';
+    ctx.fillText(e.label, labelX, barY + 3);
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = '#3a3a5e';
+    ctx.fillRect(barX, barY, barW, 1);
+    ctx.fillRect(barX, barY + barH - 1, barW, 1);
+    ctx.fillRect(barX, barY, 1, barH);
+    ctx.fillRect(barX + barW - 1, barY, 1, barH);
+
+    if (!data) {
+      ctx.fillStyle = '#555';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      ctx.fillStyle = '#888'; ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('...', barX + barW / 2 - 5, barY + 4);
+    } else if (data.error) {
+      ctx.fillStyle = '#444';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      ctx.fillStyle = '#ff5c5c'; ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('ERR', barX + barW / 2 - 6, barY + 4);
+    } else if (data.exhausted) {
+      ctx.fillStyle = '#ff5c5c';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      if (Math.floor(frame / 30) % 2 === 0) {
+        ctx.fillStyle = '#fff'; ctx.font = '3px "Press Start 2P"';
+        ctx.fillText('EXHAUSTED', barX + 4, barY + 4);
+      }
+      ctx.fillStyle = '#ff5c5c'; ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('0%', barX + barW + 3, barY + 4);
+    } else if (data.pct !== null) {
+      const pct = Math.max(0, Math.min(100, data.pct));
+      const fillW = Math.floor((barW - 2) * pct / 100);
+      const fillColor = pct > 50 ? '#3adf7a' : pct >= 20 ? '#f0c040' : '#ff5c5c';
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(barX + 1, barY + 1, fillW, barH - 2);
+      ctx.fillStyle = '#c0c0d0'; ctx.font = '3px "Press Start 2P"';
+      ctx.fillText(pct + '%', barX + barW + 3, barY + 4);
+    } else {
+      ctx.fillStyle = '#444';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      ctx.fillStyle = '#888'; ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('...', barX + barW / 2 - 5, barY + 4);
+    }
+  });
+  ctx.restore();
+}
+
+function render() {
+  frame++;
+  ctx.clearRect(0, 0, 1280, 768);
+
+  // Background: sky + ocean + sand
+  drawSkyThai();
+  drawFloorThai();
+  drawDoor();
+
+  // Environment props (behind agents)
+  drawSceneProps();
+  drawTikiSign();
+  drawBeachSign();
+  drawLightingThai();
+  drawDivider(2); drawDivider(3);
+  drawPropsThai();
+  drawUsageBars();
+
+  // Update walking transitions
+  updateTransitions();
+  updateWalkOuts();
+  const walkingDesks = new Set(transitions.map(t => t.deskIdx));
+  const walkingOutDesks = new Set(walkOuts.map(w => w.deskIdx));
+
+  const canvasAgents = buildCanvasAgents();
+  DESKS.forEach((d, idx) => {
+    const agent = canvasAgents.find(a => a.desk === idx);
+    const agentType = agent ? agent.agentType : '';
+    drawDeskThai(d, idx, agentType);
+    drawChairThai(d, idx);
+  });
+
+  canvasAgents.forEach(a => {
+    const d = DESKS[a.desk];
+    if (!d) return;
+    const isWalkingIn = walkingDesks.has(a.desk);
+    const isWalkingOut = walkingOutDesks.has(a.desk);
+    const screenState = isWalkingIn ? 'pr_open' :
+      a.failing ? 'ci_failed' :
+      a.state === 'coding' ? 'coding' :
+      a.state === 'merged' ? 'merged' : 'pr_open';
+    drawMonitorThai(d, screenState, a.monitorText, a.desk, a.agentType);
+
+    if (isWalkingIn || isWalkingOut) return;
+
+    if (a.dead) { drawTombstone(d); drawCharacterThai(d, a.ci, 'exited', a.agentType); }
+    else drawCharacterThai(d, a.ci, a.state, a.agentType);
+
+    drawTokenBar(d, a.tokens);
+    if (a.state === 'coding') {
+      drawKeyboardGlowThai(d, a.desk);
+      drawThoughtBubbleThai(d, a.desk);
+    }
+    if (a.coffees > 0) drawCoconutDrinks(d, a.coffees);
+    if (a.failing) drawFire(d);
+    if (a.pr) drawPrBadge(d, a.pr, a.state === 'merged');
+    if (a.label) {
+      const bc = a.failing ? '#f66' : (a.state === 'merged' ? '#f0c040' : '#fff');
+      drawBubble(d, a.label, bc);
+    }
+    if (a.state === 'merged') drawConfetti(d);
+  });
+
+  // Draw walking-in agents at interpolated positions
+  transitions.forEach(t => {
+    const now = Date.now();
+    if (now < t.startTime) return;
+    const pos = positionAlongPath(t.path, t.progress);
+    drawCharacterThai(pos, t.colorIdx, 'walking', t.agentType);
+  });
+
+  // Draw walking-out agents at interpolated positions
+  walkOuts.forEach(w => {
+    const now = Date.now();
+    const pos = now < w.startTime
+      ? DESKS[w.deskIdx]
+      : positionAlongPath(w.path, w.progress);
+    if (!pos) return;
+    const drawState = now < w.startTime ? w.exitState : 'walking';
+    drawCharacterThai(pos, w.colorIdx, drawState, w.agentType);
+  });
+
+  // Click glow feedback
+  if (clickedDesk >= 0 && Date.now() - clickedAt < 300) {
+    const gd = DESKS[clickedDesk];
+    if (gd) {
+      const alpha = 0.3 * (1 - (Date.now() - clickedAt) / 300);
+      ctx.fillStyle = 'rgba(240, 192, 64, ' + alpha + ')';
+      ctx.fillRect(gd.x * S - 4, gd.y * S - 8, S + 8, S * 2 + 16);
+    }
+  }
+
+  drawCrab();
+  drawPlant(0, 4); drawPlant(0, 9);
+  drawParticles();
+
+  // Day/night overlay — applied last, over entire scene
+  drawDayNightOverlay();
+
+  requestAnimationFrame(render);
+}
+
+// === SIDEBAR RESIZE ===
+(function() {
+  const sidebar = document.getElementById('sidebar');
+  const handle = document.getElementById('resizeHandle');
+  let dragging = false, startX, startW;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault(); dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+    handle.classList.add('dragging'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    sidebar.style.width = Math.max(200, Math.min(600, startW + (e.clientX - startX))) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return; dragging = false;
+    handle.classList.remove('dragging'); document.body.style.cursor = ''; document.body.style.userSelect = '';
+    try { localStorage.setItem('corral-sidebar-w', sidebar.offsetWidth); } catch {}
+  });
+  try { const saved = localStorage.getItem('corral-sidebar-w'); if (saved) sidebar.style.width = saved + 'px'; } catch {}
+})();
+
+// === MOBILE SIDEBAR TOGGLE ===
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobileOverlay');
+  const isOpen = sidebar.classList.contains('mobile-open');
+  if (isOpen) {
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('visible');
+  } else {
+    sidebar.classList.add('mobile-open');
+    overlay.classList.add('visible');
+  }
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar.classList.contains('mobile-open')) toggleMobileSidebar();
+  }
+  if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    toggleSound();
+  }
+});
+
+// Agent card tap-to-expand on mobile (touch devices)
+document.addEventListener('click', (e) => {
+  if (window.innerWidth >= 768) return;
+  const card = e.target.closest('.agent-card');
+  if (!card) return;
+  // Toggle expanded state
+  const wasExpanded = card.classList.contains('mobile-expanded');
+  // Collapse all other cards first
+  document.querySelectorAll('.agent-card.mobile-expanded').forEach(c => c.classList.remove('mobile-expanded'));
+  if (!wasExpanded) card.classList.add('mobile-expanded');
+});
+
+// === CANVAS CLICK — open agent URL ===
+let clickedDesk = -1, clickedAt = 0;
+
+function getAgentUrl(agent) {
+  if (!agent) return null;
+  if (agent.prUrl) return agent.prUrl;
+  const prNum = getPrNumber(agent);
+  if (prNum && agent.repo) return 'https://github.com/' + agent.repo + '/pull/' + prNum;
+  const issueId = getIssueId(agent);
+  if (agent.repo && issueId) return 'https://github.com/' + agent.repo + '/issues/' + issueId;
+  return null;
+}
+
+function hitTestAgent(cx, cy) {
+  const canvasAgents = buildCanvasAgents();
+  for (const a of canvasAgents) {
+    const desk = DESKS[a.desk];
+    if (!desk) continue;
+    // Hit region centered on desk+character area
+    const dx = desk.x * S + S / 2;
+    const dy = (desk.y + 1) * S;
+    if (Math.abs(cx - dx) < S * 0.7 && Math.abs(cy - dy) < S) {
+      return a.desk;
+    }
+  }
+  return -1;
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top) * scaleY;
+  const idx = hitTestAgent(cx, cy);
+  if (idx >= 0 && idx < agents.length) {
+    const url = getAgentUrl(agents[idx]);
+    if (url) {
+      clickedDesk = idx;
+      clickedAt = Date.now();
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+});
+
+// === CANVAS HOVER TOOLTIP ===
+const canvasTooltip = document.getElementById('canvasTooltip');
+let hoveredDeskIdx = -1;
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+function buildCanvasTooltip(agent) {
+  if (!agent) return '';
+  const repoName = getRepoName(agent);
+  const issueId = getIssueId(agent);
+  const label = repoName && issueId ? escapeHtml(repoName + '#' + issueId) : escapeHtml(repoName || agent.id || 'agent');
+  const state = mapState(agent);
+  const statusText = escapeHtml(stateLabel(state));
+  const pulseClass = stateToPulseClass(state);
+  const agentType = escapeHtml(resolveAgentType(agent) || 'unknown');
+  const created = getCreatedAt(agent);
+  const uptime = created ? escapeHtml(formatDuration(Date.now() - created)) : '—';
+  const prNum = getPrNumber(agent);
+  const prUrl = agent.prUrl || '';
+  const prDisplay = prNum ? `PR #${escapeHtml(prNum)}` : '—';
+  const prLink = prUrl && prNum ? `<a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener" style="color:#88aaff;pointer-events:auto">${prDisplay}</a>` : prDisplay;
+  const issueTitle = agent.issueTitle ? escapeHtml(agent.issueTitle) : '';
+  const titleRow = issueTitle ? `<div class="tt-row"><span class="tt-lbl">Issue</span><span style="color:#999">${issueTitle}</span></div>` : '';
+  return `
+    <div class="tt-title"><span class="ac-pulse ${pulseClass}"></span><span>${label}</span></div>
+    <div class="tt-row"><span class="tt-lbl">Status</span><span class="${stateToColorClass(state)}">${statusText}</span></div>
+    <div class="tt-row"><span class="tt-lbl">Type</span><span>${agentType}</span></div>
+    <div class="tt-row"><span class="tt-lbl">Uptime</span><span>${uptime}</span></div>
+    <div class="tt-row"><span class="tt-lbl">PR</span><span>${prLink}</span></div>
+    ${titleRow}
+  `;
+}
+
+function positionCanvasTooltip(clientX, clientY) {
+  const pad = 14;
+  let left = clientX + pad;
+  let top = clientY + pad;
+  const { offsetWidth: w, offsetHeight: h } = canvasTooltip;
+  if (left + w > window.innerWidth - 8) left = clientX - w - pad;
+  if (top + h > window.innerHeight - 8) top = clientY - h - pad;
+  canvasTooltip.style.left = Math.max(8, left) + 'px';
+  canvasTooltip.style.top = Math.max(8, top) + 'px';
+}
+
+function showCanvasTooltip(agent, clientX, clientY) {
+  canvasTooltip.innerHTML = buildCanvasTooltip(agent);
+  canvasTooltip.style.display = 'block';
+  canvasTooltip.setAttribute('aria-hidden', 'false');
+  positionCanvasTooltip(clientX, clientY);
+}
+
+function hideCanvasTooltip() {
+  hoveredDeskIdx = -1;
+  canvasTooltip.style.display = 'none';
+  canvasTooltip.setAttribute('aria-hidden', 'true');
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  if (isTouchDevice) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top) * scaleY;
+  const idx = hitTestAgent(cx, cy);
+  if (idx >= 0 && idx < agents.length) {
+    canvas.style.cursor = 'pointer';
+    if (idx !== hoveredDeskIdx) {
+      hoveredDeskIdx = idx;
+      showCanvasTooltip(agents[idx], e.clientX, e.clientY);
+    } else {
+      positionCanvasTooltip(e.clientX, e.clientY);
+    }
+  } else {
+    canvas.style.cursor = '';
+    if (hoveredDeskIdx >= 0) hideCanvasTooltip();
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (hoveredDeskIdx >= 0) hideCanvasTooltip();
+});
+
+// === START ===
+try { soundEnabled = localStorage.getItem('corral-sound') === '1'; } catch {}
+updateSoundButton();
+requestAnimationFrame(render);
+startPolling();
+</script>
+</body>
+</html>
