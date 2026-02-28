@@ -2755,13 +2755,23 @@ function drawPropsSV() {
   // Top box slightly open
   R(pzX + 1, pzY - 8, 10, 1, '#d8a848');
 
-  // 2. Energy drink cans — scattered
-  const cans = [[75, 42], [190, 75], [135, 108], [250, 42]];
-  cans.forEach(([cx, cy], i) => {
-    const canColor = i % 2 === 0 ? PAL.svEnergy : '#40c0ff';
-    R(cx, cy, 3, 5, PAL.svEnergyCan);
-    R(cx, cy + 1, 3, 3, canColor);
-    R(cx, cy, 3, 1, '#999'); // top rim
+  // 2. Energy drink cans — on floor near desks (not on desk surfaces)
+  // Placed in walkway gaps between desk rows, not on agent areas
+  const cans = [
+    { x: 1 * TILE + 10, y: 3 * TILE - 2, color: '#e02050' },  // Red Bull style
+    { x: 6 * TILE + 2,  y: 6 * TILE - 2, color: '#40e060' },  // Monster style
+    { x: 11 * TILE + 8, y: 9 * TILE - 2, color: '#40c0ff' },  // Blue can
+  ];
+  cans.forEach(c => {
+    // Can body (4×6 with proper shading)
+    R(c.x, c.y, 4, 6, '#aaa');           // metallic base
+    R(c.x, c.y + 1, 4, 4, c.color);     // label color
+    R(c.x + 1, c.y + 1, 2, 4, c.color); // label highlight
+    R(c.x, c.y, 4, 1, '#ccc');           // top rim
+    R(c.x, c.y + 5, 4, 1, '#888');       // bottom rim
+    R(c.x + 3, c.y + 1, 1, 4, 'rgba(0,0,0,0.2)'); // right shadow
+    // Pull tab
+    R(c.x + 1, c.y - 1, 2, 1, '#999');
   });
 
   // 3. Sticky notes — colored squares on wall near whiteboard
