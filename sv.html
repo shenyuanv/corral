@@ -1557,6 +1557,16 @@ function render() {
     if (a.state === 'merged') drawConfetti(d);
   });
 
+  // Click glow feedback
+  if (clickedDesk >= 0 && Date.now() - clickedAt < 300) {
+    const gd = DESKS[clickedDesk];
+    if (gd) {
+      const alpha = 0.3 * (1 - (Date.now() - clickedAt) / 300);
+      ctx.fillStyle = 'rgba(240, 192, 64, ' + alpha + ')';
+      ctx.fillRect(gd.x * S - 2, gd.y * S - 4, S + 4, S * 2 + 8);
+    }
+  }
+
   drawTumbleweed();
   drawPlant(0, 2); drawPlant(0, 9); drawPlant(COLS - 1, 4);
   drawServerRack((COLS - 1) * TILE - 4, 6 * TILE);
@@ -1617,6 +1627,61 @@ document.addEventListener('click', (e) => {
   // Collapse all other cards first
   document.querySelectorAll('.agent-card.mobile-expanded').forEach(c => c.classList.remove('mobile-expanded'));
   if (!wasExpanded) card.classList.add('mobile-expanded');
+});
+
+// === CANVAS CLICK — open agent URL ===
+let clickedDesk = -1, clickedAt = 0;
+
+function getAgentUrl(agent) {
+  if (!agent) return null;
+  if (agent.prUrl) return agent.prUrl;
+  const prNum = getPrNumber(agent);
+  if (prNum && agent.repo) return 'https://github.com/' + agent.repo + '/pull/' + prNum;
+  const issueId = getIssueId(agent);
+  if (agent.repo && issueId) return 'https://github.com/' + agent.repo + '/issues/' + issueId;
+  return null;
+}
+
+function hitTestAgent(cx, cy) {
+  const canvasAgents = buildCanvasAgents();
+  for (const a of canvasAgents) {
+    const desk = DESKS[a.desk];
+    if (!desk) continue;
+    // Hit region centered on desk+character area
+    const dx = desk.x * S + S / 2;
+    const dy = (desk.y + 1) * S;
+    if (Math.abs(cx - dx) < S * 0.7 && Math.abs(cy - dy) < S) {
+      return a.desk;
+    }
+  }
+  return -1;
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top) * scaleY;
+  const idx = hitTestAgent(cx, cy);
+  if (idx >= 0 && idx < agents.length) {
+    const url = getAgentUrl(agents[idx]);
+    if (url) {
+      clickedDesk = idx;
+      clickedAt = Date.now();
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top) * scaleY;
+  const idx = hitTestAgent(cx, cy);
+  canvas.style.cursor = (idx >= 0 && idx < agents.length) ? 'pointer' : '';
 });
 
 // === START ===
