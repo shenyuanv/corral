@@ -1598,8 +1598,8 @@ const PAL = {
   wb: '#d8d8c8', wbFrame: '#888',
   pizza: '#c49b2a', pizzaDark: '#8b6914',
   // SV environment upgrades
-  svFloor1: '#4a4458', svFloor2: '#3a3648', svFloor3: '#524c62', svFloor4: '#44405a',
-  svFloorWarm: 'rgba(255,200,100,0.03)',
+  svFloor1: '#c8a876', svFloor2: '#b89860', svFloor3: '#d4b888', svFloor4: '#bfa070',
+  svFloorWarm: 'rgba(255,210,120,0.06)',
   svBrick: '#6a3a2a', svBrickDark: '#5a2e20', svBrickMortar: '#4a3830',
   svConduit: '#555', svConduitLight: '#666',
   svFluor: '#c8e8ff', svFluorGlow: 'rgba(200,232,255,0.06)',
@@ -2503,23 +2503,60 @@ function drawTumbleweed() {
 
 function drawFloorSV() {
   // Floor starts at row 2 (rows 0-1 are wall)
-  for (let r = 2; r < ROWS; r++)
+  // Wood plank palette — 4 alternating plank colors for variety
+  const plankColors = [PAL.svFloor1, PAL.svFloor2, PAL.svFloor3, PAL.svFloor4];
+  // Each plank band is 3 rows tall; assign a color per band with pseudo-random offset
+  for (let r = 2; r < ROWS; r++) {
+    const band = Math.floor((r - 2) / 3);
     for (let c = 0; c < COLS; c++) {
-      const checker = (c + r) % 2;
+      // Slight per-tile color variation within a band
       const noise = Math.sin(c * 7 + r * 13) * 0.5 + 0.5;
-      let base;
-      if (checker === 0) base = noise > 0.3 ? PAL.svFloor1 : PAL.svFloor2;
-      else base = noise > 0.5 ? PAL.svFloor3 : PAL.svFloor4;
-      tileRect(c, r, 1, 1, base);
+      const colorIdx = (band + (noise > 0.7 ? 1 : 0)) % plankColors.length;
+      tileRect(c, r, 1, 1, plankColors[colorIdx]);
     }
+  }
   ctx.save(); ctx.scale(SCALE, SCALE);
   const W = COLS * TILE, H = ROWS * TILE;
   const WALL_H = TILE * 2;
+  // Wood grain — subtle darker horizontal lines within planks
+  ctx.fillStyle = 'rgba(100,60,20,0.08)';
+  for (let r = 2; r < ROWS; r++) {
+    const ry = r * TILE;
+    // 2-3 grain lines per tile row
+    for (let g = 0; g < 3; g++) {
+      const gy = ry + 3 + g * 5 + (Math.sin(r * 4.7 + g * 2.3) * 1.5 | 0);
+      if (gy >= ry && gy < ry + TILE) {
+        // Grain lines span full width with small gaps for natural look
+        for (let x = 0; x < W; x += 2) {
+          const skip = Math.sin(x * 0.3 + r * 1.7 + g) > 0.85;
+          if (!skip) ctx.fillRect(x, gy, 2, 1);
+        }
+      }
+    }
+  }
+  // Plank seams — thin dark horizontal lines between plank bands (every 3 rows)
+  ctx.fillStyle = 'rgba(80,50,20,0.25)';
+  for (let r = 2; r < ROWS; r++) {
+    if ((r - 2) % 3 === 0 && r > 2) {
+      const sy = r * TILE;
+      ctx.fillRect(0, sy, W, 1);
+    }
+  }
+  // Wood knots — occasional small darker ovals
+  ctx.fillStyle = 'rgba(90,55,20,0.15)';
+  const knots = [[45, 52], [130, 85], [210, 130], [75, 145], [260, 68], [170, 160]];
+  for (const [kx, ky] of knots) {
+    if (ky >= WALL_H) {
+      ctx.beginPath();
+      ctx.ellipse(kx, ky, 2, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   // Per-row depth gradient — darker at edges, lighter center (floor rows only)
   for (let r = 2; r < ROWS; r++) {
     const ry = r * TILE;
     const grad = ctx.createLinearGradient(0, ry, W, ry);
-    const edgeA = (0.06 + r * 0.004).toFixed(3);
+    const edgeA = (0.04 + r * 0.003).toFixed(3);
     const midA = '0.000';
     grad.addColorStop(0, 'rgba(0,0,0,' + edgeA + ')');
     grad.addColorStop(0.35, 'rgba(0,0,0,' + midA + ')');
@@ -2530,31 +2567,20 @@ function drawFloorSV() {
   }
   // Depth gradient below wall — darker near wall base
   const ceilGrad = ctx.createLinearGradient(0, WALL_H, 0, WALL_H + TILE * 2);
-  ceilGrad.addColorStop(0, 'rgba(0,0,20,0.08)');
+  ceilGrad.addColorStop(0, 'rgba(0,0,20,0.06)');
   ceilGrad.addColorStop(1, 'rgba(0,0,20,0)');
   ctx.fillStyle = ceilGrad;
   ctx.fillRect(0, WALL_H, W, TILE * 2);
   // Warm ambient tint
   ctx.fillStyle = PAL.svFloorWarm;
   ctx.fillRect(0, WALL_H, W, H - WALL_H);
-  // Concrete cracks
-  ctx.fillStyle = '#2e2845';
-  for (let i = 0; i < 18; i++) ctx.fillRect(30 + i * 2, 95 + (Math.sin(i * 1.3) * 2 | 0), 2, 1);
-  for (let i = 0; i < 12; i++) ctx.fillRect(170 + i * 2, 140 + (i % 3 === 0 ? 1 : 0), 1, 1);
-  for (let i = 0; i < 8; i++) ctx.fillRect(100 + i * 3, 60 + (Math.sin(i * 0.7) | 0), 2, 1);
-  // Scuff marks — occasional single dark pixels
-  ctx.fillStyle = 'rgba(20,15,30,0.18)';
-  for (let i = 0; i < 10; i++) {
-    const sx = (i * 31 + 17) % W, sy = WALL_H + (i * 23 + 7) % (H - WALL_H);
-    ctx.fillRect(sx, sy, 1, 1);
-  }
-  // Floor stains (spilled coffee, etc)
-  ctx.fillStyle = 'rgba(60,40,20,0.12)';
+  // Coffee stains — subtle on wood
+  ctx.fillStyle = 'rgba(80,50,20,0.07)';
   ctx.fillRect(85, 125, 6, 5);
   ctx.fillRect(195, 105, 5, 4);
   ctx.fillRect(145, 160, 4, 3);
-  // Epoxy shine spots — subtle specular highlights
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  // Wood polish highlights — subtle specular
+  ctx.fillStyle = 'rgba(255,255,240,0.05)';
   ctx.fillRect(50, 80, 20, 15);
   ctx.fillRect(150, 50, 15, 12);
   ctx.fillRect(240, 120, 18, 10);
