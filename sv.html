@@ -638,6 +638,11 @@ let connectionState = 'connecting';
 let polling = false;
 const startTime = Date.now();
 
+// --- Walk animation state ---
+let transitions = [];    // { key, deskIdx, path, progress, colorIdx, startTime }
+let prevAgentKeys = new Set();
+let hasInitialized = false;
+
 // --- Helpers ---
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => {
@@ -1051,6 +1056,7 @@ async function refreshFromLasso() {
     if (!agentsResp.ok) throw new Error('Agents fetch failed');
     const data = await agentsResp.json();
     agents = Array.isArray(data) ? data : (data.sessions || []);
+    detectNewAgents();
 
     if (historyResp.ok) {
       const hData = await historyResp.json();
@@ -1157,6 +1163,87 @@ const DESKS = [];
 for (let r = 0; r < 3; r++)
   for (let c = 0; c < 4; c++)
     DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
+
+// --- Walk animation ---
+const DOOR_TILE = { x: 0, y: 1 };
+const WALK_SPEED = 2; // tiles per second
+const ENTER_STAGGER = 0.5; // seconds between multiple entering agents
+
+function agentKey(agent, fallbackIndex) {
+  if (!agent) return 'agent-' + fallbackIndex;
+  const id = (agent.id || agent.label || agent.agentId || agent.name || '').toString().trim();
+  return id || ('agent-' + fallbackIndex);
+}
+
+function buildPath(start, end) {
+  const mid = { x: end.x, y: start.y };
+  const seg1 = Math.abs(mid.x - start.x) + Math.abs(mid.y - start.y);
+  const seg2 = Math.abs(end.x - mid.x) + Math.abs(end.y - mid.y);
+  return { start: { ...start }, mid, end: { ...end }, seg1, seg2, total: seg1 + seg2 };
+}
+
+function positionAlongPath(path, dist) {
+  if (path.total === 0) return { x: path.end.x, y: path.end.y };
+  if (dist <= path.seg1) {
+    const dx = path.mid.x - path.start.x;
+    const dy = path.mid.y - path.start.y;
+    return {
+      x: path.start.x + (dx === 0 ? 0 : Math.sign(dx) * dist),
+      y: path.start.y + (dy === 0 ? 0 : Math.sign(dy) * dist),
+    };
+  }
+  const remaining = dist - path.seg1;
+  const dx = path.end.x - path.mid.x;
+  const dy = path.end.y - path.mid.y;
+  return {
+    x: path.mid.x + (dx === 0 ? 0 : Math.sign(dx) * remaining),
+    y: path.mid.y + (dy === 0 ? 0 : Math.sign(dy) * remaining),
+  };
+}
+
+function updateTransitions() {
+  if (!transitions.length) return;
+  const now = Date.now();
+  const next = [];
+  transitions.forEach(t => {
+    if (t.path.total === 0) return;
+    const elapsed = Math.max(0, now - t.startTime) / 1000;
+    t.progress = Math.min(t.path.total, elapsed * WALK_SPEED);
+    if (t.progress >= t.path.total) return;
+    next.push(t);
+  });
+  transitions = next;
+}
+
+function detectNewAgents() {
+  const currentKeys = new Set();
+  agents.slice(0, 12).forEach((a, i) => currentKeys.add(agentKey(a, i)));
+
+  if (hasInitialized) {
+    let staggerIdx = 0;
+    const now = Date.now();
+    const existingTransitionKeys = new Set(transitions.map(t => t.key));
+    agents.slice(0, 12).forEach((agent, idx) => {
+      const key = agentKey(agent, idx);
+      if (!prevAgentKeys.has(key) && !existingTransitionKeys.has(key)) {
+        const desk = DESKS[idx];
+        if (!desk) return;
+        transitions.push({
+          key,
+          deskIdx: idx,
+          path: buildPath(DOOR_TILE, { x: desk.x, y: desk.y }),
+          progress: 0,
+          colorIdx: idx % CHARS.length,
+          startTime: now + staggerIdx * ENTER_STAGGER * 1000,
+        });
+        staggerIdx++;
+      }
+    });
+  }
+
+  hasInitialized = true;
+  prevAgentKeys = currentKeys;
+}
 
 function R(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
 function tileRect(tx, ty, tw, th, color) { R(tx * S, ty * S, tw * S, th * S, color); }
@@ -1535,14 +1622,22 @@ function render() {
 
   DESKS.forEach(d => { drawDesk(d); drawChair(d); });
 
+  // Update walking transitions
+  updateTransitions();
+  const walkingDesks = new Set(transitions.map(t => t.deskIdx));
+
   const canvasAgents = buildCanvasAgents();
   canvasAgents.forEach(a => {
     const d = DESKS[a.desk];
     if (!d) return;
-    const screenState = a.failing ? 'ci_failed' :
+    const isWalking = walkingDesks.has(a.desk);
+    const screenState = isWalking ? 'pr_open' :
+      a.failing ? 'ci_failed' :
       a.state === 'coding' ? 'coding' :
       a.state === 'merged' ? 'merged' : 'pr_open';
     drawMonitor(d, screenState);
+
+    if (isWalking) return;
 
     if (a.dead) drawTombstone(d);
     else drawCharacter(d, a.ci, a.state);
@@ -1555,6 +1650,14 @@ function render() {
       drawBubble(d, a.label, bc);
     }
     if (a.state === 'merged') drawConfetti(d);
+  });
+
+  // Draw walking agents at interpolated positions
+  transitions.forEach(t => {
+    const now = Date.now();
+    if (now < t.startTime) return;
+    const pos = positionAlongPath(t.path, t.progress);
+    drawCharacter(pos, t.colorIdx, 'walking');
   });
 
   // Click glow feedback
