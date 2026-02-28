@@ -706,17 +706,7 @@
 <!-- UI MODE REDIRECT -->
 <script>
 (function() {
-  var pref = null;
-  try { pref = localStorage.getItem('corral-ui-mode'); } catch(e) {}
-  if (pref === 'classic') {
-    window.location.replace('/');
-    return;
-  }
-  if (pref === 'sv') {
-    window.location.replace('/sv');
-    return;
-  }
-  // Set preference to thai if not already set
+  // Always set preference to thai when visiting /thai directly
   try { localStorage.setItem('corral-ui-mode', 'thai'); } catch(e) {}
 })();
 </script>
