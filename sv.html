@@ -1462,6 +1462,48 @@ function detectNewAgents() {
 function R(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
 function tileRect(tx, ty, tw, th, color) { R(tx * S, ty * S, tw * S, th * S, color); }
 
+// === DAY/NIGHT CYCLE ===
+function getTimeOfDay() {
+  const now = new Date();
+  const h = now.getHours() + now.getMinutes() / 60;
+  // nightFactor: 0 = full day, 1 = full night
+  // Smooth sine-based transitions during dawn (6-8) and dusk (18-20)
+  let nightFactor;
+  if (h >= 8 && h < 18) {
+    nightFactor = 0; // day
+  } else if (h >= 20 || h < 6) {
+    nightFactor = 1; // night
+  } else if (h >= 6 && h < 8) {
+    // dawn: 1 → 0 over 2 hours
+    nightFactor = 0.5 + 0.5 * Math.cos((h - 6) / 2 * Math.PI);
+  } else {
+    // dusk (18-20): 0 → 1 over 2 hours
+    nightFactor = 0.5 - 0.5 * Math.cos((h - 18) / 2 * Math.PI);
+  }
+  // warmFactor peaks during dawn/dusk
+  let warmFactor = 0;
+  if (h >= 6 && h < 8) warmFactor = Math.sin((h - 6) / 2 * Math.PI);
+  else if (h >= 18 && h < 20) warmFactor = Math.sin((h - 18) / 2 * Math.PI);
+  return { nightFactor, warmFactor, hour: h };
+}
+
+function drawDayNightOverlay() {
+  const { nightFactor, warmFactor } = getTimeOfDay();
+  if (nightFactor <= 0 && warmFactor <= 0) return;
+  ctx.save();
+  // Night blue overlay
+  if (nightFactor > 0) {
+    ctx.fillStyle = 'rgba(10,10,40,' + (0.3 * nightFactor).toFixed(3) + ')';
+    ctx.fillRect(0, 0, COLS * TILE * SCALE, ROWS * TILE * SCALE);
+  }
+  // Dawn/dusk warm overlay
+  if (warmFactor > 0) {
+    ctx.fillStyle = 'rgba(255,160,50,' + (0.1 * warmFactor).toFixed(3) + ')';
+    ctx.fillRect(0, 0, COLS * TILE * SCALE, ROWS * TILE * SCALE);
+  }
+  ctx.restore();
+}
+
 function drawFloor() {
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++) {
@@ -1504,21 +1546,48 @@ function drawGarageFrame() {
 function drawWindow() {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const x = 120, y = 2, w = 64, h = 12;
-  R(x, y, w, h, '#0a1029');
+  const { nightFactor, warmFactor, hour } = getTimeOfDay();
+  // Sky color: lerp between day blue and night dark
+  const skyR = Math.round(10 + (1 - nightFactor) * 60 + warmFactor * 80);
+  const skyG = Math.round(16 + (1 - nightFactor) * 80 + warmFactor * 40);
+  const skyB = Math.round(41 + (1 - nightFactor) * 100);
+  const skyColor = 'rgb(' + Math.min(skyR,255) + ',' + Math.min(skyG,255) + ',' + Math.min(skyB,255) + ')';
+  R(x, y, w, h, skyColor);
+  // Building silhouette color: darker at night, slightly lighter during day
+  const bldR = Math.round(12 + (1 - nightFactor) * 30);
+  const bldG = Math.round(21 + (1 - nightFactor) * 30);
+  const bldB = Math.round(48 + (1 - nightFactor) * 30);
+  const bldColor = 'rgb(' + bldR + ',' + bldG + ',' + bldB + ')';
   const buildings = [[x+2,y+6,6,6],[x+10,y+4,4,8],[x+16,y+7,5,5],[x+24,y+3,8,9],[x+34,y+5,6,7],[x+42,y+6,4,6],[x+48,y+4,5,8],[x+55,y+7,6,5]];
+  // Building window lights: more visible at night
+  const windowChance = 0.3 + nightFactor * 0.4;
   buildings.forEach(([bx,by,bw,bh]) => {
-    ctx.fillStyle = '#0c1530'; ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = bldColor; ctx.fillRect(bx, by, bw, bh);
     for (let wx = bx + 1; wx < bx + bw - 1; wx += 2)
       for (let wy = by + 1; wy < by + bh - 1; wy += 2)
-        if (Math.random() > 0.5) {
+        if (Math.random() > (1 - windowChance)) {
           ctx.fillStyle = ['#f0d060','#5dfc5d','#00e5ff','#ff8844','#fff'][Math.floor(Math.random()*5)];
           ctx.fillRect(wx, wy, 1, 1);
         }
   });
-  ctx.fillStyle = '#fff';
-  [[x+5,y+1],[x+20,y+2],[x+45,y+1],[x+55,y+2],[x+35,y+1],[x+15,y+1],[x+60,y+2]].forEach(([sx,sy]) => ctx.fillRect(sx, sy, 1, 1));
-  ctx.fillStyle = '#ffe39a'; ctx.fillRect(x+50, y+1, 4, 4);
-  ctx.fillStyle = '#d8d060'; ctx.fillRect(x+51, y+1, 2, 2);
+  // Stars: only visible at night
+  if (nightFactor > 0.3) {
+    ctx.fillStyle = 'rgba(255,255,255,' + (nightFactor * 0.8).toFixed(2) + ')';
+    [[x+5,y+1],[x+20,y+2],[x+45,y+1],[x+55,y+2],[x+35,y+1],[x+15,y+1],[x+60,y+2]].forEach(([sx,sy]) => ctx.fillRect(sx, sy, 1, 1));
+  }
+  // Moon/sun
+  if (nightFactor > 0.3) {
+    // Moon at night
+    ctx.fillStyle = 'rgba(255,240,200,' + (nightFactor * 0.9).toFixed(2) + ')';
+    ctx.fillRect(x+50, y+1, 4, 4);
+    ctx.fillStyle = 'rgba(220,210,160,' + (nightFactor * 0.7).toFixed(2) + ')';
+    ctx.fillRect(x+51, y+1, 2, 2);
+  } else {
+    // Sun during day
+    ctx.fillStyle = '#ffe39a'; ctx.fillRect(x+50, y+1, 4, 4);
+    ctx.fillStyle = '#d8d060'; ctx.fillRect(x+51, y+1, 2, 2);
+  }
+  // Window frame
   ctx.fillStyle = '#5a5040';
   ctx.fillRect(x-1, y-1, w+2, 1); ctx.fillRect(x-1, y+h, w+2, 1);
   ctx.fillRect(x-1, y-1, 1, h+2); ctx.fillRect(x+w, y-1, 1, h+2);
@@ -1539,7 +1608,11 @@ function drawDoor() {
 function drawNeonSign() {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const nx = 55, ny = 3;
-  for (let r = 8; r > 0; r -= 2) R(nx-r, ny-r, 56+r*2, 10+r*2, `rgba(255,45,123,${0.008 * (8-r)})`);
+  const { nightFactor } = getTimeOfDay();
+  // Glow radius and intensity increase at night
+  const glowMult = 1 + nightFactor * 1.5;
+  const maxR = Math.round(8 * glowMult);
+  for (let r = maxR; r > 0; r -= 2) R(nx-r, ny-r, 56+r*2, 10+r*2, 'rgba(255,45,123,' + (0.008 * glowMult * (maxR-r) / maxR * 8).toFixed(4) + ')');
   const L = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[1,5],[2,5],[3,5]];
   const A = [[5,1],[5,2],[5,3],[5,4],[5,5],[6,0],[7,0],[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[6,3],[7,3]];
   const S1 = [[10,0],[11,0],[12,0],[13,0],[10,1],[10,2],[11,2],[12,2],[13,2],[13,3],[13,4],[10,5],[11,5],[12,5],[13,5],[10,4]];
@@ -1548,7 +1621,9 @@ function drawNeonSign() {
   [L, A, S1, S2, O].forEach(letter => { letter.forEach(([lx, ly]) => R(nx+lx*2, ny+ly, 2, 1, PAL.neonPink)); });
   R(nx, ny+7, 48, 1, PAL.neonCyan);
   for (let i = 0; i < 48; i += 3) R(nx+i, ny+7, 1, 1, '#005a6a');
-  R(nx-4, ny+8, 56, 4, PAL.neonPinkGlow);
+  // Stronger underglow at night
+  const underGlowAlpha = (0.12 + nightFactor * 0.15).toFixed(3);
+  R(nx-4, ny+8, 56, 4, 'rgba(255,45,123,' + underGlowAlpha + ')');
   ctx.restore();
 }
 
@@ -2034,15 +2109,17 @@ function drawWallsSV() {
   for (let x = 0; x < COLS * TILE; x += 30) {
     ctx.fillRect(x, TILE - 5, 1, 3); // conduit brackets
   }
-  // Fluorescent light strips on ceiling
+  // Fluorescent light strips on ceiling — brighter at night
+  const { nightFactor: wallNF } = getTimeOfDay();
+  const flourGlowAlpha = (0.06 + wallNF * 0.12).toFixed(3);
   for (let i = 0; i < 4; i++) {
     const lx = 30 + i * 70, ly = 0;
     ctx.fillStyle = PAL.svFluor;
     ctx.fillRect(lx, ly, 30, 2);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = wallNF > 0.3 ? 'rgba(255,255,255,' + (0.8 + wallNF * 0.2).toFixed(2) + ')' : '#fff';
     ctx.fillRect(lx + 2, ly, 26, 1);
     // Glow below
-    ctx.fillStyle = PAL.svFluorGlow;
+    ctx.fillStyle = 'rgba(200,232,255,' + flourGlowAlpha + ')';
     ctx.fillRect(lx - 4, ly + 2, 38, 8);
   }
   ctx.restore();
@@ -2291,25 +2368,55 @@ function drawPropsSV() {
 }
 
 function drawLightingSV() {
-  // Neon sign extended glow on nearby walls/floor
+  const { nightFactor } = getTimeOfDay();
+  // Neon sign extended glow on nearby walls/floor — stronger at night
   const neonCX = (55 + 24) * SCALE;
   const neonCY = 5 * SCALE;
+  const neonAlpha1 = (0.07 + nightFactor * 0.08).toFixed(3);
+  const neonAlpha2 = (0.03 + nightFactor * 0.04).toFixed(3);
   const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 10, neonCX, neonCY + 80, 140);
-  neonGrad.addColorStop(0, 'rgba(255,45,123,0.07)');
-  neonGrad.addColorStop(0.5, 'rgba(0,229,255,0.03)');
+  neonGrad.addColorStop(0, 'rgba(255,45,123,' + neonAlpha1 + ')');
+  neonGrad.addColorStop(0.5, 'rgba(0,229,255,' + neonAlpha2 + ')');
   neonGrad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = neonGrad;
   ctx.fillRect(neonCX - 140, neonCY - 10, 280, 200);
 
-  // Fluorescent ceiling light glow pools on floor
+  // Fluorescent ceiling light glow pools on floor — brighter at night
+  const ceilAlpha = (0.04 + nightFactor * 0.08).toFixed(3);
   for (let i = 0; i < 4; i++) {
     const lx = (30 + i * 70 + 15) * SCALE;
     const ly = 3 * S;
     const flGrad = ctx.createRadialGradient(lx, ly, 5, lx, ly + 40, 80);
-    flGrad.addColorStop(0, 'rgba(200,232,255,0.04)');
+    flGrad.addColorStop(0, 'rgba(200,232,255,' + ceilAlpha + ')');
     flGrad.addColorStop(1, 'rgba(200,232,255,0)');
     ctx.fillStyle = flGrad;
     ctx.fillRect(lx - 80, ly, 160, 100);
+  }
+
+  // Night: draw visible ceiling light rectangles
+  if (nightFactor > 0.2) {
+    ctx.save(); ctx.scale(SCALE, SCALE);
+    const lightAlpha = (nightFactor * 0.6).toFixed(3);
+    ctx.fillStyle = 'rgba(220,240,255,' + lightAlpha + ')';
+    for (let i = 0; i < 4; i++) {
+      const lx = 30 + i * 70;
+      ctx.fillRect(lx + 4, 0, 22, 2);
+    }
+    ctx.restore();
+  }
+
+  // Night: monitor screens cast visible light pools on nearby floor
+  if (nightFactor > 0.2) {
+    const monGlowAlpha = (nightFactor * 0.05).toFixed(3);
+    DESKS.forEach(d => {
+      const mx = (d.x * TILE + 6) * SCALE;
+      const my = (d.y * TILE + 10) * SCALE;
+      const mGrad = ctx.createRadialGradient(mx, my, 2, mx, my + 20, 40);
+      mGrad.addColorStop(0, 'rgba(74,224,74,' + monGlowAlpha + ')');
+      mGrad.addColorStop(1, 'rgba(74,224,74,0)');
+      ctx.fillStyle = mGrad;
+      ctx.fillRect(mx - 40, my - 5, 80, 50);
+    });
   }
 }
 
@@ -2409,6 +2516,9 @@ function render() {
   drawTumbleweed();
   drawPlant(0, 2); drawPlant(0, 9); drawPlant(COLS - 1, 4);
   drawServerRack((COLS - 1) * TILE - 4, 6 * TILE);
+
+  // Day/night overlay — applied last, over entire scene
+  drawDayNightOverlay();
 
   requestAnimationFrame(render);
 }
