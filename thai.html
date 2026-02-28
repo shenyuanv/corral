@@ -1652,7 +1652,7 @@ const CHARS_THAI = [
 ];
 
 const DESKS = [];
-for (let r = 0; r < 3; r++)
+for (let r = 1; r < 3; r++)
   for (let c = 0; c < 4; c++)
     DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
 
@@ -1750,13 +1750,13 @@ function updateTransitions() {
 
 function detectNewAgents() {
   const currentKeys = new Set();
-  agents.slice(0, 12).forEach((a, i) => currentKeys.add(agentKey(a, i)));
+  agents.slice(0, 8).forEach((a, i) => currentKeys.add(agentKey(a, i)));
 
   if (hasInitialized) {
     let staggerIdx = 0;
     const now = Date.now();
     const existingTransitionKeys = new Set(transitions.map(t => t.key));
-    agents.slice(0, 12).forEach((agent, idx) => {
+    agents.slice(0, 8).forEach((agent, idx) => {
       const key = agentKey(agent, idx);
       if (!prevAgentKeys.has(key) && !existingTransitionKeys.has(key)) {
         const desk = DESKS[idx];
@@ -1789,7 +1789,7 @@ function detectWalkOuts() {
   const now = Date.now();
   const existingWalkOutKeys = new Set(walkOuts.map(w => w.key));
 
-  agents.slice(0, 12).forEach((agent, idx) => {
+  agents.slice(0, 8).forEach((agent, idx) => {
     const key = agentKey(agent, idx);
     const state = mapState(agent);
     const prevState = prevAgentMapStates.get(key);
@@ -1841,12 +1841,12 @@ function hasPrOpen(agent) {
 function detectSoundEvents() {
   if (!hasInitialized || previousAgentsByKey.size === 0) {
     // First load — store state but don't play sounds
-    agents.slice(0, 12).forEach((a, i) => previousAgentsByKey.set(agentKey(a, i), a));
+    agents.slice(0, 8).forEach((a, i) => previousAgentsByKey.set(agentKey(a, i), a));
     return;
   }
 
   let soundToPlay = null;
-  agents.slice(0, 12).forEach((agent, idx) => {
+  agents.slice(0, 8).forEach((agent, idx) => {
     const key = agentKey(agent, idx);
     const prev = previousAgentsByKey.get(key);
 
@@ -1891,7 +1891,7 @@ function detectSoundEvents() {
 
   // Store current state for next comparison
   previousAgentsByKey.clear();
-  agents.slice(0, 12).forEach((a, i) => previousAgentsByKey.set(agentKey(a, i), a));
+  agents.slice(0, 8).forEach((a, i) => previousAgentsByKey.set(agentKey(a, i), a));
 }
 
 function R(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
@@ -2989,7 +2989,7 @@ function drawTokenBar(d, pct) {
 
 // Map live agents to desk positions for canvas rendering
 function buildCanvasAgents() {
-  return agents.slice(0, 12).map((agent, idx) => {
+  return agents.slice(0, 8).map((agent, idx) => {
     const state = mapState(agent);
     const canvasState = state === 'waiting' || state === 'reading' ? 'reading' :
                         state === 'review_waiting' ? 'reading' :
