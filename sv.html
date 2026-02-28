@@ -2755,23 +2755,32 @@ function drawPropsSV() {
   // Top box slightly open
   R(pzX + 1, pzY - 8, 10, 1, '#d8a848');
 
-  // 2. Energy drink cans — on floor near desks (not on desk surfaces)
-  // Placed in walkway gaps between desk rows, not on agent areas
-  const cans = [
-    { x: 1 * TILE + 10, y: 3 * TILE - 2, color: '#e02050' },  // Red Bull style
-    { x: 6 * TILE + 2,  y: 6 * TILE - 2, color: '#40e060' },  // Monster style
-    { x: 11 * TILE + 8, y: 9 * TILE - 2, color: '#40c0ff' },  // Blue can
-  ];
-  cans.forEach(c => {
-    // Can body (4×6 with proper shading)
-    R(c.x, c.y, 4, 6, '#aaa');           // metallic base
-    R(c.x, c.y + 1, 4, 4, c.color);     // label color
-    R(c.x + 1, c.y + 1, 2, 4, c.color); // label highlight
-    R(c.x, c.y, 4, 1, '#ccc');           // top rim
-    R(c.x, c.y + 5, 4, 1, '#888');       // bottom rim
-    R(c.x + 3, c.y + 1, 1, 4, 'rgba(0,0,0,0.2)'); // right shadow
-    // Pull tab
-    R(c.x + 1, c.y - 1, 2, 1, '#999');
+  // 2. Floor cable runs — ethernet/power cables across walkways (SV garage vibe)
+  ctx.fillStyle = '#2a2a3a';
+  // Horizontal cable run between row 1 and 2
+  for (let cx = 3 * TILE; cx < 17 * TILE; cx += 2) {
+    const wobble = Math.sin(cx * 0.3) * 0.8;
+    R(cx, 3 * TILE + 6 + Math.round(wobble), 2, 1, '#2a2a3a');
+  }
+  // Cable tie-downs (small squares along cable)
+  [5, 9, 13].forEach(col => {
+    R(col * TILE, 3 * TILE + 6, 2, 2, '#444');
+  });
+
+  // 3. Whiteboard markers — on floor near whiteboard
+  const mkX = 17 * TILE + 2, mkY = 2 * TILE + 10;
+  [['#e04040', 0], ['#4040e0', 3], ['#40a040', 6]].forEach(([color, offset]) => {
+    R(mkX + offset, mkY, 6, 2, color);
+    R(mkX + offset, mkY, 1, 2, '#ddd'); // cap
+  });
+
+  // 4. Laptop stickers on wall — YC, GitHub octocat, etc (colored squares = stickers)
+  const stX = 8 * TILE, stY = 1;
+  [['#f06529', 'YC'], ['#333', '◆'], ['#6e5494', '⚡']].forEach(([bg, _label], i) => {
+    R(stX + i * 8, stY, 6, 6, bg);
+    R(stX + i * 8 + 1, stY + 1, 4, 4, bg);
+    // Slight highlight
+    R(stX + i * 8, stY, 6, 1, 'rgba(255,255,255,0.15)');
   });
 
   // 3. Sticky notes — colored squares on wall near whiteboard
