@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Corral 🤠 — SV Mode</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/nes.css@2.3.0/css/nes.min.css" rel="stylesheet" />
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -385,6 +386,43 @@
   /* No-data message */
   .no-data { color: #555; font-size: 7px; text-align: center; padding: 12px; }
 
+  /* === NES.CSS DARK THEME OVERRIDES === */
+  .nes-container.is-dark {
+    background: #1a1a2e;
+    padding: 8px 10px;
+    margin-bottom: 0;
+    position: relative;
+  }
+  .nes-container.is-dark.with-title > .title {
+    background-color: #1a1a2e;
+    color: #f0c040;
+    font-size: 9px;
+    text-shadow: 0 0 8px #f0c04022;
+  }
+  .nes-container.is-dark::after {
+    box-shadow: inset -4px -4px #2a2a4a;
+  }
+  .nes-container.is-dark::before {
+    box-shadow: inset -4px -4px #3a3a5c;
+  }
+  .nes-badge { white-space: nowrap; }
+  .nes-badge span { font-size: 6px; padding: 2px 6px; }
+  .nes-progress {
+    height: 8px;
+    border-color: #2a2a4a;
+    background: #0f0f1a;
+  }
+  .nes-btn {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    padding: 4px 10px;
+  }
+  .nes-btn.is-primary { color: #fff; }
+  .nes-icon { display: inline-block; vertical-align: middle; }
+  .sidebar .nes-container {
+    border-image-repeat: stretch;
+  }
+
   /* Mobile menu button — hidden on desktop */
   .mobile-menu-btn { display: none; }
 
@@ -454,17 +492,24 @@
 
     /* Agent cards: larger touch targets */
     .agent-card {
-      padding: 12px 14px;
+      padding: 10px 12px !important;
       margin-bottom: 10px;
     }
-    .ac-top { gap: 8px; margin-bottom: 8px; }
-    .ac-pulse { width: 10px; height: 10px; }
-    .ac-name { font-size: 10px; }
-    .ac-time { font-size: 8px; }
     .ac-detail { font-size: 9px; line-height: 2.2; }
 
+    /* NES.css mobile overrides */
+    .nes-container.is-dark.with-title {
+      padding: 8px 10px;
+    }
+    .nes-container.is-dark.with-title > .title {
+      font-size: 8px;
+    }
+    .nes-badge span { font-size: 5px; }
+    .nes-btn { font-size: 7px; padding: 3px 6px; }
+    .nes-progress { height: 6px; }
+
     /* Sidebar sections: more padding */
-    .sb-section { padding: 12px 14px; }
+    .sb-section { padding: 10px 12px; }
     .sb-header { font-size: 10px; margin-bottom: 12px; }
 
     /* Scene area: responsive — fill width, auto height from aspect ratio */
@@ -523,11 +568,10 @@
     .top-title { font-size: 9px; }
     .top-title .ver { font-size: 6px; }
     .top-stats { font-size: 6px; gap: 6px 10px; }
-    .top-btn { font-size: 7px; padding: 2px 5px; }
+    .nes-btn { font-size: 6px; padding: 2px 4px; }
 
     .sb-header { font-size: 9px; }
-    .agent-card { padding: 10px 12px; }
-    .ac-name { font-size: 9px; }
+    .agent-card { padding: 8px 10px !important; }
     .ac-detail { font-size: 8px; }
 
     .status-bar { font-size: 5px; }
@@ -566,9 +610,9 @@
   </div>
   <div class="top-controls">
     <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
-    <button class="top-btn" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
-    <button class="top-btn" id="cleanBtn" onclick="cleanAgents()">🧹</button>
-    <button class="top-btn mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
+    <button class="nes-btn is-primary" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
+    <button class="nes-btn" id="cleanBtn" onclick="cleanAgents()">🧹</button>
+    <button class="nes-btn mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
   </div>
 </div>
 
@@ -581,51 +625,48 @@
   <div class="sidebar" id="sidebar">
     <div class="resize-handle" id="resizeHandle"></div>
 
-    <!-- Usage -->
+    <!-- Usage / Inventory -->
     <div class="sb-section">
-      <div class="sb-header">
-        <span>📊 USAGE</span>
-        <span class="count" id="usageUpdated">—</span>
-      </div>
-      <div id="usageCards">
-        <div class="no-data">Loading usage data...</div>
-      </div>
+      <section class="nes-container is-dark with-title">
+        <p class="title">⚔️ INVENTORY <span class="count" id="usageUpdated" style="font-size:7px;color:#666">—</span></p>
+        <div id="usageCards">
+          <div class="no-data">Loading usage data...</div>
+        </div>
+      </section>
     </div>
 
-    <!-- Timeline -->
+    <!-- Timeline / Quest Log -->
     <div class="sb-section">
-      <div class="sb-header">
-        <span>📈 TIMELINE</span>
-        <span class="count" id="timelineRange">—</span>
-      </div>
+      <section class="nes-container is-dark with-title">
+        <p class="title">📜 QUEST LOG <span class="count" id="timelineRange" style="font-size:7px;color:#666">—</span></p>
 
-      <div style="display:flex; gap:8px; margin-bottom:6px; font-size:6px; color:#555">
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3b7cff;display:inline-block"></span>Work</span>
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3adf7a;display:inline-block"></span>PR</span>
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#ff5c5c;display:inline-block"></span>CI</span>
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#f0c040;display:inline-block"></span>Merge</span>
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#8855aa;display:inline-block"></span>Close</span>
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#6c6c6c;display:inline-block"></span>Dead</span>
-      </div>
+        <div style="display:flex; gap:8px; margin-bottom:6px; font-size:6px; color:#555">
+          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3b7cff;display:inline-block"></span>Work</span>
+          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3adf7a;display:inline-block"></span>PR</span>
+          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#ff5c5c;display:inline-block"></span>CI</span>
+          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#f0c040;display:inline-block"></span>Merge</span>
+          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#8855aa;display:inline-block"></span>Close</span>
+          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#6c6c6c;display:inline-block"></span>Dead</span>
+        </div>
 
-      <div id="timelineRows">
-        <div class="no-data">No timeline data</div>
-      </div>
+        <div id="timelineRows">
+          <div class="no-data">No timeline data</div>
+        </div>
 
-      <div style="display:flex;justify-content:space-between;color:#444;font-size:5px;margin-top:4px;padding:0 60px 0 0">
-        <span>-6h</span><span>-4h</span><span>-2h</span><span>Now</span>
-      </div>
+        <div style="display:flex;justify-content:space-between;color:#444;font-size:5px;margin-top:4px;padding:0 60px 0 0">
+          <span>-6h</span><span>-4h</span><span>-2h</span><span>Now</span>
+        </div>
+      </section>
     </div>
 
-    <!-- Agents -->
+    <!-- Agents / Party -->
     <div class="sb-section">
-      <div class="sb-header">
-        <span>⚡ AGENTS</span>
-        <span class="count" id="agentCount">—</span>
-      </div>
-      <div id="agentCards">
-        <div class="no-data">Waiting for agent data...</div>
-      </div>
+      <section class="nes-container is-dark with-title">
+        <p class="title">⚡ PARTY <span class="count" id="agentCount" style="font-size:7px;color:#666">—</span></p>
+        <div id="agentCards">
+          <div class="no-data">Waiting for agent data...</div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -635,7 +676,7 @@
       <canvas id="office" width="640" height="384"></canvas>
       <div class="scanlines"></div>
     </div>
-    <div class="status-bar">
+    <div class="status-bar nes-container is-dark is-rounded" style="padding:0 14px;margin:0;border-radius:0">
       <span class="sb-log" id="statusLog">▸ Connecting to server...</span>
       <span>POLL 5s │ <span id="agentCountBar">0</span> agents │ <span id="clock"></span></span>
     </div>
@@ -760,6 +801,22 @@ function stateToFillClass(state) {
   return '';
 }
 
+function stateToBadgeClass(state) {
+  if (state === 'coding') return 'is-success';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'is-primary';
+  if (state === 'merged') return 'is-warning';
+  if (state === 'exited' || state === 'dead') return 'is-error';
+  if (state === 'pr_closed') return 'is-error';
+  return 'is-primary';
+}
+
+function stateToProgressClass(state) {
+  if (state === 'coding') return 'is-success';
+  if (state === 'waiting' || state === 'reading' || state === 'review_waiting') return 'is-primary';
+  if (state === 'merged') return 'is-warning';
+  return 'is-success';
+}
+
 function formatDuration(ms) {
   const totalMins = Math.max(0, Math.floor(ms / 60000));
   const hours = Math.floor(totalMins / 60);
@@ -870,9 +927,9 @@ function renderAgentCards() {
   container.innerHTML = agents.map(agent => {
     const state = mapState(agent);
     const cardClass = stateToCardClass(state);
-    const pulseClass = stateToPulseClass(state);
     const colorClass = stateToColorClass(state);
-    const fillClass = stateToFillClass(state);
+    const badgeClass = stateToBadgeClass(state);
+    const progressClass = stateToProgressClass(state);
     const name = escapeHtml(agent.id || 'agent');
     const repo = escapeHtml(getRepoName(agent));
     const issueId = getIssueId(agent);
@@ -884,27 +941,28 @@ function renderAgentCards() {
     const elapsed = created ? formatDuration(Date.now() - created) : '—';
     const failing = isCiFailing(agent);
     const tokenPct = Math.min(100, Math.max(0, tokens / 2000));
+    const agentType = resolveAgentType(agent);
+    const typeIcon = agentType.includes('codex') ? '<i class="nes-icon coin is-small"></i>' :
+                     agentType.includes('claude') ? '<i class="nes-icon star is-small"></i>' : '';
+
+    const titleLabel = repo && issueId ? repo + '#' + escapeHtml(String(issueId)) : (repo || name);
 
     let detailLine = '';
-    if (repo) detailLine += `<span class="repo">${repo}</span>`;
-    if (issueId) detailLine += ` <span class="v-cyan">#${escapeHtml(String(issueId))}</span>`;
-    if (issueTitle) detailLine += ` — ${issueTitle}`;
-    detailLine += '<br>';
-    detailLine += `<span class="${colorClass}">▸ ${escapeHtml(stateLabel(state))}</span>`;
-    if (prNum) detailLine += ` · PR <span class="v-green">#${escapeHtml(String(prNum))}</span>`;
-    if (failing) detailLine += ` · <span class="v-red">CI ✗</span>`;
-    if (tokens) detailLine += ` · ${tokensLabel} tokens`;
+    if (issueTitle) detailLine += `<span style="color:#999">${issueTitle}</span><br>`;
+    if (prNum) detailLine += `PR <span class="v-green">#${escapeHtml(String(prNum))}</span> · `;
+    if (failing) detailLine += `<span class="v-red">CI ✗</span> · `;
+    detailLine += `<span style="color:#666">${elapsed}</span>`;
+    if (tokens) detailLine += ` · ${tokensLabel} tok`;
 
     return `
-      <div class="agent-card ${cardClass}">
-        <div class="ac-top">
-          <span class="ac-pulse ${pulseClass}"></span>
-          <span class="ac-name ${colorClass}">${name}</span>
-          <span class="ac-time">${elapsed}</span>
+      <section class="nes-container is-dark with-title agent-card ${cardClass}" style="margin-bottom:8px;padding:6px 8px">
+        <p class="title" style="font-size:8px">${typeIcon} ${escapeHtml(titleLabel)}</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span class="nes-badge"><span class="${badgeClass}">${escapeHtml(stateLabel(state).toUpperCase())}</span></span>
         </div>
-        <div class="ac-detail">${detailLine}</div>
-        ${fillClass ? `<div class="progress-bar"><div class="fill ${fillClass}" style="width:${tokenPct}%"></div></div>` : ''}
-      </div>
+        <div class="ac-detail" style="margin-bottom:4px">${detailLine}</div>
+        ${tokens ? `<progress class="nes-progress ${progressClass}" value="${Math.round(tokenPct)}" max="100" style="height:8px"></progress>` : ''}
+      </section>
     `;
   }).join('');
 }
@@ -943,9 +1001,9 @@ function renderUsageCards() {
         : 'Reset time unknown';
       return `
         <div class="usage-card exhausted">
-          <div class="uc-title"><span>${name}</span><span class="uc-pill pill-exhausted">EXHAUSTED</span></div>
-          <div class="uc-row" style="color:#f5b3b3">⛔ Quota exhausted</div>
-          <div class="uc-bar"><div class="uc-fill uf-red" style="width:100%"></div></div>
+          <div class="uc-title"><span>${name}</span><span class="nes-badge"><span class="is-error">EXHAUSTED</span></span></div>
+          <div class="uc-row" style="color:#f5b3b3">💀 HP: 0/100</div>
+          <progress class="nes-progress is-error" value="100" max="100" style="height:8px"></progress>
           <div class="uc-note">${escapeHtml(resetLabel)}</div>
         </div>`;
     }
@@ -958,8 +1016,7 @@ function renderUsageCards() {
     }).filter(p => p !== null);
     const highest = percents.length ? Math.max(...percents) : null;
     const level = highest === null ? 'unknown' : highest >= 0.95 ? 'alert' : highest >= 0.8 ? 'warn' : 'ok';
-    const pillClass = level === 'alert' ? 'pill-alert' : level === 'warn' ? 'pill-warn' : 'pill-ok';
-    const cardWarn = level === 'warn' ? ' warn' : level === 'alert' ? ' alert' : '';
+    const badgeClass = level === 'alert' ? 'is-error' : level === 'warn' ? 'is-warning' : 'is-success';
     const resetNote = provider.resetAt ? 'Resets ' + new Date(provider.resetAt).toLocaleString() : '';
 
     const metricsHtml = metrics.map(m => {
@@ -968,21 +1025,23 @@ function renderUsageCards() {
       if (m.utilization !== null && m.utilization !== undefined) pct = Number(m.utilization) / 100;
       else if (m.used != null && m.limit != null && m.limit > 0) pct = Math.min(1, m.used / m.limit);
       const fillWidth = pct === null ? 0 : Math.round(pct * 100);
-      const fillClass = pct === null ? 'uf-green' : pct >= 0.95 ? 'uf-red' : pct >= 0.8 ? 'uf-yellow' : 'uf-green';
+      const progressClass = pct === null ? 'is-success' : pct >= 0.95 ? 'is-error' : pct >= 0.8 ? 'is-warning' : 'is-success';
+      const remaining = pct !== null ? Math.max(0, Math.round((1 - pct) * 100)) : 100;
+      const hearts = remaining >= 75 ? '❤️❤️❤️' : remaining >= 50 ? '❤️❤️🖤' : remaining >= 25 ? '❤️🖤🖤' : '🖤🖤🖤';
 
       let valStr = '—';
-      if (m.unit === '%' && m.limit === 100 && m.used != null) valStr = m.used + '%';
-      else if (m.limit != null) valStr = m.used + ' / ' + m.limit + (m.unit ? ' ' + m.unit : '');
+      if (m.unit === '%' && m.limit === 100 && m.used != null) valStr = 'HP: ' + (100 - m.used) + '/100';
+      else if (m.limit != null) valStr = 'HP: ' + (m.limit - (m.used || 0)) + '/' + m.limit + (m.unit ? ' ' + m.unit : '');
       else if (m.used != null) valStr = m.used + (m.unit ? ' ' + m.unit : '');
 
       return `
-        <div class="uc-row"><span>${label}</span><span>${escapeHtml(valStr)}</span></div>
-        <div class="uc-bar"><div class="uc-fill ${fillClass}" style="width:${fillWidth}%"></div></div>`;
+        <div class="uc-row"><span>${label}</span><span>${hearts} ${escapeHtml(valStr)}</span></div>
+        <progress class="nes-progress ${progressClass}" value="${fillWidth}" max="100" style="height:8px"></progress>`;
     }).join('');
 
     return `
-      <div class="usage-card${cardWarn}">
-        <div class="uc-title"><span>${name}</span><span class="uc-pill ${pillClass}">${level.toUpperCase()}</span></div>
+      <div class="usage-card" style="border:none;background:transparent">
+        <div class="uc-title"><span>${name}</span><span class="nes-badge"><span class="${badgeClass}">${level.toUpperCase()}</span></span></div>
         ${metricsHtml || '<div class="uc-note">No metrics</div>'}
         ${resetNote ? '<div class="uc-note">' + escapeHtml(resetNote) + '</div>' : ''}
       </div>`;
