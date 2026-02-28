@@ -114,9 +114,47 @@ Both views must work on mobile (≤767px). Key breakpoints:
 
 The SV view uses inline stacked layout on mobile (sidebar sections flow below canvas). No hamburger overlay.
 
-## Testing
+## Testing (MANDATORY before submitting PR)
 
-No test suite currently. Verify by:
-1. Server starts without errors: `node server.js`
-2. Pages load: `curl -s http://localhost:3377/ | grep -c '<canvas'`
-3. Visual screenshot (see above) for UI changes
+Every GitHub issue has a **Test Criteria** section with checkboxes. Before submitting your PR, you MUST:
+
+1. **Read the issue's Test Criteria** — each checkbox is a required verification step
+2. **Execute every test criterion** — actually run the server, click through the UI, verify behavior
+3. **Report results in PR body** — copy each criterion and mark pass/fail with evidence
+
+### Minimum verification for ALL PRs:
+
+```bash
+# 1. Server starts without errors
+node server.js &
+SERVER_PID=$!
+
+# 2. Pages load
+curl -s http://localhost:3377/ | grep -c '<canvas'      # should be 1
+curl -s http://localhost:3377/sv.html | grep -c '<canvas' # should be 1
+
+# 3. No JS syntax errors — check in a headless browser or review manually
+node -e "const fs=require('fs'); const html=fs.readFileSync('sv.html','utf8'); const m=html.match(/<script>([\s\S]*?)<\/script>/); try{new Function(m[1]);console.log('sv.html JS OK')}catch(e){console.error('SYNTAX ERROR:',e.message);process.exit(1)}"
+node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); const m=html.match(/<script>([\s\S]*?)<\/script>/); try{new Function(m[1]);console.log('index.html JS OK')}catch(e){console.error('SYNTAX ERROR:',e.message);process.exit(1)}"
+
+kill $SERVER_PID
+```
+
+4. **Visual screenshot** (see Visual Verification section above) — required for any UI changes
+5. **Don't submit the PR until all test criteria pass**
+
+### PR body template:
+
+```markdown
+## Test Results
+
+### Issue Test Criteria
+- [x] Criterion 1 — verified by ...
+- [x] Criterion 2 — verified by ...
+
+### Standard Checks
+- [x] Server starts without errors
+- [x] Both pages load (canvas element present)
+- [x] No JS syntax errors
+- [x] Screenshots attached (if visual change)
+```
