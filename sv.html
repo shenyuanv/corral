@@ -310,13 +310,22 @@
     border-bottom: 1px solid #1a1a2e;
     font-size: 7px;
   }
+  a.ql-entry {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(136, 170, 255, 0.3);
+    touch-action: manipulation;
+    min-height: 44px;
+  }
+  a.ql-entry:hover { background: rgba(136, 170, 255, 0.08); }
+  a.ql-entry .ql-name { color: #88aaff; }
+  a.ql-entry:hover .ql-name { color: #aaccff; text-decoration: underline; }
   .ql-entry:last-child { border-bottom: none; }
   .ql-icon { flex-shrink: 0; font-size: 9px; line-height: 1; }
   .ql-body { flex: 1; min-width: 0; }
   .ql-head { display: flex; align-items: baseline; gap: 4px; }
   .ql-name { color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ql-link { color: #88aaff; text-decoration: none; cursor: pointer; }
-  .ql-link:hover { color: #aaccff; text-decoration: underline; }
   .ql-status { white-space: nowrap; font-size: 6px; }
   .ql-time { flex-shrink: 0; color: #555; font-size: 6px; margin-left: auto; }
   .ql-title { color: #666; font-size: 6px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -666,7 +675,7 @@
 
     /* Quest Log feed: slightly larger on mobile */
     .ql-feed { max-height: 240px; }
-    .ql-entry { font-size: 8px; gap: 8px; padding: 5px 0; }
+    .ql-entry { font-size: 8px; gap: 8px; padding: 5px 0; min-height: 44px; }
     .ql-status { font-size: 7px; }
     .ql-time { font-size: 7px; }
     .ql-title { font-size: 7px; }
@@ -1445,21 +1454,20 @@ function renderTimeline() {
       ? `<div class="ql-title">${escapeHtml(ev.title)}</div>`
       : '';
 
-    const nameHtml = ev.url
-      ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="ql-name ql-link">${escapeHtml(ev.name)}</a>`
-      : `<span class="ql-name">${escapeHtml(ev.name)}</span>`;
+    const tag = ev.url ? 'a' : 'div';
+    const linkAttrs = ev.url ? ` href="${escapeHtml(ev.url)}" target="_blank" rel="noopener"` : '';
 
-    return `<div class="ql-entry">
+    return `<${tag}${linkAttrs} class="ql-entry">
       <span class="ql-icon">${icon}</span>
       <div class="ql-body">
         <div class="ql-head">
-          ${nameHtml}
+          <span class="ql-name">${escapeHtml(ev.name)}</span>
           <span class="ql-status" style="color:${color}">${label}</span>
           <span class="ql-time">${timeAgo}</span>
         </div>
         ${titleLine}
       </div>
-    </div>`;
+    </${tag}>`;
   });
 
   container.innerHTML = rows.join('');
