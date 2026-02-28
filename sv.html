@@ -1524,6 +1524,36 @@ for (let r = 0; r < 3; r++)
   for (let c = 0; c < 4; c++)
     DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
 
+// --- Ambient particles (dust motes + neon sparkles) ---
+const particles = [];
+(function initParticles() {
+  const W = COLS * TILE, H = ROWS * TILE;
+  // Dust motes — 12 small dots floating upward
+  for (let i = 0; i < 12; i++) {
+    particles.push({
+      type: 'dust',
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: -0.1 - Math.random() * 0.15,
+      alpha: 0.15 + Math.random() * 0.15,
+      size: 1 + (Math.random() > 0.7 ? 1 : 0),
+    });
+  }
+  // Neon sparkles — 4 slots near the LASSO sign (nx=55, ny=3)
+  for (let i = 0; i < 4; i++) {
+    particles.push({
+      type: 'sparkle',
+      x: 55 + Math.random() * 48,
+      y: 1 + Math.random() * 10,
+      life: 0,
+      maxLife: 40 + Math.random() * 40,
+      alpha: 0,
+      size: 1,
+    });
+  }
+})();
+
 // --- Walk animation ---
 const DOOR_TILE = { x: 0, y: 1 };
 const WALK_SPEED = 2; // tiles per second
@@ -1741,10 +1771,20 @@ function drawWalls() {
 
 function drawGarageFrame() {
   ctx.save(); ctx.scale(SCALE, SCALE);
-  R(0, 0, COLS * TILE, 3, PAL.beam); R(0, 0, COLS * TILE, 1, PAL.beamLight); R(0, 2, COLS * TILE, 1, PAL.beamDark);
-  R(0, 0, 3, ROWS * TILE, PAL.beam); R(0, 0, 1, ROWS * TILE, PAL.beamLight); R(2, 0, 1, ROWS * TILE, PAL.beamDark);
-  R(COLS * TILE - 3, 0, 3, ROWS * TILE, PAL.beam); R(COLS * TILE - 3, 0, 1, ROWS * TILE, PAL.beamLight);
-  [[6,1],[6,80],[6,160],[COLS*TILE-5,1],[COLS*TILE-5,80],[COLS*TILE-5,160]].forEach(([nx, ny]) => {
+  const W = COLS * TILE, H = ROWS * TILE;
+  R(0, 0, W, 3, PAL.beam); R(0, 0, W, 1, PAL.beamLight); R(0, 2, W, 1, PAL.beamDark);
+  R(0, 0, 3, H, PAL.beam); R(0, 0, 1, H, PAL.beamLight); R(2, 0, 1, H, PAL.beamDark);
+  R(W - 3, 0, 3, H, PAL.beam); R(W - 3, 0, 1, H, PAL.beamLight);
+  // Garage door ridges — horizontal lines suggesting metal slats on side beams
+  for (let gy = 8; gy < H - 4; gy += 12) {
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, gy, 3, 1);
+    ctx.fillRect(W - 3, gy, 3, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0, gy + 1, 3, 1);
+    ctx.fillRect(W - 3, gy + 1, 3, 1);
+  }
+  [[6,1],[6,80],[6,160],[W-5,1],[W-5,80],[W-5,160]].forEach(([nx, ny]) => {
     ctx.fillStyle = PAL.nail; ctx.fillRect(nx, ny, 2, 2);
     ctx.fillStyle = '#777'; ctx.fillRect(nx, ny, 1, 1);
   });
@@ -2179,9 +2219,18 @@ function drawCoffeeCups(d, count) {
     R(cx + 3, baseY + 1, 1, 2, PAL.cupDark);
   }
   if (count > 0) {
-    const lastX = baseX + (count - 1) * 5 + 1;
-    const phase = frame % 20 < 10 ? 0 : 1;
-    R(lastX, baseY - 1 - phase, 1, 1, 'rgba(255,255,255,0.4)');
+    // Steam/smoke — 2-3 translucent white pixels rising and fading
+    for (let si = 0; si < Math.min(count, 3); si++) {
+      const sx = baseX + si * 5 + 1;
+      const drift = Math.sin(frame * 0.04 + si * 2) * 0.8;
+      for (let sp = 0; sp < 3; sp++) {
+        const age = (frame * 0.06 + si * 3 + sp * 2.5) % 6;
+        const steamAlpha = Math.max(0, 0.35 - age * 0.06);
+        if (steamAlpha > 0.02) {
+          R(sx + (drift | 0), baseY - 1 - (age | 0), 1, 1, 'rgba(255,255,255,' + steamAlpha.toFixed(2) + ')');
+        }
+      }
+    }
   }
   ctx.restore();
 }
@@ -2264,31 +2313,78 @@ function drawFloorSV() {
       tileRect(c, r, 1, 1, base);
     }
   ctx.save(); ctx.scale(SCALE, SCALE);
+  const W = COLS * TILE, H = ROWS * TILE;
+  // Per-row depth gradient — darker at edges, lighter center
+  for (let r = 0; r < ROWS; r++) {
+    const ry = r * TILE;
+    const grad = ctx.createLinearGradient(0, ry, W, ry);
+    const edgeA = (0.06 + r * 0.004).toFixed(3);
+    const midA = '0.000';
+    grad.addColorStop(0, 'rgba(0,0,0,' + edgeA + ')');
+    grad.addColorStop(0.35, 'rgba(0,0,0,' + midA + ')');
+    grad.addColorStop(0.65, 'rgba(0,0,0,' + midA + ')');
+    grad.addColorStop(1, 'rgba(0,0,0,' + edgeA + ')');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, ry, W, TILE);
+  }
+  // Ceiling area dark-to-medium gradient (top rows suggest depth)
+  const ceilGrad = ctx.createLinearGradient(0, 0, 0, TILE * 2);
+  ceilGrad.addColorStop(0, 'rgba(0,0,20,0.08)');
+  ceilGrad.addColorStop(1, 'rgba(0,0,20,0)');
+  ctx.fillStyle = ceilGrad;
+  ctx.fillRect(0, 0, W, TILE * 2);
   // Warm ambient tint
   ctx.fillStyle = PAL.svFloorWarm;
-  ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
+  ctx.fillRect(0, 0, W, H);
   // Concrete cracks
   ctx.fillStyle = '#2e2845';
   for (let i = 0; i < 18; i++) ctx.fillRect(30 + i * 2, 95 + (Math.sin(i * 1.3) * 2 | 0), 2, 1);
   for (let i = 0; i < 12; i++) ctx.fillRect(170 + i * 2, 140 + (i % 3 === 0 ? 1 : 0), 1, 1);
   for (let i = 0; i < 8; i++) ctx.fillRect(100 + i * 3, 60 + (Math.sin(i * 0.7) | 0), 2, 1);
+  // Scuff marks — occasional single dark pixels
+  ctx.fillStyle = 'rgba(20,15,30,0.18)';
+  for (let i = 0; i < 10; i++) {
+    const sx = (i * 31 + 17) % W, sy = TILE + (i * 23 + 7) % (H - TILE);
+    ctx.fillRect(sx, sy, 1, 1);
+  }
   // Floor stains (spilled coffee, etc)
   ctx.fillStyle = 'rgba(60,40,20,0.12)';
   ctx.fillRect(85, 125, 6, 5);
   ctx.fillRect(195, 105, 5, 4);
   ctx.fillRect(145, 160, 4, 3);
-  // Epoxy shine spots
-  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  // Epoxy shine spots — subtle specular highlights
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
   ctx.fillRect(50, 80, 20, 15);
   ctx.fillRect(150, 50, 15, 12);
   ctx.fillRect(240, 120, 18, 10);
+  ctx.fillRect(100, 140, 12, 8);
+  ctx.fillRect(200, 60, 16, 10);
   ctx.restore();
 }
 
 function drawWallsSV() {
-  // Base wall
+  // Base wall with horizontal gradient (darker near corners)
   for (let c = 0; c < COLS; c++) tileRect(c, 0, 1, 1, PAL.wall);
   ctx.save(); ctx.scale(SCALE, SCALE);
+  const W = COLS * TILE;
+  // Wall corner darkening gradient
+  const wallGrad = ctx.createLinearGradient(0, 0, W, 0);
+  wallGrad.addColorStop(0, 'rgba(0,0,0,0.08)');
+  wallGrad.addColorStop(0.15, 'rgba(0,0,0,0)');
+  wallGrad.addColorStop(0.85, 'rgba(0,0,0,0)');
+  wallGrad.addColorStop(1, 'rgba(0,0,0,0.08)');
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, W, TILE);
+  // Panel seams every 3-4 tiles with color variation
+  for (let px = 0; px < W; px += TILE * 3) {
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(px, 1, 1, TILE - 3);
+    // Slight color variation between panels
+    if ((px / (TILE * 3)) % 2 === 1) {
+      ctx.fillStyle = 'rgba(255,255,255,0.02)';
+      ctx.fillRect(px + 1, 1, TILE * 3 - 1, TILE - 3);
+    }
+  }
   // Exposed brick sections on left and right walls
   const brickW = 4, brickH = 2;
   for (let section = 0; section < 3; section++) {
@@ -2297,7 +2393,9 @@ function drawWallsSV() {
     for (let by = 1; by < TILE - 3; by += brickH + 1) {
       const offset = (by % 4 === 1) ? 0 : 2;
       for (let bx = sx + offset; bx < sx + sw; bx += brickW + 1) {
-        const bColor = Math.random() > 0.3 ? PAL.svBrick : PAL.svBrickDark;
+        // 2-3 shade variations per row
+        const shade = ((bx + by * 3) % 3);
+        const bColor = shade === 0 ? PAL.svBrick : shade === 1 ? PAL.svBrickDark : '#7a4a3a';
         ctx.fillStyle = bColor;
         ctx.fillRect(bx, by, Math.min(brickW, sx + sw - bx), brickH);
         // Mortar
@@ -2308,26 +2406,29 @@ function drawWallsSV() {
     }
   }
   // Baseboard
-  ctx.fillStyle = '#3a3028'; ctx.fillRect(0, TILE - 2, COLS * TILE, 2);
-  ctx.fillStyle = '#4a4038'; ctx.fillRect(0, TILE - 2, COLS * TILE, 1);
+  ctx.fillStyle = '#3a3028'; ctx.fillRect(0, TILE - 2, W, 2);
+  ctx.fillStyle = '#4a4038'; ctx.fillRect(0, TILE - 2, W, 1);
   // Electrical conduit lines running along wall
   ctx.fillStyle = PAL.svConduit;
-  ctx.fillRect(0, TILE - 4, COLS * TILE, 1);
+  ctx.fillRect(0, TILE - 4, W, 1);
   ctx.fillStyle = PAL.svConduitLight;
-  for (let x = 0; x < COLS * TILE; x += 30) {
+  for (let x = 0; x < W; x += 30) {
     ctx.fillRect(x, TILE - 5, 1, 3); // conduit brackets
   }
-  // Fluorescent light strips on ceiling — brighter at night
+  // Fluorescent light strips on ceiling — brighter at night, with flicker
   const { nightFactor: wallNF } = getTimeOfDay();
   const flourGlowAlpha = (0.06 + wallNF * 0.12).toFixed(3);
   for (let i = 0; i < 4; i++) {
     const lx = 30 + i * 70, ly = 0;
+    // Subtle flicker — random alpha variation every ~120 frames
+    const flicker = 1.0 - ((frame + i * 37) % 120 < 3 ? 0.15 : 0);
     ctx.fillStyle = PAL.svFluor;
     ctx.fillRect(lx, ly, 30, 2);
-    ctx.fillStyle = wallNF > 0.3 ? 'rgba(255,255,255,' + (0.8 + wallNF * 0.2).toFixed(2) + ')' : '#fff';
+    const tubeAlpha = wallNF > 0.3 ? (0.8 + wallNF * 0.2) * flicker : flicker;
+    ctx.fillStyle = 'rgba(255,255,255,' + tubeAlpha.toFixed(2) + ')';
     ctx.fillRect(lx + 2, ly, 26, 1);
-    // Glow below
-    ctx.fillStyle = 'rgba(200,232,255,' + flourGlowAlpha + ')';
+    // Glow below — modulated by flicker
+    ctx.fillStyle = 'rgba(200,232,255,' + (parseFloat(flourGlowAlpha) * flicker).toFixed(3) + ')';
     ctx.fillRect(lx - 4, ly + 2, 38, 8);
   }
   ctx.restore();
@@ -2342,6 +2443,8 @@ function drawDeskSV(d, idx) {
   if (isStanding) {
     // Standing desk — taller frame, adjustable legs
     R(x, y - 2, TILE, 2, PAL.svDeskSurface); R(x, y - 2, TILE, 1, PAL.svDeskFrameLight);
+    // Wood grain — alternating thin lines
+    for (let gx = x + 1; gx < x + TILE - 1; gx += 2) R(gx, y - 1, 1, 1, PAL.svDeskSurfaceDark);
     R(x, y, TILE, 1, PAL.svDeskSurfaceDark);
     // Height-adjustable frame legs (double lines)
     R(x + 1, y + 1, 1, 10, PAL.svDeskFrame); R(x + 2, y + 1, 1, 10, PAL.svDeskFrameDark);
@@ -2349,9 +2452,11 @@ function drawDeskSV(d, idx) {
     // Crossbar
     R(x + 2, y + 6, TILE - 4, 1, PAL.svDeskFrameDark);
   } else {
-    // Regular desk — wider, L-shaped modern desk
+    // Regular desk — wider, L-shaped modern desk with wood grain
     R(x, y, TILE, 2, PAL.svDeskSurface); R(x, y, TILE, 1, '#d8ccb4');
-    for (let gx = x + 2; gx < x + TILE - 1; gx += 3) R(gx, y + 1, 2, 1, PAL.svDeskSurfaceDark);
+    // Wood grain effect — alternating thin lines of 2 brown shades
+    for (let gx = x + 1; gx < x + TILE - 1; gx += 2) R(gx, y + 1, 1, 1, PAL.svDeskSurfaceDark);
+    for (let gx = x + 2; gx < x + TILE - 1; gx += 3) R(gx, y + 1, 2, 1, '#c4b898');
     R(x, y + 2, TILE, 3, PAL.svDeskFrame); R(x, y + 2, TILE, 1, PAL.svDeskFrameLight);
     // Metal legs
     R(x + 1, y + 5, 1, 7, PAL.svDeskFrameDark); R(x + TILE - 2, y + 5, 1, 7, PAL.svDeskFrameDark);
@@ -2444,10 +2549,15 @@ function drawMonitorSV(d, state, monitorText, idx) {
     ctx.save(); ctx.scale(SCALE, SCALE);
   }
 
-  // Monitor glow on desk/floor
+  // Monitor glow on desk/floor — radial gradient for light pool
   if (state === 'coding' || state === 'ci_failed') {
-    const glowColor = state === 'ci_failed' ? 'rgba(255,59,59,0.06)' : 'rgba(74,224,74,0.06)';
-    R(x - 1, y + 9, 14, 4, glowColor);
+    const gcx = x + 6, gcy = y + 10;
+    const gr = state === 'ci_failed' ? 'rgba(255,59,59,' : 'rgba(74,224,74,';
+    const glow = ctx.createRadialGradient(gcx, gcy, 1, gcx, gcy + 3, 10);
+    glow.addColorStop(0, gr + '0.12)');
+    glow.addColorStop(1, gr + '0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 4, y + 6, 20, 12);
   }
   ctx.restore();
 }
@@ -2576,26 +2686,37 @@ function drawPropsSV() {
 }
 
 function drawLightingSV() {
-  const { nightFactor } = getTimeOfDay();
-  // Neon sign extended glow on nearby walls/floor — stronger at night
+  const { nightFactor, warmFactor, hour } = getTimeOfDay();
+  // Neon sign extended glow on nearby walls/floor — larger radius, stronger at night
   const neonCX = (55 + 24) * SCALE;
   const neonCY = 5 * SCALE;
-  const neonAlpha1 = (0.07 + nightFactor * 0.08).toFixed(3);
-  const neonAlpha2 = (0.03 + nightFactor * 0.04).toFixed(3);
-  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 10, neonCX, neonCY + 80, 140);
+  const neonAlpha1 = (0.09 + nightFactor * 0.10).toFixed(3);
+  const neonAlpha2 = (0.04 + nightFactor * 0.06).toFixed(3);
+  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 8, neonCX, neonCY + 90, 180);
   neonGrad.addColorStop(0, 'rgba(255,45,123,' + neonAlpha1 + ')');
-  neonGrad.addColorStop(0.5, 'rgba(0,229,255,' + neonAlpha2 + ')');
+  neonGrad.addColorStop(0.4, 'rgba(0,229,255,' + neonAlpha2 + ')');
   neonGrad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = neonGrad;
-  ctx.fillRect(neonCX - 140, neonCY - 10, 280, 200);
+  ctx.fillRect(neonCX - 180, neonCY - 20, 360, 240);
+  // Neon color bleed onto nearby wall tiles (cyan/pink tint)
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const wallBleedAlpha = (0.04 + nightFactor * 0.06).toFixed(3);
+  ctx.fillStyle = 'rgba(255,45,123,' + wallBleedAlpha + ')';
+  ctx.fillRect(50, 0, 20, TILE);
+  ctx.fillStyle = 'rgba(0,229,255,' + wallBleedAlpha + ')';
+  ctx.fillRect(70, 0, 40, TILE);
+  ctx.fillStyle = 'rgba(255,45,123,' + (parseFloat(wallBleedAlpha) * 0.5).toFixed(3) + ')';
+  ctx.fillRect(90, 0, 20, TILE);
+  ctx.restore();
 
-  // Fluorescent ceiling light glow pools on floor — brighter at night
+  // Fluorescent ceiling light glow pools on floor — brighter at night, with flicker
   const ceilAlpha = (0.04 + nightFactor * 0.08).toFixed(3);
   for (let i = 0; i < 4; i++) {
     const lx = (30 + i * 70 + 15) * SCALE;
     const ly = 3 * S;
+    const flicker = 1.0 - ((frame + i * 37) % 120 < 3 ? 0.15 : 0);
     const flGrad = ctx.createRadialGradient(lx, ly, 5, lx, ly + 40, 80);
-    flGrad.addColorStop(0, 'rgba(200,232,255,' + ceilAlpha + ')');
+    flGrad.addColorStop(0, 'rgba(200,232,255,' + (parseFloat(ceilAlpha) * flicker).toFixed(3) + ')');
     flGrad.addColorStop(1, 'rgba(200,232,255,0)');
     ctx.fillStyle = flGrad;
     ctx.fillRect(lx - 80, ly, 160, 100);
@@ -2626,6 +2747,58 @@ function drawLightingSV() {
       ctx.fillRect(mx - 40, my - 5, 80, 50);
     });
   }
+
+  // Daytime: window light beam — warm yellow trapezoid on floor
+  if (nightFactor < 0.5) {
+    const beamAlpha = (0.03 * (1 - nightFactor)).toFixed(3);
+    ctx.save(); ctx.scale(SCALE, SCALE);
+    // Window is at x=120, y=2, w=64 — light falls onto floor below
+    const wx = 130, wy = TILE + 4;
+    const beamGrad = ctx.createLinearGradient(wx, wy, wx, wy + TILE * 4);
+    beamGrad.addColorStop(0, 'rgba(255,240,180,' + beamAlpha + ')');
+    beamGrad.addColorStop(1, 'rgba(255,240,180,0)');
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(wx, wy); ctx.lineTo(wx + 50, wy);
+    ctx.lineTo(wx + 60, wy + TILE * 4); ctx.lineTo(wx - 10, wy + TILE * 4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawParticles() {
+  const W = COLS * TILE, H = ROWS * TILE;
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (p.type === 'dust') {
+      // Update position — slow upward drift with horizontal wobble
+      p.x += p.vx + Math.sin(frame * 0.02 + i) * 0.05;
+      p.y += p.vy;
+      // Reset when exiting top
+      if (p.y < 0) { p.y = H; p.x = Math.random() * W; }
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      ctx.fillStyle = 'rgba(200,200,220,' + p.alpha.toFixed(2) + ')';
+      ctx.fillRect(p.x | 0, p.y | 0, p.size, p.size);
+    } else if (p.type === 'sparkle') {
+      p.life++;
+      if (p.life >= p.maxLife) {
+        // Respawn at random position near neon sign
+        p.x = 55 + Math.random() * 48;
+        p.y = 1 + Math.random() * 10;
+        p.life = 0;
+        p.maxLife = 40 + Math.random() * 40;
+      }
+      // Fade in then out
+      const t = p.life / p.maxLife;
+      p.alpha = t < 0.3 ? t / 0.3 : (1 - t) / 0.7;
+      if (p.alpha > 0.02) {
+        ctx.fillStyle = 'rgba(255,220,255,' + (p.alpha * 0.6).toFixed(2) + ')';
+        ctx.fillRect(p.x | 0, p.y | 0, 1, 1);
+      }
+    }
+  }
+  ctx.restore();
 }
 
 // Map live agents to desk positions for canvas rendering
@@ -2724,6 +2897,7 @@ function render() {
   drawTumbleweed();
   drawPlant(0, 2); drawPlant(0, 9); drawPlant(COLS - 1, 4);
   drawServerRack((COLS - 1) * TILE - 4, 6 * TILE);
+  drawParticles();
 
   // Day/night overlay — applied last, over entire scene
   drawDayNightOverlay();
