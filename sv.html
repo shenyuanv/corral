@@ -823,7 +823,9 @@ const previousAgentsByKey = new Map();
 
 // --- Walk animation state ---
 let transitions = [];    // { key, deskIdx, path, progress, colorIdx, startTime }
+let walkOuts = [];       // { key, deskIdx, path, progress, colorIdx, startTime, agentType, exitState }
 let prevAgentKeys = new Set();
+let prevAgentMapStates = new Map(); // key -> state string for walk-out detection
 let hasInitialized = false;
 
 // --- Notification balloon state ---
@@ -1505,6 +1507,7 @@ async function refreshFromLasso() {
     agents = Array.isArray(data) ? data : (data.sessions || []);
     detectStateChanges();
     detectNewAgents();
+    detectWalkOuts();
     detectSoundEvents();
 
     if (historyResp.ok) {
@@ -1754,6 +1757,60 @@ function detectNewAgents() {
 
   hasInitialized = true;
   prevAgentKeys = currentKeys;
+}
+
+const WALKOUT_DELAY_MERGED = 1500; // ms — celebration pose before walking out
+const WALKOUT_DELAY_EXITED = 500;  // ms — brief pause then walk out
+const WALKOUT_SPEED_MERGED = 1.5;  // tiles/sec (leisurely stroll)
+const WALKOUT_SPEED_EXITED = 2.5;  // tiles/sec (faster, they got fired)
+
+function detectWalkOuts() {
+  if (!hasInitialized) return;
+  const now = Date.now();
+  const existingWalkOutKeys = new Set(walkOuts.map(w => w.key));
+
+  agents.slice(0, 12).forEach((agent, idx) => {
+    const key = agentKey(agent, idx);
+    const state = mapState(agent);
+    const prevState = prevAgentMapStates.get(key);
+
+    if (prevState && prevState !== 'merged' && prevState !== 'exited' && prevState !== 'dead' &&
+        (state === 'merged' || state === 'exited' || state === 'dead') &&
+        !existingWalkOutKeys.has(key)) {
+      const desk = DESKS[idx];
+      if (!desk) return;
+      const isMerged = state === 'merged';
+      const delay = isMerged ? WALKOUT_DELAY_MERGED : WALKOUT_DELAY_EXITED;
+      walkOuts.push({
+        key,
+        deskIdx: idx,
+        path: buildPath({ x: desk.x, y: desk.y }, DOOR_TILE),
+        progress: 0,
+        colorIdx: idx % CHARS.length,
+        startTime: now + delay,
+        agentType: resolveAgentType(agent),
+        exitState: isMerged ? 'merged' : 'exited',
+      });
+    }
+
+    prevAgentMapStates.set(key, state);
+  });
+}
+
+function updateWalkOuts() {
+  if (!walkOuts.length) return;
+  const now = Date.now();
+  const next = [];
+  walkOuts.forEach(w => {
+    if (w.path.total === 0) return; // instant removal
+    if (now < w.startTime) { next.push(w); return; } // still in delay
+    const speed = w.exitState === 'merged' ? WALKOUT_SPEED_MERGED : WALKOUT_SPEED_EXITED;
+    const elapsed = Math.max(0, now - w.startTime) / 1000;
+    w.progress = Math.min(w.path.total, elapsed * speed);
+    if (w.progress >= w.path.total) return; // reached door, remove
+    next.push(w);
+  });
+  walkOuts = next;
 }
 
 function hasPrOpen(agent) {
@@ -3367,7 +3424,9 @@ function render() {
 
   // Update walking transitions
   updateTransitions();
+  updateWalkOuts();
   const walkingDesks = new Set(transitions.map(t => t.deskIdx));
+  const walkingOutDesks = new Set(walkOuts.map(w => w.deskIdx));
 
   const canvasAgents = buildCanvasAgents();
   DESKS.forEach((d, idx) => {
@@ -3380,14 +3439,15 @@ function render() {
   canvasAgents.forEach(a => {
     const d = DESKS[a.desk];
     if (!d) return;
-    const isWalking = walkingDesks.has(a.desk);
-    const screenState = isWalking ? 'pr_open' :
+    const isWalkingIn = walkingDesks.has(a.desk);
+    const isWalkingOut = walkingOutDesks.has(a.desk);
+    const screenState = isWalkingIn ? 'pr_open' :
       a.failing ? 'ci_failed' :
       a.state === 'coding' ? 'coding' :
       a.state === 'merged' ? 'merged' : 'pr_open';
     drawMonitorSV(d, screenState, a.monitorText, a.desk, a.agentType);
 
-    if (isWalking) return;
+    if (isWalkingIn || isWalkingOut) return;
 
     if (a.dead) { drawTombstone(d); drawCharacterSV(d, a.ci, 'exited', a.agentType); }
     else drawCharacterSV(d, a.ci, a.state, a.agentType);
@@ -3414,12 +3474,23 @@ function render() {
     if (a.state === 'merged') drawConfetti(d);
   });
 
-  // Draw walking agents at interpolated positions
+  // Draw walking-in agents at interpolated positions
   transitions.forEach(t => {
     const now = Date.now();
     if (now < t.startTime) return;
     const pos = positionAlongPath(t.path, t.progress);
     drawCharacterSV(pos, t.colorIdx, 'walking', t.agentType);
+  });
+
+  // Draw walking-out agents at interpolated positions
+  walkOuts.forEach(w => {
+    const now = Date.now();
+    const pos = now < w.startTime
+      ? DESKS[w.deskIdx]  // still in delay — show at desk in exit pose
+      : positionAlongPath(w.path, w.progress);
+    if (!pos) return;
+    const drawState = now < w.startTime ? w.exitState : 'walking';
+    drawCharacterSV(pos, w.colorIdx, drawState, w.agentType);
   });
 
   // Click glow feedback
