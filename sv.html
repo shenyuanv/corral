@@ -1247,6 +1247,15 @@ const CHARS = [
   { skin: '#e8c090', skinD: '#c8a070', hair: '#802020', shirt: '#f08b2e', shirtD: '#c06a18', pants: '#2a2a4e' },
 ];
 
+const CHARS_SV = [
+  { skin: '#f5c6a0', skinH: '#ffe0c8', skinD: '#d4a080', hair: '#4a2800', hairH: '#6a4820', hairStyle: 0 },
+  { skin: '#d4a373', skinH: '#e8b888', skinD: '#b88855', hair: '#1a1a2e', hairH: '#3a3a4e', hairStyle: 1 },
+  { skin: '#f5deb3', skinH: '#fff0d0', skinD: '#d4bc90', hair: '#c04000', hairH: '#e06020', hairStyle: 2 },
+  { skin: '#c49b6a', skinH: '#d8b080', skinD: '#a07a48', hair: '#222',    hairH: '#444',    hairStyle: 3 },
+  { skin: '#f0d0b0', skinH: '#ffe8d0', skinD: '#d0b090', hair: '#604020', hairH: '#806040', hairStyle: 4 },
+  { skin: '#e8c090', skinH: '#f8d8a8', skinD: '#c8a070', hair: '#802020', hairH: '#a04040', hairStyle: 5 },
+];
+
 const DESKS = [];
 for (let r = 0; r < 3; r++)
   for (let c = 0; c < 4; c++)
@@ -1323,6 +1332,7 @@ function detectNewAgents() {
           progress: 0,
           colorIdx: idx % CHARS.length,
           startTime: now + staggerIdx * ENTER_STAGGER * 1000,
+          agentType: resolveAgentType(agent),
         });
         staggerIdx++;
       }
@@ -1580,6 +1590,133 @@ function drawCharacter(d, colorIdx, state) {
   ctx.restore();
 }
 
+function drawCharacterSV(d, colorIdx, state, agentType) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const ch = CHARS_SV[colorIdx % CHARS_SV.length];
+  const x = d.x * TILE;
+  const y = (d.y + 1) * TILE;
+  const isCodex = (agentType || '').includes('codex');
+  // Hoodie palette by agent type (orange=Claude, green=Codex)
+  const hM = isCodex ? '#3fbf3f' : '#e87030';
+  const hL = isCodex ? '#5fdf5f' : '#ff9050';
+  const hD = isCodex ? '#2a8a2a' : '#c05020';
+  const hX = isCodex ? '#1e6e1e' : '#a03818';
+  const f = Math.floor(frame / 8) % 4;
+  const sleeping = state === 'sleeping';
+  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
+  const celeb = state === 'merged';
+  const slumped = state === 'exited' || sleeping;
+  const walk = state === 'walking';
+  const coding = state === 'coding';
+  const bob = sitting ? 0 : [0, -1, 0, -1][f];
+  const oy = sitting ? (celeb ? -6 : slumped ? -2 : -4) : bob;
+  // Shadow for standing/walking
+  if (!sitting) { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(x+2, y+19, 12, 2); }
+  // --- LEGS ---
+  if (sitting) {
+    R(x+4, y+13+oy, 3, 2, '#3050a0'); R(x+9, y+13+oy, 3, 2, '#3050a0');
+    R(x+4, y+14+oy, 3, 1, '#283e80'); R(x+9, y+14+oy, 3, 1, '#283e80');
+  } else if (walk) {
+    const wc = [[0,0,0,0],[-1,-1,1,0],[0,0,0,0],[1,0,-1,-1]][f];
+    R(x+4+wc[0], y+14+oy, 3, 4, '#3050a0'); R(x+4+wc[0], y+14+oy, 3, 1, '#283e80');
+    R(x+9+wc[2], y+14+oy, 3, 4, '#3050a0'); R(x+9+wc[2], y+14+oy, 3, 1, '#283e80');
+    R(x+3+wc[0], y+18+oy+wc[1], 5, 1, '#333'); R(x+8+wc[2], y+18+oy+wc[3], 5, 1, '#333');
+  } else {
+    R(x+4, y+14+oy, 3, 4, '#3050a0'); R(x+4, y+14+oy, 3, 1, '#283e80');
+    R(x+9, y+14+oy, 3, 4, '#3050a0'); R(x+9, y+14+oy, 3, 1, '#283e80');
+    R(x+3, y+18+oy, 5, 1, '#333'); R(x+8, y+18+oy, 5, 1, '#333');
+  }
+  // --- TORSO (Hoodie) ---
+  R(x+3, y+7+oy, 10, 6, hM);
+  R(x+3, y+7+oy, 10, 1, hL);
+  R(x+3, y+12+oy, 10, 1, hD);
+  R(x+4, y+8+oy, 1, 4, hL);
+  R(x+12, y+8+oy, 1, 4, hD);
+  R(x+5, y+7+oy, 6, 1, hD);
+  R(x+7, y+8+oy, 1, 4, hD); R(x+8, y+8+oy, 1, 4, hX);
+  R(x+6, y+8+oy, 1, 2, hX); R(x+9, y+8+oy, 1, 2, hX);
+  if (isCodex) { R(x+10, y+9+oy, 2, 2, '#f0c040'); R(x+10, y+9+oy, 1, 1, '#d4a020'); }
+  else { R(x+10, y+9+oy, 1, 1, '#f0c040'); R(x+9, y+10+oy, 3, 1, '#f0c040'); R(x+10, y+11+oy, 1, 1, '#f0c040'); }
+  // --- HEAD ---
+  R(x+4, y+2+oy, 8, 5, ch.skin);
+  R(x+4, y+2+oy, 8, 1, ch.skinH);
+  R(x+4, y+6+oy, 8, 1, ch.skinD);
+  R(x+3, y+3+oy, 1, 2, ch.skin); R(x+3, y+3+oy, 1, 1, ch.skinH);
+  R(x+12, y+3+oy, 1, 2, ch.skinD);
+  // --- EYES (2px tall) ---
+  const blink = frame % 80 < 3;
+  if (slumped) {
+    R(x+5, y+4+oy, 2, 1, '#222'); R(x+9, y+4+oy, 2, 1, '#222');
+  } else if (!blink) {
+    R(x+5, y+3+oy, 2, 2, '#fff'); R(x+9, y+3+oy, 2, 2, '#fff');
+    const px = coding ? 0 : (Math.sin(frame * 0.02) > 0 ? 0 : 1);
+    R(x+5+px, y+3+oy, 1, 2, '#111'); R(x+9+px, y+3+oy, 1, 2, '#111');
+    R(x+5, y+3+oy, 1, 1, '#ddf'); R(x+9, y+3+oy, 1, 1, '#ddf');
+    if (celeb) { R(x+5, y+2+oy, 2, 1, ch.hair); R(x+9, y+2+oy, 2, 1, ch.hair); }
+  }
+  if (celeb) R(x+7, y+5+oy, 2, 1, '#c06060');
+  else if (slumped) R(x+7, y+5+oy, 2, 1, '#888');
+  else if (coding) R(x+7, y+5+oy, 1, 1, ch.skinD);
+  // --- HAIR (per hairStyle) ---
+  const hs = ch.hairStyle;
+  R(x+4, y+1+oy, 8, 2, ch.hair); R(x+4, y+1+oy, 8, 1, ch.hairH);
+  R(x+3, y+2+oy, 1, 1, ch.hair); R(x+12, y+2+oy, 1, 1, ch.hair);
+  if (hs === 0) {
+    R(x+5, y+oy, 2, 1, ch.hair); R(x+8, y+oy, 2, 1, ch.hair);
+    R(x+6, y+oy-1, 1, 1, ch.hairH); R(x+9, y+oy-1, 1, 1, ch.hairH); R(x+11, y+oy, 1, 1, ch.hair);
+  } else if (hs === 1) {
+    R(x+12, y+1+oy, 2, 1, ch.hair); R(x+13, y+2+oy, 2, 2, ch.hair); R(x+13, y+2+oy, 1, 1, ch.hairH);
+  } else if (hs === 2) {
+    R(x+3, y+oy, 10, 2, '#cc3333'); R(x+3, y+oy, 10, 1, '#ee5555'); R(x+2, y+1+oy, 12, 1, '#aa2222');
+  } else if (hs === 3) {
+    R(x+3, y+oy, 10, 2, ch.hair);
+    R(x+2, y+2+oy, 2, 3, '#555'); R(x+2, y+2+oy, 2, 1, '#777');
+    R(x+12, y+2+oy, 2, 3, '#555'); R(x+12, y+2+oy, 2, 1, '#777');
+    R(x+3, y+oy, 10, 1, '#666');
+  } else if (hs === 4) {
+    R(x+4, y+oy, 8, 1, '#4a4a8a'); R(x+3, y+1+oy, 10, 1, '#3a3a7a');
+    R(x+5, y+oy-1, 6, 1, '#5a5a9a'); R(x+7, y+oy-2, 2, 1, '#4a4a8a');
+  } else {
+    R(x+4, y+oy, 8, 2, ch.hair); R(x+4, y+oy, 8, 1, ch.hairH);
+  }
+  // --- ARMS ---
+  if (coding) {
+    const ab = f % 2;
+    R(x+1, y+8+oy, 2, 4, hM); R(x+1, y+8+oy, 2, 1, hL); R(x+1, y+12+oy, 2, 1, ch.skin);
+    R(x+13, y+8+oy, 2, 4, hM); R(x+13, y+8+oy, 2, 1, hL); R(x+13, y+12+oy+ab, 2, 1, ch.skin);
+  } else if (celeb) {
+    R(x+1, y+2+oy, 2, 5, hM); R(x+1, y+2+oy, 2, 1, hL); R(x+1, y+1+oy, 2, 1, ch.skin);
+    R(x+13, y+2+oy, 2, 5, hM); R(x+13, y+2+oy, 2, 1, hL); R(x+13, y+1+oy, 2, 1, ch.skin);
+  } else if (slumped) {
+    R(x+1, y+8+oy, 2, 6, hM); R(x+13, y+8+oy, 2, 6, hM);
+  } else if (walk) {
+    const as = [1, 0, -1, 0][f];
+    R(x+1, y+8+oy, 2, 4+as, hM); R(x+1, y+8+oy, 2, 1, hL); R(x+1, y+12+oy+as, 2, 1, ch.skin);
+    R(x+13, y+8+oy, 2, 4-as, hM); R(x+13, y+8+oy, 2, 1, hL); R(x+13, y+12+oy-as, 2, 1, ch.skin);
+  } else if (state === 'reading' || state === 'waiting') {
+    R(x+1, y+8+oy, 2, 4, hM); R(x+1, y+8+oy, 2, 1, hL);
+    R(x+13, y+7+oy, 2, 2, hM); R(x+13, y+5+oy, 2, 2, hM); R(x+12, y+5+oy, 1, 1, ch.skin);
+  } else {
+    R(x+1, y+8+oy, 2, 4, hM); R(x+1, y+8+oy, 2, 1, hL);
+    R(x+13, y+8+oy, 2, 4, hM); R(x+13, y+8+oy, 2, 1, hL);
+  }
+  // Coding headset
+  if (coding && hs !== 3) {
+    R(x+3, y+2+oy, 1, 3, '#555'); R(x+3, y+2+oy, 1, 1, '#777');
+    R(x+12, y+2+oy, 1, 3, '#555'); R(x+12, y+2+oy, 1, 1, '#777');
+    R(x+4, y+oy, 8, 1, '#444');
+  }
+  // Sleeping ZZZ
+  if (sleeping) {
+    const zf = frame % 90;
+    ctx.fillStyle = '#aaddff'; ctx.font = '3px "Press Start 2P"';
+    if (zf < 30) ctx.fillText('z', x+14, y+oy+2);
+    else if (zf < 60) ctx.fillText('zZ', x+13, y+oy);
+    else ctx.fillText('zZz', x+12, y+oy-2);
+  }
+  ctx.restore();
+}
+
 function drawFire(d) {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const x = d.x * TILE, y = d.y * TILE - 6;
@@ -1738,6 +1875,7 @@ function buildCanvasAgents() {
       })(),
       failing: isCiFailing(agent),
       coffees: coffeeCount(agent),
+      agentType: resolveAgentType(agent),
     };
   });
 }
@@ -1770,8 +1908,8 @@ function render() {
 
     if (isWalking) return;
 
-    if (a.dead) drawTombstone(d);
-    else drawCharacter(d, a.ci, a.state);
+    if (a.dead) { drawTombstone(d); drawCharacterSV(d, a.ci, 'exited', a.agentType); }
+    else drawCharacterSV(d, a.ci, a.state, a.agentType);
 
     drawTokenBar(d, a.tokens);
     if (a.coffees > 0) drawCoffeeCups(d, a.coffees);
@@ -1789,7 +1927,7 @@ function render() {
     const now = Date.now();
     if (now < t.startTime) return;
     const pos = positionAlongPath(t.path, t.progress);
-    drawCharacter(pos, t.colorIdx, 'walking');
+    drawCharacterSV(pos, t.colorIdx, 'walking', t.agentType);
   });
 
   // Click glow feedback
