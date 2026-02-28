@@ -292,26 +292,32 @@
   .uf-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
   .uc-note { color: #555; font-size: 6px; margin-top: 4px; }
 
-  /* Timeline mini */
-  .tl-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 4px;
-    font-size: 6px;
+  /* Quest Log feed */
+  .ql-feed {
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #333 #111;
   }
-  .tl-label { width: 56px; color: #888; overflow: hidden; white-space: nowrap; }
-  .tl-track {
-    flex: 1;
-    height: 6px;
-    background: #111;
-    border-radius: 3px;
-    overflow: hidden;
-    position: relative;
+  .ql-feed::-webkit-scrollbar { width: 4px; }
+  .ql-feed::-webkit-scrollbar-track { background: #111; }
+  .ql-feed::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .ql-entry {
     display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #1a1a2e;
+    font-size: 7px;
   }
-  .tl-seg { height: 100%; }
-  .tl-time { width: 24px; color: #555; text-align: right; }
+  .ql-entry:last-child { border-bottom: none; }
+  .ql-icon { flex-shrink: 0; font-size: 9px; line-height: 1; }
+  .ql-body { flex: 1; min-width: 0; }
+  .ql-head { display: flex; align-items: baseline; gap: 4px; }
+  .ql-name { color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ql-status { white-space: nowrap; font-size: 6px; }
+  .ql-time { flex-shrink: 0; color: #555; font-size: 6px; margin-left: auto; }
+  .ql-title { color: #666; font-size: 6px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* Queue */
   .queue-item {
@@ -581,10 +587,12 @@
     .uc-title { font-size: 9px; }
     .uc-row { font-size: 8px; }
 
-    /* Timeline: slightly larger */
-    .tl-row { font-size: 7px; gap: 6px; }
-    .tl-label { width: 48px; font-size: 7px; }
-    .tl-track { height: 8px; }
+    /* Quest Log feed: slightly larger on mobile */
+    .ql-feed { max-height: 240px; }
+    .ql-entry { font-size: 8px; gap: 8px; padding: 5px 0; }
+    .ql-status { font-size: 7px; }
+    .ql-time { font-size: 7px; }
+    .ql-title { font-size: 7px; }
 
     /* Agent card tap-to-expand */
     .agent-card .ac-detail { max-height: 2.2em; overflow: hidden; transition: max-height 0.2s ease; }
@@ -670,21 +678,8 @@
       <section class="nes-container is-dark with-title">
         <p class="title">📜 QUEST LOG <span class="count" id="timelineRange" style="font-size:7px;color:#666">—</span></p>
 
-        <div style="display:flex; gap:8px; margin-bottom:6px; font-size:6px; color:#555">
-          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3b7cff;display:inline-block"></span>Work</span>
-          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#3adf7a;display:inline-block"></span>PR</span>
-          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#ff5c5c;display:inline-block"></span>CI</span>
-          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#f0c040;display:inline-block"></span>Merge</span>
-          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#8855aa;display:inline-block"></span>Close</span>
-          <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:#6c6c6c;display:inline-block"></span>Dead</span>
-        </div>
-
-        <div id="timelineRows">
-          <div class="no-data">No timeline data</div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;color:#444;font-size:5px;margin-top:4px;padding:0 60px 0 0">
-          <span>-6h</span><span>-4h</span><span>-2h</span><span>Now</span>
+        <div id="timelineRows" class="ql-feed">
+          <div class="no-data">No quests yet...</div>
         </div>
       </section>
     </div>
@@ -1243,66 +1238,104 @@ function renderUsageCards() {
   }).join('');
 }
 
-// --- Timeline ---
+// --- Timeline (Quest Log event feed) ---
+function questIcon(state) {
+  switch (state) {
+    case 'merged': return '🎉';
+    case 'pr_closed': return '🚫';
+    case 'exited': case 'dead': return '💀';
+    case 'waiting': return '🔀';
+    case 'review_waiting': return '🔀';
+    case 'reading': return '🔀';
+    case 'coding': return '☕';
+    default: return '☕';
+  }
+}
+
+function questStatusLabel(state) {
+  switch (state) {
+    case 'merged': return 'MERGED';
+    case 'pr_closed': return 'CLOSED';
+    case 'exited': return 'EXITED';
+    case 'dead': return 'DEAD';
+    case 'waiting': return 'PR OPEN';
+    case 'review_waiting': return 'REVIEW';
+    case 'reading': return 'REVIEW';
+    case 'coding': return 'WORKING';
+    default: return 'IDLE';
+  }
+}
+
+function questTimeAgo(ms) {
+  if (ms < 60000) return 'just now';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours / 24);
+  return days + 'd ago';
+}
+
 function renderTimeline() {
   const container = document.getElementById('timelineRows');
   const rangeEl = document.getElementById('timelineRange');
   if (!container) return;
 
-  // Use history data if available, otherwise fall back to current agents
   const items = historyData.length ? historyData : agents;
   if (!items.length) {
-    container.innerHTML = '<div class="no-data">No timeline data</div>';
+    container.innerHTML = '<div class="no-data">No quests yet...</div>';
     return;
   }
 
   const now = Date.now();
-  const windowMs = 6 * 3600000; // 6 hours
-  const windowStart = now - windowMs;
   if (rangeEl) rangeEl.textContent = 'last 6h';
 
-  // Build timeline rows from history statusHistory or agent data
-  const rows = items.slice(0, 12).map(item => {
-    const name = escapeHtml((item.id || '').substring(0, 8));
+  // Build event list: extract most recent event time for each item
+  const events = items.map(item => {
     const state = mapState(item);
-    const colorClass = stateToColorClass(state);
-    const created = getCreatedAt(item) || windowStart;
-    const elapsed = formatDuration(now - created);
-
-    // If history item has statusHistory, render segments
     const statusHistory = item.statusHistory || [];
-    if (statusHistory.length > 1) {
-      let segments = '';
-      for (let i = 0; i < statusHistory.length; i++) {
-        const entry = statusHistory[i];
-        const entryTime = new Date(entry.at).getTime();
-        const nextTime = i + 1 < statusHistory.length ? new Date(statusHistory[i+1].at).getTime() : now;
-        const segStart = Math.max(entryTime, windowStart);
-        const segEnd = Math.min(nextTime, now);
-        if (segEnd <= segStart) continue;
-        const startPct = ((segStart - windowStart) / windowMs) * 100;
-        const widthPct = ((segEnd - segStart) / windowMs) * 100;
-        const color = timelineColor(entry.status || '');
-        segments += `<div class="tl-seg" style="position:absolute;left:${startPct}%;width:${widthPct}%;background:${color}"></div>`;
-      }
-      return `<div class="tl-row">
-        <span class="tl-label ${colorClass}">${name}</span>
-        <div class="tl-track" style="position:relative">${segments}</div>
-        <span class="tl-time">${elapsed}</span>
-      </div>`;
+    // Most recent event time: last statusHistory entry, or lastUpdatedAt, or createdAt
+    let eventTime = null;
+    if (statusHistory.length) {
+      const last = statusHistory[statusHistory.length - 1];
+      if (last.at) eventTime = new Date(last.at).getTime();
     }
+    if (!eventTime) {
+      const updated = item.lastUpdatedAt || item.updatedAt || item.updated_at;
+      if (updated) eventTime = new Date(updated).getTime();
+    }
+    if (!eventTime) eventTime = getCreatedAt(item) || now;
 
-    // Simple single-color bar for agents without history
-    const agentStart = Math.max(created, windowStart);
-    const startPct = ((agentStart - windowStart) / windowMs) * 100;
-    const widthPct = ((now - agentStart) / windowMs) * 100;
-    const color = timelineColor(item.status || '');
-    return `<div class="tl-row">
-      <span class="tl-label ${colorClass}">${name}</span>
-      <div class="tl-track" style="position:relative">
-        <div class="tl-seg" style="position:absolute;left:${startPct}%;width:${widthPct}%;background:${color}"></div>
+    const repoName = getRepoName(item);
+    const issueId = getIssueId(item);
+    const name = repoName && issueId ? repoName + '#' + issueId : (repoName || escapeHtml((item.id || '').substring(0, 12)));
+    const title = item.issueTitle || item.issue_title || '';
+
+    return { state, eventTime, name, title, item };
+  });
+
+  // Sort by most recent event first
+  events.sort((a, b) => b.eventTime - a.eventTime);
+
+  const rows = events.slice(0, 12).map(ev => {
+    const icon = questIcon(ev.state);
+    const label = questStatusLabel(ev.state);
+    const color = timelineColor(ev.item.status || '');
+    const timeAgo = questTimeAgo(now - ev.eventTime);
+    const titleLine = ev.title
+      ? `<div class="ql-title">${escapeHtml(ev.title)}</div>`
+      : '';
+
+    return `<div class="ql-entry">
+      <span class="ql-icon">${icon}</span>
+      <div class="ql-body">
+        <div class="ql-head">
+          <span class="ql-name">${escapeHtml(ev.name)}</span>
+          <span class="ql-status" style="color:${color}">${label}</span>
+          <span class="ql-time">${timeAgo}</span>
+        </div>
+        ${titleLine}
       </div>
-      <span class="tl-time">${elapsed}</span>
     </div>`;
   });
 
