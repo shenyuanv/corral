@@ -200,6 +200,35 @@
   .v-purple { color: #8855aa; }
   .v-cyan { color: #00e5ff; }
 
+  /* === NOTIFICATION BALLOONS === */
+  #notificationArea {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .notif-balloon {
+    font-size: 7px;
+    line-height: 1.8;
+    padding: 8px 10px;
+    animation: notifIn 0.3s ease-out;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    word-break: break-word;
+  }
+  .notif-balloon.fade-out {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  @keyframes notifIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .notif-balloon .notif-text-blue { color: #3b7cff; }
+  .notif-balloon .notif-text-red { color: #e76e55; }
+  .notif-balloon .notif-text-gold { color: #f0c040; }
+  .notif-balloon .notif-text-gray { color: #6c6c6c; }
+  .notif-balloon .notif-text-green { color: #5dfc5d; }
+
   .progress-bar {
     height: 3px;
     background: #1a1a30;
@@ -663,6 +692,7 @@
     <div class="sb-section">
       <section class="nes-container is-dark with-title">
         <p class="title">⚡ PARTY <span class="count" id="agentCount" style="font-size:7px;color:#666">—</span></p>
+        <div id="notificationArea"></div>
         <div id="agentCards">
           <div class="no-data">Waiting for agent data...</div>
         </div>
@@ -702,6 +732,69 @@ const startTime = Date.now();
 let transitions = [];    // { key, deskIdx, path, progress, colorIdx, startTime }
 let prevAgentKeys = new Set();
 let hasInitialized = false;
+
+// --- Notification balloon state ---
+let prevAgentStates = new Map(); // agentId -> { state, prNumber, ciFailing }
+const MAX_BALLOONS = 3;
+const BALLOON_DURATION = 8000;
+
+function showNotification(emoji, message, colorClass) {
+  const area = document.getElementById('notificationArea');
+  if (!area) return;
+
+  // Enforce max 3 balloons — remove oldest first
+  while (area.children.length >= MAX_BALLOONS) {
+    area.removeChild(area.firstChild);
+  }
+
+  const balloon = document.createElement('div');
+  balloon.className = 'nes-balloon from-left is-dark notif-balloon';
+  balloon.innerHTML = '<span class="' + colorClass + '">' + emoji + ' ' + escapeHtml(message) + '</span>';
+  area.appendChild(balloon);
+
+  setTimeout(() => {
+    balloon.classList.add('fade-out');
+    setTimeout(() => { if (balloon.parentNode) balloon.parentNode.removeChild(balloon); }, 500);
+  }, BALLOON_DURATION);
+}
+
+function detectStateChanges() {
+  if (!hasInitialized) return; // skip initial load
+  const currentStates = new Map();
+
+  agents.forEach(agent => {
+    const id = agent.id || '';
+    if (!id) return;
+    const state = mapState(agent);
+    const prNum = getPrNumber(agent);
+    const ciFail = isCiFailing(agent);
+    const repo = getRepoName(agent);
+    const name = id.length > 16 ? id.slice(0, 16) + '..' : id;
+    const repoLabel = repo ? repo + (prNum ? '#' + prNum : '') : name;
+
+    currentStates.set(id, { state, prNumber: prNum, ciFailing: ciFail });
+
+    const prev = prevAgentStates.get(id);
+    if (!prev) {
+      // New agent appeared (not on first load since hasInitialized check above)
+      showNotification('\u{1F6B6}', 'New agent: ' + name, 'notif-text-green');
+      return;
+    }
+
+    // Detect state transitions
+    if (state === 'merged' && prev.state !== 'merged') {
+      showNotification('\u2705', repoLabel + ' PR merged!', 'notif-text-gold');
+    } else if (ciFail && !prev.ciFailing) {
+      showNotification('\u274C', repoLabel + ' CI failed', 'notif-text-red');
+    } else if (prNum && !prev.prNumber) {
+      showNotification('\u{1F500}', repoLabel + ' PR opened', 'notif-text-blue');
+    } else if ((state === 'dead' || state === 'exited') && prev.state !== 'dead' && prev.state !== 'exited') {
+      showNotification('\u{1F480}', name + ' died', 'notif-text-gray');
+    }
+  });
+
+  prevAgentStates = currentStates;
+}
 
 // --- Helpers ---
 function escapeHtml(value) {
@@ -1144,6 +1237,7 @@ async function refreshFromLasso() {
     if (!agentsResp.ok) throw new Error('Agents fetch failed');
     const data = await agentsResp.json();
     agents = Array.isArray(data) ? data : (data.sessions || []);
+    detectStateChanges();
     detectNewAgents();
 
     if (historyResp.ok) {
