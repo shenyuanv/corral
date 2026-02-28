@@ -507,8 +507,10 @@
       min-height: calc(100vh - 70px);
     }
 
-    /* Sidebar: stacked below canvas on mobile */
+    /* Canvas first on mobile, sidebar below */
+    .scene-wrap { order: 1; }
     .sidebar {
+      order: 2;
       position: static;
       width: 100%;
       max-width: none;
@@ -520,7 +522,14 @@
       border-right: none;
       border-top: 2px solid #f0c040;
       overflow-y: visible;
+      display: flex;
+      flex-direction: column;
     }
+
+    /* Sidebar section order: PARTY → QUEST LOG → INVENTORY */
+    .sidebar > .sb-section:nth-child(2) { order: 3; } /* INVENTORY → last */
+    .sidebar > .sb-section:nth-child(3) { order: 2; } /* QUEST LOG → middle */
+    .sidebar > .sb-section:nth-child(4) { order: 1; } /* PARTY → first */
 
     /* Hide desktop resize handle on mobile */
     .resize-handle { display: none; }
@@ -833,14 +842,16 @@ function resolveAgentType(agent) {
 
 function mapState(agent) {
   if (!agent) return 'idle';
-  if (agent.endedAt || agent.ended_at) return 'dead';
   const status = (agent.status || '').toLowerCase();
   const activity = (agent.activity || '').toLowerCase();
+  // Check explicit status FIRST, before endedAt
   if (status.includes('merged') || activity.includes('merged')) return 'merged';
   if (status.includes('pr_closed') || activity.includes('pr_closed')) return 'pr_closed';
   if (status.includes('exited') || activity.includes('exited') ||
       status.includes('archived') || activity.includes('archived')) return 'exited';
   if (status.includes('dead') || activity.includes('dead')) return 'dead';
+  // endedAt as fallback for agents with no clear status
+  if (agent.endedAt || agent.ended_at) return 'exited';
   if (status.includes('pr_review') || status.includes('changes_requested')) return 'reading';
   if (status.includes('pr_open') && agent.alive === false) return 'review_waiting';
   if (status.includes('pr_open') || status.includes('ci') || activity.includes('stale')) return 'waiting';
@@ -856,8 +867,8 @@ function stateLabel(state) {
     case 'waiting': return 'PR open';
     case 'merged': return 'merged ✓';
     case 'pr_closed': return 'PR closed';
-    case 'exited': return 'exited 💀';
-    case 'dead': return 'done 💀';
+    case 'exited': return 'exited';
+    case 'dead': return 'dead';
     default: return 'idle';
   }
 }
