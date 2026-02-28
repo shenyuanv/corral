@@ -750,6 +750,16 @@ function getCreatedAt(agent) {
   return null;
 }
 
+function coffeeCount(agent) {
+  const created = getCreatedAt(agent);
+  if (!created) return 0;
+  const hours = (Date.now() - created) / 3600000;
+  if (hours < 0.5) return 0;
+  if (hours < 1) return 1;
+  if (hours < 2) return 2;
+  return 3;
+}
+
 function getTokens(agent) {
   return agent.tokensUsed || agent.tokens_used || agent.tokens || 0;
 }
@@ -1440,6 +1450,25 @@ function drawConfetti(d) {
   }
 }
 
+function drawCoffeeCups(d, count) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const baseX = d.x * TILE + TILE + 1;
+  const baseY = d.y * TILE + 10;
+  for (let i = 0; i < count; i++) {
+    const cx = baseX + i * 5;
+    R(cx, baseY, 3, 4, PAL.cup);
+    R(cx, baseY + 4, 3, 1, PAL.cupDark);
+    R(cx + 1, baseY + 1, 1, 2, PAL.coffee);
+    R(cx + 3, baseY + 1, 1, 2, PAL.cupDark);
+  }
+  if (count > 0) {
+    const lastX = baseX + (count - 1) * 5 + 1;
+    const phase = frame % 20 < 10 ? 0 : 1;
+    R(lastX, baseY - 1 - phase, 1, 1, 'rgba(255,255,255,0.4)');
+  }
+  ctx.restore();
+}
+
 function drawPrBadge(d, num, merged) {
   const x = d.x * S + S - 6, y = d.y * S - 2;
   R(x, y, 22, 12, merged ? '#d1a128' : '#2f9a3d');
@@ -1520,6 +1549,7 @@ function buildCanvasAgents() {
       dead: state === 'dead' || state === 'exited',
       label: getRepoName(agent) + (getIssueId(agent) ? '#' + getIssueId(agent) : ''),
       failing: isCiFailing(agent),
+      coffees: coffeeCount(agent),
     };
   });
 }
@@ -1548,6 +1578,7 @@ function render() {
     else drawCharacter(d, a.ci, a.state);
 
     drawTokenBar(d, a.tokens);
+    if (a.coffees > 0) drawCoffeeCups(d, a.coffees);
     if (a.failing) drawFire(d);
     if (a.pr) drawPrBadge(d, a.pr, a.state === 'merged');
     if (a.label) {
