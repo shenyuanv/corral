@@ -631,7 +631,7 @@
     .canvas-area {
       width: 100%;
       height: 0;
-      padding-bottom: 60%; /* 384/640 = 60% aspect ratio */
+      padding-bottom: 60%; /* 768/1280 = 60% aspect ratio */
       position: relative;
       overflow: hidden;
     }
@@ -774,7 +774,7 @@
   <!-- SCENE -->
   <div class="scene-wrap">
     <div class="canvas-area">
-      <canvas id="office" width="640" height="384"></canvas>
+      <canvas id="office" width="1280" height="768"></canvas>
       <div class="scanlines"></div>
     </div>
     <div class="status-bar" style="padding:0 14px;margin:0">
@@ -1522,7 +1522,7 @@ const canvas = document.getElementById('office');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-const TILE = 16, SCALE = 2, S = TILE * SCALE;
+const TILE = 16, SCALE = 4, S = TILE * SCALE;
 const COLS = 20, ROWS = 12;
 let frame = 0;
 
@@ -2014,10 +2014,10 @@ function drawMonitor(d, state, monitorText) {
     ctx.save();
     ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
     ctx.fillStyle = state === 'ci_failed' ? '#ff6666' : (state === 'coding' ? '#4ae04a' : '#8888ff');
-    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.font = '10px "Press Start 2P", monospace';
     ctx.textBaseline = 'middle';
     const textWidth = ctx.measureText(monitorText).width;
-    const totalScroll = textWidth + sw + 4;
+    const totalScroll = textWidth + sw + 8;
     const scroll = (frame * 0.6) % totalScroll;
     ctx.fillText(monitorText, sx + sw - scroll, sy + sh / 2);
     ctx.restore();
@@ -2256,10 +2256,10 @@ function drawTombstone(d) {
 
 function drawBubble(d, text, color) {
   const px = d.x * S, py = (d.y * TILE - 10) * SCALE;
-  R(px - 1, py - 13, text.length * 5.5 + 12, 13, 'rgba(0,0,0,0.8)');
-  R(px + S/2 - 2, py, 4, 3, 'rgba(0,0,0,0.8)');
-  ctx.fillStyle = color || '#fff'; ctx.font = '8px "Press Start 2P"';
-  ctx.textAlign = 'center'; ctx.fillText(text, px + S/2, py - 3); ctx.textAlign = 'left';
+  R(px - 2, py - 26, text.length * 11 + 24, 26, 'rgba(0,0,0,0.8)');
+  R(px + S/2 - 4, py, 8, 6, 'rgba(0,0,0,0.8)');
+  ctx.fillStyle = color || '#fff'; ctx.font = '16px "Press Start 2P"';
+  ctx.textAlign = 'center'; ctx.fillText(text, px + S/2, py - 6); ctx.textAlign = 'left';
 }
 
 function drawConfetti(d) {
@@ -2267,9 +2267,9 @@ function drawConfetti(d) {
   const colors = ['#f0c040', '#4ae04a', '#fff', '#d1a128', '#ff5a9a', '#00e5ff'];
   for (let i = 0; i < 15; i++) {
     const a = (i / 15) * Math.PI * 2 + frame * 0.04;
-    const dist = 20 + Math.sin(frame * 0.08 + i * 1.3) * 14;
+    const dist = 40 + Math.sin(frame * 0.08 + i * 1.3) * 28;
     ctx.fillStyle = colors[i % colors.length];
-    ctx.fillRect(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist - 10, 2 + (i % 2), 2 + (i % 2));
+    ctx.fillRect(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist - 20, 4 + (i % 2) * 2, 4 + (i % 2) * 2);
   }
 }
 
@@ -2302,10 +2302,10 @@ function drawCoffeeCups(d, count) {
 }
 
 function drawPrBadge(d, num, merged) {
-  const x = d.x * S + S - 6, y = d.y * S - 2;
-  R(x, y, 22, 12, merged ? '#d1a128' : '#2f9a3d');
-  R(x, y, 22, 1, merged ? '#e8c848' : '#4ae04a');
-  ctx.fillStyle = '#111'; ctx.font = '7px "Press Start 2P"'; ctx.fillText(`#${num}`, x + 2, y + 9);
+  const x = d.x * S + S - 12, y = d.y * S - 4;
+  R(x, y, 44, 24, merged ? '#d1a128' : '#2f9a3d');
+  R(x, y, 44, 2, merged ? '#e8c848' : '#4ae04a');
+  ctx.fillStyle = '#111'; ctx.font = '14px "Press Start 2P"'; ctx.fillText(`#${num}`, x + 4, y + 18);
 }
 
 function drawTokenBar(d, pct) {
@@ -2340,26 +2340,26 @@ function drawServerRack(px, py) {
 
 function drawDivider(col) {
   const x = (2 + col * 5 - 1) * S + S/2;
-  ctx.strokeStyle = PAL.divider; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = PAL.divider; ctx.lineWidth = 4; ctx.setLineDash([8, 8]);
   ctx.beginPath(); ctx.moveTo(x, S); ctx.lineTo(x, ROWS * S - S); ctx.stroke(); ctx.setLineDash([]);
 }
 
 function drawLampGlow(tx, ty) {
   const cx = tx * S + S/2, cy = ty * S;
-  const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy + 60, 60);
+  const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy + 120, 120);
   grad.addColorStop(0, 'rgba(255,240,200,0.06)'); grad.addColorStop(1, 'rgba(255,240,200,0)');
-  ctx.fillStyle = grad; ctx.fillRect(cx - 60, cy, 120, 80);
+  ctx.fillStyle = grad; ctx.fillRect(cx - 120, cy, 240, 160);
 }
 
 // Tumbleweed
-let tumbleX = -20;
+let tumbleX = -40;
 function drawTumbleweed() {
-  tumbleX = (tumbleX + 0.4) % (COLS * S + 40);
-  const ty = (ROWS - 1) * S - 8 + Math.sin(tumbleX * 0.03) * 4;
+  tumbleX = (tumbleX + 0.8) % (COLS * S + 80);
+  const ty = (ROWS - 1) * S - 16 + Math.sin(tumbleX * 0.015) * 8;
   ctx.save(); ctx.translate(tumbleX, ty); ctx.rotate(frame * 0.06);
-  ctx.fillStyle = '#6a5a30'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#8a7a40'; ctx.lineWidth = 1;
-  for (let i = 0; i < 5; i++) { const a = i * Math.PI / 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*5, Math.sin(a)*5); ctx.stroke(); }
+  ctx.fillStyle = '#6a5a30'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#8a7a40'; ctx.lineWidth = 2;
+  for (let i = 0; i < 5; i++) { const a = i * Math.PI / 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*10, Math.sin(a)*10); ctx.stroke(); }
   ctx.restore();
 }
 
@@ -2500,78 +2500,115 @@ function drawWallsSV() {
   ctx.restore();
 }
 
-function drawDeskSV(d, idx) {
+function drawDeskSV(d, idx, agentType) {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const x = d.x * TILE, y = d.y * TILE + 8;
-  const isStanding = idx % 3 === 0; // every 3rd desk is standing
-  const isLaptop = idx % 4 === 1; // every 4th desk has laptop combo
+  const isCodex = (agentType || '').includes('codex');
+  const isStanding = idx % 3 === 0;
 
   if (isStanding) {
     // Standing desk — taller frame, adjustable legs
     R(x, y - 2, TILE, 2, PAL.svDeskSurface); R(x, y - 2, TILE, 1, PAL.svDeskFrameLight);
-    // Wood grain — alternating thin lines
     for (let gx = x + 1; gx < x + TILE - 1; gx += 2) R(gx, y - 1, 1, 1, PAL.svDeskSurfaceDark);
     R(x, y, TILE, 1, PAL.svDeskSurfaceDark);
-    // Height-adjustable frame legs (double lines)
     R(x + 1, y + 1, 1, 10, PAL.svDeskFrame); R(x + 2, y + 1, 1, 10, PAL.svDeskFrameDark);
     R(x + TILE - 3, y + 1, 1, 10, PAL.svDeskFrame); R(x + TILE - 2, y + 1, 1, 10, PAL.svDeskFrameDark);
-    // Crossbar
     R(x + 2, y + 6, TILE - 4, 1, PAL.svDeskFrameDark);
   } else {
-    // Regular desk — wider, L-shaped modern desk with wood grain
+    // Regular desk — modern desk with wood grain
     R(x, y, TILE, 2, PAL.svDeskSurface); R(x, y, TILE, 1, '#d8ccb4');
-    // Wood grain effect — alternating thin lines of 2 brown shades
     for (let gx = x + 1; gx < x + TILE - 1; gx += 2) R(gx, y + 1, 1, 1, PAL.svDeskSurfaceDark);
     for (let gx = x + 2; gx < x + TILE - 1; gx += 3) R(gx, y + 1, 2, 1, '#c4b898');
     R(x, y + 2, TILE, 3, PAL.svDeskFrame); R(x, y + 2, TILE, 1, PAL.svDeskFrameLight);
-    // Metal legs
     R(x + 1, y + 5, 1, 7, PAL.svDeskFrameDark); R(x + TILE - 2, y + 5, 1, 7, PAL.svDeskFrameDark);
     R(x + 1, y + 11, 3, 1, PAL.svDeskFrame); R(x + TILE - 4, y + 11, 3, 1, PAL.svDeskFrame);
   }
 
-  // Keyboard on desk surface
+  // Mechanical keyboard with colored keycaps
   const ky = isStanding ? y - 1 : y + 1;
-  R(x + 3, ky, 6, 2, PAL.svKeyboard);
-  for (let kx = x + 3; kx < x + 9; kx += 2) R(kx, ky, 1, 1, PAL.svKeyboardKey);
-  // Mouse
-  R(x + 11, ky, 2, 2, PAL.svMouse);
-  R(x + 11, ky, 2, 1, '#444');
+  R(x + 2, ky, 8, 3, PAL.svKeyboard);
+  R(x + 2, ky, 8, 1, '#333');
+  const keyCols = ['#4a4a4a', '#3a5a3a', '#3a3a5a', '#5a3a3a', '#4a4a3a'];
+  for (let kx = 0; kx < 7; kx++) {
+    R(x + 3 + kx, ky + 1, 1, 1, keyCols[kx % keyCols.length]);
+  }
+  for (let kx = 0; kx < 6; kx++) {
+    R(x + 3 + kx, ky + 2, 1, 1, keyCols[(kx + 2) % keyCols.length]);
+  }
+  // Trackpad/Mouse
+  R(x + 11, ky, 3, 2, PAL.svMouse);
+  R(x + 11, ky, 3, 1, '#444');
+  R(x + 12, ky + 1, 1, 1, '#3a3a3a');
 
-  // Cable mess under desk
+  // Cable management tray under desk
+  const cableY = isStanding ? y + 7 : y + 7;
+  R(x + 2, cableY, TILE - 4, 1, '#3a3a3a');
   ctx.fillStyle = PAL.svCable;
-  const cableY = isStanding ? y + 8 : y + 8;
-  for (let i = 0; i < 4; i++) {
-    const cx = x + 3 + i * 3;
-    const cy = cableY + Math.sin(i * 2.1) * 1.5;
-    ctx.fillRect(cx, cy, 2, 1);
-    ctx.fillRect(cx + 1, cy + 1, 2, 1);
+  for (let i = 0; i < 5; i++) {
+    const cx = x + 3 + i * 2;
+    const cy = cableY + 1 + Math.sin(i * 1.8) * 1;
+    ctx.fillRect(cx, cy, 1, 2);
+  }
+
+  // Power strip with LED
+  R(x + 4, cableY + 3, 6, 2, '#2a2a2a');
+  R(x + 4, cableY + 3, 6, 1, '#333');
+  R(x + 9, cableY + 3, 1, 1, frame % 60 < 30 ? '#2f9a3d' : '#1a4a1a');
+
+  // Backpack leaning against desk leg
+  if (idx % 3 === 1) {
+    const bx = x + TILE - 2, by = isStanding ? y + 8 : y + 9;
+    R(bx, by, 3, 4, '#3a4a6a');
+    R(bx, by, 3, 1, '#4a5a7a');
+    R(bx + 1, by + 1, 1, 1, '#555');
   }
   ctx.restore();
 }
 
-function drawMonitorSV(d, state, monitorText, idx) {
+function drawMonitorSV(d, state, monitorText, idx, agentType) {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const x = d.x * TILE + 1, y = d.y * TILE;
-  const isLaptop = idx % 4 === 1;
+  const isCodex = (agentType || '').includes('codex');
 
-  // Primary monitor — slightly wider
+  // Primary monitor — thin bezel with visible stand
   R(x, y, 12, 8, PAL.monitorBezel); R(x + 1, y, 10, 1, PAL.monitor);
   const sc = state === 'ci_failed' ? '#3a0808' : (state === 'coding' ? '#0a200a' : '#0a0a0a');
   R(x + 1, y + 1, 10, 6, sc);
-  // Monitor stand
-  R(x + 4, y + 8, 4, 1, '#333'); R(x + 3, y + 9, 6, 1, '#2a2a2a');
+  // Thin bezel highlight
+  R(x, y, 12, 1, '#333');
+  // Monitor stand — visible arm + base
+  R(x + 5, y + 8, 2, 1, '#444');
+  R(x + 4, y + 9, 4, 1, '#333');
+  R(x + 3, y + 9, 6, 1, '#2a2a2a');
 
-  if (isLaptop) {
-    // Laptop beside primary monitor
-    R(x + 13, y + 5, 3, 3, PAL.svLaptop);
-    R(x + 13, y + 5, 3, 2, PAL.svLaptopScreen);
-    R(x + 13, y + 4, 4, 1, PAL.svLaptop); // lid
-  } else {
-    // Secondary monitor (smaller, slightly offset)
-    R(x + 13, y + 1, 3, 5, PAL.svMonitor2Bezel);
-    R(x + 13, y + 1, 3, 1, PAL.svMonitor2);
-    R(x + 13, y + 2, 3, 3, sc === '#0a0a0a' ? '#0c0c0c' : sc);
+  // Sticky notes on monitor bezel
+  const stickyColors = PAL.svSticky;
+  R(x, y + 7, 2, 1, stickyColors[idx % stickyColors.length]);
+  if (idx % 2 === 0) R(x + 10, y + 7, 2, 1, stickyColors[(idx + 2) % stickyColors.length]);
+
+  if (isCodex) {
+    // Codex: dual monitor + tower PC (power user)
+    // Second monitor (same size, slightly offset)
+    R(x + 13, y, 3, 6, PAL.svMonitor2Bezel);
+    R(x + 13, y, 3, 1, PAL.svMonitor2);
+    R(x + 13, y + 1, 3, 4, sc === '#0a0a0a' ? '#0c0c0c' : sc);
     R(x + 14, y + 6, 1, 1, '#333');
+    // Tower PC under desk — tall case with LED
+    R(x + 14, y + 8, 2, 4, '#1a1a1a');
+    R(x + 14, y + 8, 2, 1, '#2a2a2a');
+    R(x + 14, y + 9, 1, 1, frame % 40 < 20 ? '#2f9a3d' : '#1a3a1a');
+    R(x + 14, y + 10, 1, 1, '#00e5ff33');
+  } else {
+    // Claude: laptop + external monitor (creative/portable)
+    // Laptop — open with screen glow + keyboard area + trackpad
+    R(x + 13, y + 4, 4, 1, PAL.svLaptop); // lid/hinge
+    R(x + 13, y + 5, 4, 3, PAL.svLaptop);
+    R(x + 13, y + 5, 4, 2, PAL.svLaptopScreen);
+    // Laptop screen glow
+    if (state === 'coding') R(x + 14, y + 5, 2, 1, '#0a200a');
+    // Laptop keyboard area
+    R(x + 13, y + 7, 4, 1, '#222');
+    for (let lk = 0; lk < 3; lk++) R(x + 14 + lk, y + 7, 1, 1, '#2a2a2a');
   }
 
   // Screen content on primary monitor
@@ -2605,10 +2642,10 @@ function drawMonitorSV(d, state, monitorText, idx) {
     ctx.save();
     ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
     ctx.fillStyle = state === 'ci_failed' ? '#ff6666' : (state === 'coding' ? '#4ae04a' : '#8888ff');
-    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.font = '10px "Press Start 2P", monospace';
     ctx.textBaseline = 'middle';
     const textWidth = ctx.measureText(monitorText).width;
-    const totalScroll = textWidth + sw + 4;
+    const totalScroll = textWidth + sw + 8;
     const scroll = (frame * 0.6) % totalScroll;
     ctx.fillText(monitorText, sx + sw - scroll, sy + sh / 2);
     ctx.restore();
@@ -2634,32 +2671,42 @@ function drawChairSV(d, idx) {
   const chairColor = PAL.svChairColors[idx % PAL.svChairColors.length];
   const chairDark = '#1a1a1a';
 
-  // Seat (mesh texture - striped)
+  // Seat (mesh texture — grid of small dots)
   R(x, y, 10, 2, chairColor);
-  for (let mx = x; mx < x + 10; mx += 2) R(mx, y, 1, 2, chairDark + '44');
+  for (let mx = x; mx < x + 10; mx += 2)
+    for (let my = y; my < y + 2; my++) R(mx, my, 1, 1, chairDark + '44');
   R(x, y, 10, 1, chairColor);
 
-  // Backrest (mesh outline with pattern)
-  R(x, y - 7, 10, 3, chairColor);
-  for (let mx = x + 1; mx < x + 9; mx += 2) R(mx, y - 6, 1, 2, chairDark + '44');
-  R(x, y - 7, 10, 1, PAL.svChairFrame); // top edge
-  R(x, y - 4, 10, 1, PAL.svChairFrame); // bottom edge
+  // Backrest (mesh pattern — grid of dots)
+  R(x, y - 7, 10, 4, chairColor);
+  for (let mx = x + 1; mx < x + 9; mx += 2)
+    for (let my = y - 6; my < y - 3; my += 2) R(mx, my, 1, 1, chairDark + '44');
+  R(x, y - 7, 10, 1, PAL.svChairFrame);
+  R(x, y - 3, 10, 1, PAL.svChairFrame);
+  // Lumbar support ridge
+  R(x + 1, y - 4, 8, 1, chairDark + '33');
 
-  // Armrests
-  R(x - 1, y - 2, 2, 1, PAL.svChairFrame);
-  R(x + 9, y - 2, 2, 1, PAL.svChairFrame);
+  // Armrests — padded tops
+  R(x - 1, y - 2, 3, 1, PAL.svChairFrame);
+  R(x - 1, y - 2, 3, 1, '#666');
+  R(x + 8, y - 2, 3, 1, PAL.svChairFrame);
+  R(x + 8, y - 2, 3, 1, '#666');
   // Side supports
-  R(x, y - 4, 1, 5, chairDark);
-  R(x + 9, y - 4, 1, 5, chairDark);
+  R(x, y - 3, 1, 4, chairDark);
+  R(x + 9, y - 3, 1, 4, chairDark);
 
-  // Center post
+  // Center post — hydraulic cylinder
   R(x + 4, y + 2, 2, 2, PAL.svChairFrame);
-  // Star base
+  R(x + 4, y + 2, 1, 1, '#666');
+  // 5-star castor base
   R(x + 1, y + 4, 8, 1, PAL.svChairFrame);
-  // Wheels (small dots at base)
-  R(x, y + 5, 2, 1, PAL.svChairWheel);
+  R(x + 4, y + 4, 2, 1, '#666');
+  // 5 wheels at star tips
+  R(x - 1, y + 5, 2, 1, PAL.svChairWheel);
+  R(x + 2, y + 5, 2, 1, PAL.svChairWheel);
   R(x + 4, y + 5, 2, 1, PAL.svChairWheel);
-  R(x + 8, y + 5, 2, 1, PAL.svChairWheel);
+  R(x + 6, y + 5, 2, 1, PAL.svChairWheel);
+  R(x + 9, y + 5, 2, 1, PAL.svChairWheel);
   ctx.restore();
 }
 
@@ -2758,12 +2805,12 @@ function drawLightingSV() {
   const neonCY = 5 * SCALE;
   const neonAlpha1 = (0.09 + nightFactor * 0.10).toFixed(3);
   const neonAlpha2 = (0.04 + nightFactor * 0.06).toFixed(3);
-  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 8, neonCX, neonCY + 90, 180);
+  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 16, neonCX, neonCY + 180, 360);
   neonGrad.addColorStop(0, 'rgba(255,45,123,' + neonAlpha1 + ')');
   neonGrad.addColorStop(0.4, 'rgba(0,229,255,' + neonAlpha2 + ')');
   neonGrad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = neonGrad;
-  ctx.fillRect(neonCX - 180, neonCY - 20, 360, 240);
+  ctx.fillRect(neonCX - 360, neonCY - 40, 720, 480);
   // Neon color bleed onto nearby wall tiles (cyan/pink tint)
   ctx.save(); ctx.scale(SCALE, SCALE);
   const wallBleedAlpha = (0.04 + nightFactor * 0.06).toFixed(3);
@@ -2781,11 +2828,11 @@ function drawLightingSV() {
     const lx = (30 + i * 70 + 15) * SCALE;
     const ly = 3 * S;
     const flicker = 1.0 - ((frame + i * 37) % 120 < 3 ? 0.15 : 0);
-    const flGrad = ctx.createRadialGradient(lx, ly, 5, lx, ly + 40, 80);
+    const flGrad = ctx.createRadialGradient(lx, ly, 10, lx, ly + 80, 160);
     flGrad.addColorStop(0, 'rgba(200,232,255,' + (parseFloat(ceilAlpha) * flicker).toFixed(3) + ')');
     flGrad.addColorStop(1, 'rgba(200,232,255,0)');
     ctx.fillStyle = flGrad;
-    ctx.fillRect(lx - 80, ly, 160, 100);
+    ctx.fillRect(lx - 160, ly, 320, 200);
   }
 
   // Night: draw visible ceiling light rectangles
@@ -2806,11 +2853,11 @@ function drawLightingSV() {
     DESKS.forEach(d => {
       const mx = (d.x * TILE + 6) * SCALE;
       const my = (d.y * TILE + 10) * SCALE;
-      const mGrad = ctx.createRadialGradient(mx, my, 2, mx, my + 20, 40);
+      const mGrad = ctx.createRadialGradient(mx, my, 4, mx, my + 40, 80);
       mGrad.addColorStop(0, 'rgba(74,224,74,' + monGlowAlpha + ')');
       mGrad.addColorStop(1, 'rgba(74,224,74,0)');
       ctx.fillStyle = mGrad;
-      ctx.fillRect(mx - 40, my - 5, 80, 50);
+      ctx.fillRect(mx - 80, my - 10, 160, 100);
     });
   }
 
@@ -2900,7 +2947,7 @@ function buildCanvasAgents() {
 
 function render() {
   frame++;
-  ctx.clearRect(0, 0, 640, 384);
+  ctx.clearRect(0, 0, 1280, 768);
 
   drawFloorSV(); drawWallsSV(); drawGarageFrame(); drawWindow(); drawDoor();
   drawNeonSign(); drawWhiteboard();
@@ -2909,13 +2956,18 @@ function render() {
   drawDivider(2); drawDivider(3);
   drawPropsSV();
 
-  DESKS.forEach((d, idx) => { drawDeskSV(d, idx); drawChairSV(d, idx); });
-
   // Update walking transitions
   updateTransitions();
   const walkingDesks = new Set(transitions.map(t => t.deskIdx));
 
   const canvasAgents = buildCanvasAgents();
+  DESKS.forEach((d, idx) => {
+    const agent = canvasAgents.find(a => a.desk === idx);
+    const agentType = agent ? agent.agentType : '';
+    drawDeskSV(d, idx, agentType);
+    drawChairSV(d, idx);
+  });
+
   canvasAgents.forEach(a => {
     const d = DESKS[a.desk];
     if (!d) return;
@@ -2924,7 +2976,7 @@ function render() {
       a.failing ? 'ci_failed' :
       a.state === 'coding' ? 'coding' :
       a.state === 'merged' ? 'merged' : 'pr_open';
-    drawMonitorSV(d, screenState, a.monitorText, a.desk);
+    drawMonitorSV(d, screenState, a.monitorText, a.desk, a.agentType);
 
     if (isWalking) return;
 
@@ -2932,6 +2984,15 @@ function render() {
     else drawCharacterSV(d, a.ci, a.state, a.agentType);
 
     drawTokenBar(d, a.tokens);
+    // Headphone stand on desk edge for coding agents
+    if (a.state === 'coding') {
+      ctx.save(); ctx.scale(SCALE, SCALE);
+      const hx = d.x * TILE + TILE - 1, hy = d.y * TILE + 6;
+      R(hx, hy, 1, 3, '#555'); // stand pole
+      R(hx - 1, hy, 3, 1, '#666'); // top bar
+      R(hx - 2, hy, 1, 2, '#444'); R(hx + 2, hy, 1, 2, '#444'); // headphone cups
+      ctx.restore();
+    }
     if (a.coffees > 0) drawCoffeeCups(d, a.coffees);
     if (a.failing) drawFire(d);
     if (a.pr) drawPrBadge(d, a.pr, a.state === 'merged');
@@ -2956,7 +3017,7 @@ function render() {
     if (gd) {
       const alpha = 0.3 * (1 - (Date.now() - clickedAt) / 300);
       ctx.fillStyle = 'rgba(240, 192, 64, ' + alpha + ')';
-      ctx.fillRect(gd.x * S - 2, gd.y * S - 4, S + 4, S * 2 + 8);
+      ctx.fillRect(gd.x * S - 4, gd.y * S - 8, S + 8, S * 2 + 16);
     }
   }
 
