@@ -19,7 +19,55 @@ Corral uses a **single-file HTML architecture** per scene. Each scene file (`ind
 ```js
 const TILE = 16, SCALE = 4, S = TILE * SCALE;  // S = 64px per tile on screen
 const COLS = 20, ROWS = 12;                      // 20 tiles wide, 12 tall
-const DOOR_TILE = { x: 0, y: 2 };               // Entry/exit point for walk animations
+const DOOR_TILE = { x: 0, y: 4 };               // Entry/exit point at top of work floor
+```
+
+---
+
+## Standard Layout (MANDATORY for all scenes)
+
+All scenes use a **4-row background + 8-row work floor** layout:
+
+```
+Row  0 ┌─────────────────────────────┐
+Row  1 │     BACKGROUND ZONE         │  4 rows (64 logical px)
+Row  2 │     (wall / sky / ocean)    │  Scene-specific decorations
+Row  3 │                             │
+       ├─────────────────────────────┤  ← floor starts here (row 4)
+Row  4 │                             │
+Row  5 │  ██ desk row 1 (y=5)  ██   │  8 rows (128 logical px)
+Row  6 │                             │  WORK ZONE
+Row  7 │                             │  Desks, chairs, agents, props
+Row  8 │  ██ desk row 2 (y=8)  ██   │  2 rows of 4 desks (max 8 agents)
+Row  9 │                             │
+Row 10 │                             │
+Row 11 │                             │
+       └─────────────────────────────┘
+```
+
+### Background Zone (Rows 0-3)
+4 tile rows = 64 logical pixels. Content varies by scene:
+
+| Scene   | Rows 0-1              | Rows 2-3                |
+|---------|-----------------------|-------------------------|
+| SV      | Ceiling, ductwork     | Wall art, window, signs |
+| Classic | Wall top, window      | Wall, door frame        |
+| Thai    | Sky, clouds, sun      | Ocean, waves, foam      |
+
+### Work Zone (Rows 4-11)
+8 tile rows = 128 logical pixels. Consistent across all scenes:
+
+- **Desk row 1:** y=5 (tiles at x=2, 7, 12, 17)
+- **Desk row 2:** y=8 (tiles at x=2, 7, 12, 17)
+- **DOOR_TILE:** `{ x: 0, y: 4 }` — agent entry/exit at top of floor
+- **Max agents:** 8 (4 per row, 2 rows)
+
+Desk generation (same across all scenes):
+```js
+const DESKS = [];
+for (let r = 1; r < 3; r++)
+  for (let c = 0; c < 4; c++)
+    DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 }); // y=5, y=8
 ```
 
 ---
@@ -55,7 +103,7 @@ These elements MUST exist in every scene — they represent actual data. The vis
 ### 2. Desks & Workstations
 **What:** Where agents sit and work
 **Data:** Position in grid, agent assignment
-**Layout:** `DESKS` array — 12 positions (3 rows × 4 columns)
+**Layout:** `DESKS` array — 8 positions (2 rows × 4 columns)
 
 **Functions:**
 - `drawDesk[SCENE](d, idx, agentType)` — Desk furniture
@@ -142,10 +190,10 @@ Each scene needs a complete environment drawn in the render pipeline:
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Ceiling / Sky (rows 0-1)    — WALL ZONE     │
-│   Wall decorations, windows, signs          │
+│ Background (rows 0-3)  — BACKGROUND ZONE    │
+│   Wall/sky/ocean, decorations, windows      │
 ├─────────────────────────────────────────────┤
-│ Floor area (rows 2-11)      — WORK ZONE     │
+│ Floor area (rows 4-11) — WORK ZONE          │
 │   Desks, chairs, agents, props              │
 │   Walkways between desk rows                │
 │   Floor texture and details                 │

@@ -317,7 +317,7 @@ const CANVAS_H = OFFICE_H + TIMELINE_HEIGHT + USAGE_PANEL_HEIGHT + S; // office 
 const USAGE_BAR_WIDTH = 120;
 const USAGE_BAR_HEIGHT = 8;
 const USAGE_FETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const DOOR_TILE = { x: 0, y: 6 };
+const DOOR_TILE = { x: 0, y: 4 };
 const WALK_SPEED = 2; // tiles per second
 const ENTER_STAGGER = 0.5; // seconds
 const TOMBSTONE_FADE_MS = 30 * 60 * 1000;
@@ -419,7 +419,7 @@ for (let row = 0; row < DESK_ROWS; row++) {
 }
 
 // === TIME + WINDOW SETTINGS ===
-const WINDOW = { x: Math.floor(COLS / 2) - 2, y: 0, w: 4, h: 1 };
+const WINDOW = { x: Math.floor(COLS / 2) - 2, y: 0, w: 4, h: 3 };
 const TIME_TRANSITION_MINUTES = 30;
 const TIME_PHASES = {
   day: {
@@ -1821,14 +1821,20 @@ function buildLayout(list) {
 
 // === DRAW OFFICE ===
 function drawFloor() {
-  for (let y = 0; y < ROWS; y++) {
+  // Floor tiles — rows 4-11 (work zone)
+  for (let y = 4; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       fillTile(x, y, (x + y) % 2 === 0 ? PAL.floor : PAL.floorAlt);
     }
   }
-  // top wall
+  // Wall — rows 0-3 (4-row background zone)
+  for (let wy = 0; wy < 4; wy++) {
+    for (let x = 0; x < COLS; x++) {
+      fillTile(x, wy, PAL.wall);
+    }
+  }
+  // Wall top decoration strip
   for (let x = 0; x < COLS; x++) {
-    fillTile(x, 0, PAL.wall);
     drawRect(x * TILE, 0, TILE, 4, PAL.wallTop);
   }
   drawWindow();
@@ -1837,9 +1843,9 @@ function drawFloor() {
 function drawWindow() {
   if (!timeState) return;
   const px = WINDOW.x * TILE;
-  const py = WINDOW.y * TILE + 2;
+  const py = WINDOW.y * TILE + 4;
   const w = WINDOW.w * TILE;
-  const h = 10;
+  const h = WINDOW.h * TILE - 6;
   const innerX = px + 1;
   const innerY = py + 1;
   const innerW = w - 2;
@@ -1848,6 +1854,7 @@ function drawWindow() {
   drawRect(px, py, w, h, PAL.wallTop);
   drawRect(innerX, innerY, innerW, innerH, PAL.windowSky);
   drawRect(px + Math.floor(w / 2) - 1, innerY, 2, innerH, PAL.wall);
+  drawRect(px, py + Math.floor(h / 2), w, 1, PAL.wall); // horizontal divider
 
   if (timeState.starAlpha > 0.05) {
     const now = new Date();
@@ -1871,9 +1878,13 @@ function drawWindow() {
 
 function drawDoor() {
   const px = DOOR_TILE.x * TILE;
-  const py = DOOR_TILE.y * TILE;
-  drawRect(px + 1, py + 1, 14, 14, '#7a4b1f');
-  drawRect(px + 11, py + 8, 2, 2, '#d8c28a');
+  const py = DOOR_TILE.y * TILE - 16;
+  drawRect(px + 1, py + 1, 14, 30, '#7a4b1f');
+  drawRect(px + 11, py + 16, 2, 2, '#d8c28a');
+  // Door frame
+  drawRect(px, py, 1, 32, PAL.wallTop);
+  drawRect(px + 15, py, 1, 32, PAL.wallTop);
+  drawRect(px, py, 16, 1, PAL.wallTop);
 }
 
 function drawLampGlow(tileX, tileY, intensity) {
@@ -3317,7 +3328,7 @@ function render(now) {
   });
 
   // decorative plants
-  drawPlant(0, 2);
+  drawPlant(0, 4);
   drawPlant(0, 8);
   drawPlant(COLS - 1, 5);
 
