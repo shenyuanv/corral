@@ -728,8 +728,7 @@
   <div class="top-controls">
     <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
     <button class="snes-button" id="soundToggleBtn" onclick="toggleSound()" title="Sound off (S)">🔇</button>
-    <button class="snes-button has-ocean-color" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
-    <button class="snes-button has-ocean-color" onclick="switchToPixel()" title="Switch to Pixel Office">🎮 Pixel</button>
+    <button class="snes-button has-ocean-color" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
     <button class="snes-button has-ember-color" id="cleanBtn" onclick="cleanAgents()">🧹</button>
     <button class="snes-button mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
   </div>
@@ -1052,10 +1051,6 @@ function setConnection(state) {
 function switchToClassic() {
   try { localStorage.setItem('corral-ui-mode', 'classic'); } catch(e) {}
   window.location.href = '/';
-}
-function switchToPixel() {
-  try { localStorage.setItem('corral-ui-mode', 'pixel'); } catch(e) {}
-  window.location.href = '/pixel';
 }
 
 // --- Clean button ---

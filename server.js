@@ -1017,7 +1017,7 @@ const server = http.createServer((req, res) => {
   }
 
   // Static file serving
-  let filePath = req.url === '/' ? '/index.html' : req.url === '/sv' ? '/sv.html' : req.url === '/thai' ? '/thai.html' : req.url === '/pixel' ? '/pixel.html' : req.url;
+  let filePath = req.url === '/' ? '/index.html' : req.url === '/sv' ? '/sv.html' : req.url === '/thai' ? '/thai.html' : req.url;
   filePath = path.join(__dirname, filePath);
   const ext = path.extname(filePath);
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
