@@ -1,9 +1,14 @@
 <!DOCTYPE html>
+<!--
+  Pixel Office scene for Corral.
+  Character sprites ported from pixel-agents by Pablo De Lucca (MIT License).
+  https://github.com/pablodelucca/pixel-agents
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Corral 🤠 — SV Mode</title>
+<title>Corral 🤠 — Pixel Office</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link href="https://unpkg.com/snes.css@1.0.1/dist/snes.min.css" rel="stylesheet" />
 <style>
@@ -706,8 +711,8 @@
 <!-- UI MODE REDIRECT -->
 <script>
 (function() {
-  // Always set preference to sv when visiting /sv directly
-  try { localStorage.setItem('corral-ui-mode', 'sv'); } catch(e) {}
+  // Always set preference to pixel when visiting /pixel directly
+  try { localStorage.setItem('corral-ui-mode', 'pixel'); } catch(e) {}
 })();
 </script>
 
@@ -716,7 +721,7 @@
   <div class="top-title">
     <span style="font-size:16px">🤠</span>
     <span>CORRAL</span>
-    <span class="ver">sv</span>
+    <span class="ver">pixel</span>
   </div>
   <div class="top-stats" id="topStats">
     <span>AGENTS <span class="val" id="statAgents">0</span>/<span style="color:#555">12</span></span>
@@ -728,8 +733,7 @@
   <div class="top-controls">
     <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
     <button class="snes-button" id="soundToggleBtn" onclick="toggleSound()" title="Sound off (S)">🔇</button>
-    <button class="snes-button has-ocean-color" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
-    <button class="snes-button has-ocean-color" onclick="switchToPixel()" title="Switch to Pixel Office">🎮 Pixel</button>
+    <button class="snes-button has-ocean-color" id="toggleViewBtn" onclick="switchToSV()" title="Switch to SV view">🏢 SV</button>
     <button class="snes-button has-ember-color" id="cleanBtn" onclick="cleanAgents()">🧹</button>
     <button class="snes-button mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
   </div>
@@ -1053,9 +1057,9 @@ function switchToClassic() {
   try { localStorage.setItem('corral-ui-mode', 'classic'); } catch(e) {}
   window.location.href = '/';
 }
-function switchToPixel() {
-  try { localStorage.setItem('corral-ui-mode', 'pixel'); } catch(e) {}
-  window.location.href = '/pixel';
+function switchToSV() {
+  try { localStorage.setItem('corral-ui-mode', 'sv'); } catch(e) {}
+  window.location.href = '/sv';
 }
 
 // --- Clean button ---
@@ -1646,7 +1650,399 @@ for (let r = 1; r < 3; r++)
   for (let c = 0; c < 4; c++)
     DESKS.push({ x: 2 + c * 5, y: 2 + r * 3 });
 
-// --- Ambient particles (dust motes + neon sparkles) ---
+// ============================================================
+// Pixel-agents sprite system (MIT License, Copyright (c) 2026 Pablo De Lucca)
+// Ported from pixel-agents TypeScript to plain JS
+// ============================================================
+
+const DIR_DOWN = 0, DIR_LEFT = 1, DIR_RIGHT = 2, DIR_UP = 3;
+const SITTING_OFFSET = 6;
+const READING_TOOLS_SET = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']);
+
+// 6 distinct character palettes from pixel-agents
+const CHAR_PALETTES = [
+  { skin: '#FFCC99', shirt: '#4488CC', pants: '#334466', hair: '#553322', shoes: '#222222' },
+  { skin: '#FFCC99', shirt: '#CC4444', pants: '#333333', hair: '#FFD700', shoes: '#222222' },
+  { skin: '#DEB887', shirt: '#44AA66', pants: '#334444', hair: '#222222', shoes: '#333333' },
+  { skin: '#FFCC99', shirt: '#AA55CC', pants: '#443355', hair: '#AA4422', shoes: '#222222' },
+  { skin: '#DEB887', shirt: '#CCAA33', pants: '#444433', hair: '#553322', shoes: '#333333' },
+  { skin: '#FFCC99', shirt: '#FF8844', pants: '#443322', hair: '#111111', shoes: '#222222' },
+];
+
+// Character templates: 16x24 grids, compact string format
+// '.': transparent, 'H': hair, 'K': skin, 'S': shirt, 'P': pants, 'O': shoes, 'E': eyes (#fff)
+// Frame order per direction: walk1, walk2, walk3, type1, type2, read1, read2
+const CHAR_TEMPLATES = {
+  down: [
+    [ // walk_down_1
+      '................','......HHHH......','.....HHHHHH.....','.....HHHHHH.....',
+      '.....KKKKKK.....','.....KEKKEK.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','....SSSSSSSS....',
+      '....KSSSSSSK....','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','....PP....PP....','....PP....PP....','....OO.....OO...',
+      '....OO.....OO...','................','................','................',
+    ],
+    [ // walk_down_2 (standing frame)
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....KKKKKK.....','.....KEKKEK.....','.....KKKKKK.....',
+      '.....KKKKKK.....','......SSSS......','.....SSSSSS.....','....SSSSSSSS....',
+      '....SSSSSSSS....','....KSSSSSSK....','.....SSSSSS.....','......PPPP......',
+      '.....PPPPPP.....','.....PP..PP.....','.....PP..PP.....','.....PP..PP.....',
+      '.....OO..OO.....','.....OO..OO.....','................','................',
+    ],
+    [ // walk_down_3
+      '................','......HHHH......','.....HHHHHH.....','.....HHHHHH.....',
+      '.....KKKKKK.....','.....KEKKEK.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','....SSSSSSSS....',
+      '....KSSSSSSK....','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','...OO......PP...','...OO......PP...','..........OO....',
+      '..........OO....','................','................','................',
+    ],
+    [ // type_down_1
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....KKKKKK.....','.....KEKKEK.....','.....KKKKKK.....',
+      '.....KKKKKK.....','......SSSS......','.....SSSSSS.....','....SSSSSSSS....',
+      '...KKSSSSSSKK...',  '....KSSSSSSK....','.....SSSSSS.....','......PPPP......',
+      '.....PPPPPP.....','.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....',
+      '................','................','................','................',
+    ],
+    [ // type_down_2
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....KKKKKK.....','.....KEKKEK.....','.....KKKKKK.....',
+      '.....KKKKKK.....','......SSSS......','.....SSSSSS.....','....SSSSSSSS....',
+      '....KSSSSSSKK...',  '....KSSSSSS.K...','.....SSSSSS.....','......PPPP......',
+      '.....PPPPPP.....','.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....',
+      '................','................','................','................',
+    ],
+    [ // read_down_1
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....KKKKKK.....','.....KEKKEK.....','.....KKKKKK.....',
+      '.....KKKKKK.....','......SSSS......','.....SSSSSS.....','....SSSSSSSS....',
+      '....SSSSSSSS....','....KSSSSSSK....','.....SSSSSS.....','......PPPP......',
+      '.....PPPPPP.....','.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....',
+      '................','................','................','................',
+    ],
+    [ // read_down_2
+      '................','................','................','......HHHH......',
+      '.....HHHHHH.....','.....HHHHHH.....','.....KKKKKK.....','.....KEKKEK.....',
+      '.....KKKKKK.....','.....KKKKKK.....','......SSSS......','.....SSSSSS.....',
+      '....SSSSSSSS....','....SSSSSSSS....','....KSSSSSSK....','.....SSSSSS.....',
+      '......PPPP......','.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....',
+      '................','................','................','................',
+    ],
+  ],
+  up: [
+    [ // walk_up_1
+      '................','......HHHH......','.....HHHHHH.....','.....HHHHHH.....',
+      '.....HHHHHH.....','.....KKKKKK.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','....SSSSSSSS....',
+      '....KSSSSSSK....','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','....PP....PP....','....PP....PP....','...OO......OO...',
+      '...OO......OO...','................','................','................',
+    ],
+    [ // walk_up_2 (standing frame)
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....HHHHHH.....','.....KKKKKK.....','.....KKKKKK.....',
+      '.....KKKKKK.....','......SSSS......','.....SSSSSS.....','....SSSSSSSS....',
+      '....SSSSSSSS....','....KSSSSSSK....','.....SSSSSS.....','......PPPP......',
+      '.....PPPPPP.....','.....PP..PP.....','.....PP..PP.....','.....PP..PP.....',
+      '.....OO..OO.....','.....OO..OO.....','................','................',
+    ],
+    [ // walk_up_3
+      '................','......HHHH......','.....HHHHHH.....','.....HHHHHH.....',
+      '.....HHHHHH.....','.....KKKKKK.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','....SSSSSSSS....',
+      '....KSSSSSSK....','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','...OO......PP...','...OO......PP...','..........OO....',
+      '..........OO....','................','................','................',
+    ],
+    [ // type_up_1
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....HHHHHH.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','...KKSSSSSSKK...',
+      '....KSSSSSSK....','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....','................',
+      '................','................','................','................',
+    ],
+    [ // type_up_2
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....HHHHHH.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','....KSSSSSSKK...',
+      '....KSSSSSS.K...','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....','................',
+      '................','................','................','................',
+    ],
+    [ // read_up_1
+      '................','................','......HHHH......','.....HHHHHH.....',
+      '.....HHHHHH.....','.....HHHHHH.....','.....KKKKKK.....','.....KKKKKK.....',
+      '......SSSS......','.....SSSSSS.....','....SSSSSSSS....','....SSSSSSSS....',
+      '....KSSSSSSK....','.....SSSSSS.....','......PPPP......','.....PPPPPP.....',
+      '.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....','................',
+      '................','................','................','................',
+    ],
+    [ // read_up_2
+      '................','................','................','......HHHH......',
+      '.....HHHHHH.....','.....HHHHHH.....','.....HHHHHH.....','.....KKKKKK.....',
+      '.....KKKKKK.....','......SSSS......','.....SSSSSS.....','....SSSSSSSS....',
+      '....SSSSSSSS....','....KSSSSSSK....','.....SSSSSS.....','......PPPP......',
+      '.....PPPPPP.....','.....PP..PP.....','.....OO..OO.....','................',
+      '................','................','................','................',
+    ],
+  ],
+  right: [
+    [ // walk_right_1
+      '................','.......HHHH.....','......HHHHH.....','......HHHHH.....',
+      '......KKKKK.....','......KKKEK.....','......KKKKK.....','......KKKK......',
+      '.......SSS......','......SSSSS.....','.....SSSSSS.....','.....SSSSSS.....',
+      '.....KSSSSK.....','......SSSS......','.......PP.......',  '......PPPP......',
+      '......PPPP......','.....PP...PP....','.....PP...PP....','.....OO....OO...',
+      '.....OO....OO...','................','................','................',
+    ],
+    [ // walk_right_2 (standing frame)
+      '................','................','.......HHHH.....','......HHHHH.....',
+      '......HHHHH.....','......KKKKK.....','......KKKEK.....','......KKKKK.....',
+      '......KKKK......','.......SSS......','......SSSSS.....','.....SSSSSS.....',
+      '.....SSSSSS.....','.....KSSSSK.....','......SSSS......','.......PP.......',
+      '......PPPP......','......PP.PP.....','......PP.PP.....','......PP.PP.....',
+      '......OO.OO.....','......OO.OO.....','................','................',
+    ],
+    [ // walk_right_3
+      '................','.......HHHH.....','......HHHHH.....','......HHHHH.....',
+      '......KKKKK.....','......KKKEK.....','......KKKKK.....','......KKKK......',
+      '.......SSS......','......SSSSS.....','.....SSSSSS.....','.....SSSSSS.....',
+      '.....KSSSSK.....','......SSSS......','.......PP.......',  '......PPPP......',
+      '......PPPP......','........PPP.....','........PPP.....','.....OO..OO.....',
+      '.....OO.........','................','................','................',
+    ],
+    [ // type_right_1
+      '................','................','.......HHHH.....','......HHHHH.....',
+      '......HHHHH.....','......KKKKK.....','......KKKEK.....','......KKKKK.....',
+      '......KKKK......','.......SSS......','......SSSSS.....','.....SSSSSSK....',
+      '.....SSSSSK.....','......SSSS......','......SSSS......','.......PP.......',
+      '......PPPP......','......PPPP......','......PP.PP.....','......OO.OO.....',
+      '................','................','................','................',
+    ],
+    [ // type_right_2
+      '................','................','.......HHHH.....','......HHHHH.....',
+      '......HHHHH.....','......KKKKK.....','......KKKEK.....','......KKKKK.....',
+      '......KKKK......','.......SSS......','......SSSSS.....','.....SSSSSS..K..',
+      '.....SSSSS..K...','......SSSS......','......SSSS......','.......PP.......',
+      '......PPPP......','......PPPP......','......PP.PP.....','......OO.OO.....',
+      '................','................','................','................',
+    ],
+    [ // read_right_1
+      '................','................','.......HHHH.....','......HHHHH.....',
+      '......HHHHH.....','......KKKKK.....','......KKKEK.....','......KKKKK.....',
+      '......KKKK......','.......SSS......','......SSSSS.....','.....SSSSSS.....',
+      '.....SSSSSS.....','.....KSSSSK.....','......SSSS......','.......PP.......',
+      '......PPPP......','......PPPP......','......PP.PP.....','......OO.OO.....',
+      '................','................','................','................',
+    ],
+    [ // read_right_2
+      '................','................','................','.......HHHH.....',
+      '......HHHHH.....','......HHHHH.....','......KKKKK.....','......KKKEK.....',
+      '......KKKKK.....','......KKKK......','.......SSS......','......SSSSS.....',
+      '.....SSSSSS.....','.....SSSSSS.....','.....KSSSSK.....','......SSSS......',
+      '.......PP.......',  '......PPPP......','......PP.PP.....','......OO.OO.....',
+      '................','................','................','................',
+    ],
+  ],
+};
+
+// Resolve a compact string template to a 2D color array using a palette
+function resolveTemplate(rows, pal) {
+  return rows.map(function(row) {
+    return Array.from(row).map(function(ch) {
+      if (ch === '.') return '';
+      if (ch === 'H') return pal.hair;
+      if (ch === 'K') return pal.skin;
+      if (ch === 'S') return pal.shirt;
+      if (ch === 'P') return pal.pants;
+      if (ch === 'O') return pal.shoes;
+      if (ch === 'E') return '#FFFFFF';
+      return '';
+    });
+  });
+}
+
+// Flip a compact string template horizontally (for generating left from right)
+function flipTemplate(tmpl) {
+  return tmpl.map(function(row) { return row.split('').reverse().join(''); });
+}
+
+// Render a resolved sprite (2D color array) at pixel coordinates (unscaled)
+function renderSprite(sprite, px, py) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  for (var r = 0; r < sprite.length; r++) {
+    for (var c = 0; c < sprite[r].length; c++) {
+      if (sprite[r][c]) {
+        ctx.fillStyle = sprite[r][c];
+        ctx.fillRect(px + c, py + r, 1, 1);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// Sprite cache: palIdx -> { walk, typing, reading } keyed by direction
+const spriteCache = new Map();
+
+function getCharacterSprites(palIdx) {
+  if (spriteCache.has(palIdx)) return spriteCache.get(palIdx);
+  const pal = CHAR_PALETTES[palIdx % CHAR_PALETTES.length];
+  const res = function(t) { return resolveTemplate(t, pal); };
+  const resF = function(t) { return resolveTemplate(flipTemplate(t), pal); };
+  const T = CHAR_TEMPLATES;
+  const sprites = {
+    walk: {
+      0: [res(T.down[0]), res(T.down[1]), res(T.down[2]), res(T.down[1])],
+      1: [resF(T.right[0]), resF(T.right[1]), resF(T.right[2]), resF(T.right[1])],
+      2: [res(T.right[0]), res(T.right[1]), res(T.right[2]), res(T.right[1])],
+      3: [res(T.up[0]), res(T.up[1]), res(T.up[2]), res(T.up[1])],
+    },
+    typing: {
+      0: [res(T.down[3]), res(T.down[4])],
+      1: [resF(T.right[3]), resF(T.right[4])],
+      2: [res(T.right[3]), res(T.right[4])],
+      3: [res(T.up[3]), res(T.up[4])],
+    },
+    reading: {
+      0: [res(T.down[5]), res(T.down[6])],
+      1: [resF(T.right[5]), resF(T.right[6])],
+      2: [res(T.right[5]), res(T.right[6])],
+      3: [res(T.up[3]), res(T.up[4])],
+    },
+  };
+  spriteCache.set(palIdx, sprites);
+  return sprites;
+}
+
+function drawCharacterPixel(d, colorIdx, state, dir) {
+  const sprites = getCharacterSprites(colorIdx);
+  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
+  const walk = state === 'walking';
+  const sleeping = state === 'sleeping';
+  if (dir === undefined) dir = DIR_DOWN;
+
+  var sprite;
+  if (walk) {
+    const wf = Math.floor(frame / 9) % 4;
+    sprite = sprites.walk[dir][wf];
+  } else if (state === 'coding') {
+    const tf = Math.floor(frame / 18) % 2;
+    sprite = sprites.typing[dir][tf];
+  } else if (state === 'reading' || state === 'waiting') {
+    const rf = Math.floor(frame / 18) % 2;
+    sprite = sprites.reading[dir][rf];
+  } else {
+    sprite = sprites.walk[dir][1]; // idle/standing frame
+  }
+
+  const px = d.x * TILE;
+  const py = (d.y + 1) * TILE - (sitting ? SITTING_OFFSET : 0);
+
+  // Shadow for standing/walking
+  if (!sitting) {
+    ctx.save(); ctx.scale(SCALE, SCALE);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(px + 3, py + 20, 10, 2);
+    ctx.restore();
+  }
+
+  renderSprite(sprite, px, py);
+
+  // Sleeping ZZZ
+  if (sleeping) {
+    ctx.save(); ctx.scale(SCALE, SCALE);
+    const zf = frame % 90;
+    ctx.fillStyle = '#aaddff'; ctx.font = '3px "Press Start 2P"';
+    if (zf < 30) ctx.fillText('z', px + 14, py + 2);
+    else if (zf < 60) ctx.fillText('zZ', px + 13, py);
+    else ctx.fillText('zZz', px + 12, py - 2);
+    ctx.restore();
+  }
+}
+
+// ============================================================
+// Pixel-agents furniture sprites (MIT License, pixel-agents)
+// ============================================================
+
+const PLANT_SPRITE = [
+  ['','','','','','','#3D8B37','#3D8B37','','','','','','','',''],
+  ['','','','','','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','','','','','',''],
+  ['','','','','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','#3D8B37','','','','','',''],
+  ['','','','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','','','','',''],
+  ['','','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','','',''],
+  ['','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','','',''],
+  ['','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','',''],
+  ['','','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','','',''],
+  ['','','','#3D8B37','#3D8B37','#3D8B37','#2D6B27','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','','','',''],
+  ['','','','','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','','','','',''],
+  ['','','','','','#3D8B37','#3D8B37','#3D8B37','#3D8B37','','','','','','',''],
+  ['','','','','','','#6B4E0A','#6B4E0A','','','','','','','',''],
+  ['','','','','','','#6B4E0A','#6B4E0A','','','','','','','',''],
+  ['','','','','','','#6B4E0A','#6B4E0A','','','','','','','',''],
+  ['','','','','','#8B4422','#8B4422','#8B4422','#8B4422','#8B4422','','','','','',''],
+  ['','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','',''],
+  ['','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','',''],
+  ['','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','',''],
+  ['','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','',''],
+  ['','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','',''],
+  ['','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','',''],
+  ['','','','','','#8B4422','#B85C3A','#B85C3A','#B85C3A','#8B4422','','','','','',''],
+  ['','','','','','','#8B4422','#8B4422','#8B4422','','','','','','',''],
+  ['','','','','','','','','','','','','','','',''],
+];
+
+const BOOKSHELF_SPRITE = [
+  ['','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914',''],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#CC4444','#CC4444','#4477AA','#4477AA','#44AA66','#44AA66','#CCAA33','#CCAA33','#CC4444','#CC4444','#4477AA','#4477AA','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#CC4444','#CC4444','#4477AA','#4477AA','#44AA66','#44AA66','#CCAA33','#CCAA33','#CC4444','#CC4444','#4477AA','#4477AA','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#CC4444','#CC4444','#4477AA','#4477AA','#44AA66','#44AA66','#CCAA33','#CCAA33','#CC4444','#CC4444','#4477AA','#4477AA','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#CC4444','#CC4444','#4477AA','#4477AA','#44AA66','#44AA66','#CCAA33','#CCAA33','#CC4444','#CC4444','#4477AA','#4477AA','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#CC4444','#CC4444','#4477AA','#4477AA','#44AA66','#44AA66','#CCAA33','#CCAA33','#CC4444','#CC4444','#4477AA','#4477AA','#6B4E0A','#8B6914'],
+  ['#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#9955AA','#9955AA','#CCAA33','#CCAA33','#4477AA','#4477AA','#44AA66','#44AA66','#9955AA','#9955AA','#CC4444','#CC4444','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#9955AA','#9955AA','#CCAA33','#CCAA33','#4477AA','#4477AA','#44AA66','#44AA66','#9955AA','#9955AA','#CC4444','#CC4444','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#9955AA','#9955AA','#CCAA33','#CCAA33','#4477AA','#4477AA','#44AA66','#44AA66','#9955AA','#9955AA','#CC4444','#CC4444','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#9955AA','#9955AA','#CCAA33','#CCAA33','#4477AA','#4477AA','#44AA66','#44AA66','#9955AA','#9955AA','#CC4444','#CC4444','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#9955AA','#9955AA','#CCAA33','#CCAA33','#4477AA','#4477AA','#44AA66','#44AA66','#9955AA','#9955AA','#CC4444','#CC4444','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#9955AA','#9955AA','#CCAA33','#CCAA33','#4477AA','#4477AA','#44AA66','#44AA66','#9955AA','#9955AA','#CC4444','#CC4444','#6B4E0A','#8B6914'],
+  ['#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#44AA66','#44AA66','#CC4444','#CC4444','#9955AA','#9955AA','#4477AA','#4477AA','#CCAA33','#CCAA33','#44AA66','#44AA66','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#44AA66','#44AA66','#CC4444','#CC4444','#9955AA','#9955AA','#4477AA','#4477AA','#CCAA33','#CCAA33','#44AA66','#44AA66','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#44AA66','#44AA66','#CC4444','#CC4444','#9955AA','#9955AA','#4477AA','#4477AA','#CCAA33','#CCAA33','#44AA66','#44AA66','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#44AA66','#44AA66','#CC4444','#CC4444','#9955AA','#9955AA','#4477AA','#4477AA','#CCAA33','#CCAA33','#44AA66','#44AA66','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#44AA66','#44AA66','#CC4444','#CC4444','#9955AA','#9955AA','#4477AA','#4477AA','#CCAA33','#CCAA33','#44AA66','#44AA66','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#44AA66','#44AA66','#CC4444','#CC4444','#9955AA','#9955AA','#4477AA','#4477AA','#CCAA33','#CCAA33','#44AA66','#44AA66','#6B4E0A','#8B6914'],
+  ['#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#6B4E0A','#8B6914'],
+  ['#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914'],
+  ['','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914','#8B6914',''],
+];
+
+/** Render a pixel-agents 2D sprite array at tile position */
+function drawPixelSprite(sprite, tx, ty) {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const px = tx * TILE, py = ty * TILE;
+  for (let r = 0; r < sprite.length; r++) {
+    const row = sprite[r];
+    for (let c = 0; c < row.length; c++) {
+      if (row[c]) { ctx.fillStyle = row[c]; ctx.fillRect(px + c, py + r, 1, 1); }
+    }
+  }
+  ctx.restore();
+}
+
+// --- Ambient particles (dust motes only for clean office) ---
 const particles = [];
 (function initParticles() {
   const W = COLS * TILE, H = ROWS * TILE;
@@ -1662,22 +2058,10 @@ const particles = [];
       size: 1 + (Math.random() > 0.7 ? 1 : 0),
     });
   }
-  // Neon sparkles — 4 slots near the HACK sign (nx=55, ny=10)
-  for (let i = 0; i < 4; i++) {
-    particles.push({
-      type: 'sparkle',
-      x: 55 + Math.random() * 38,
-      y: 18 + Math.random() * 14,
-      life: 0,
-      maxLife: 40 + Math.random() * 40,
-      alpha: 0,
-      size: 1,
-    });
-  }
 })();
 
 // --- Walk animation ---
-const DOOR_TILE = { x: 0, y: 4 };
+const DOOR_TILE = { x: 0, y: 2 };
 const WALK_SPEED = 2; // tiles per second
 const ENTER_STAGGER = 0.5; // seconds between multiple entering agents
 
@@ -1969,7 +2353,7 @@ function drawGarageFrame() {
 
 function drawWindow() {
   ctx.save(); ctx.scale(SCALE, SCALE);
-  const x = 120, y = 8, w = 64, h = 44;
+  const x = 120, y = 4, w = 64, h = 24;
   const { nightFactor, warmFactor, hour } = getTimeOfDay();
   // Sky color: lerp between day blue and night dark
   const skyR = Math.round(10 + (1 - nightFactor) * 60 + warmFactor * 80);
@@ -1983,9 +2367,9 @@ function drawWindow() {
   const bldB = Math.round(48 + (1 - nightFactor) * 30);
   const bldColor = 'rgb(' + bldR + ',' + bldG + ',' + bldB + ')';
   const buildings = [
-    [x+2,y+24,6,20],[x+10,y+14,5,30],[x+17,y+28,5,16],
-    [x+24,y+10,8,34],[x+34,y+18,6,26],[x+42,y+24,5,20],
-    [x+48,y+12,6,32],[x+56,y+28,6,16]
+    [x+2,y+14,6,10],[x+10,y+8,5,16],[x+17,y+16,5,8],
+    [x+24,y+6,8,18],[x+34,y+10,6,14],[x+42,y+14,5,10],
+    [x+48,y+7,6,17],[x+56,y+16,6,8]
   ];
   const windowChance = 0.3 + nightFactor * 0.4;
   buildings.forEach(([bx,by,bw,bh]) => {
@@ -2000,17 +2384,17 @@ function drawWindow() {
   // Stars: only visible at night
   if (nightFactor > 0.3) {
     ctx.fillStyle = 'rgba(255,255,255,' + (nightFactor * 0.8).toFixed(2) + ')';
-    [[x+5,y+2],[x+20,y+4],[x+45,y+2],[x+55,y+3],[x+35,y+1],[x+15,y+5],[x+60,y+3],[x+30,y+2],[x+8,y+4]].forEach(([sx,sy]) => ctx.fillRect(sx, sy, 1, 1));
+    [[x+5,y+1],[x+20,y+2],[x+45,y+1],[x+55,y+2],[x+35,y+1],[x+15,y+3],[x+60,y+2],[x+30,y+1],[x+8,y+3]].forEach(([sx,sy]) => ctx.fillRect(sx, sy, 1, 1));
   }
   // Moon/sun
   if (nightFactor > 0.3) {
     ctx.fillStyle = 'rgba(255,240,200,' + (nightFactor * 0.9).toFixed(2) + ')';
-    ctx.fillRect(x+50, y+2, 4, 4);
+    ctx.fillRect(x+50, y+1, 4, 4);
     ctx.fillStyle = 'rgba(220,210,160,' + (nightFactor * 0.7).toFixed(2) + ')';
-    ctx.fillRect(x+51, y+2, 2, 2);
+    ctx.fillRect(x+51, y+1, 2, 2);
   } else {
-    ctx.fillStyle = '#ffe39a'; ctx.fillRect(x+50, y+3, 4, 4);
-    ctx.fillStyle = '#d8d060'; ctx.fillRect(x+51, y+3, 2, 2);
+    ctx.fillStyle = '#ffe39a'; ctx.fillRect(x+50, y+2, 4, 4);
+    ctx.fillStyle = '#d8d060'; ctx.fillRect(x+51, y+2, 2, 2);
   }
   // Window frame — 4 panes
   ctx.fillStyle = '#5a5040';
@@ -2033,17 +2417,17 @@ function drawWindow() {
 
 function drawDoor() {
   ctx.save(); ctx.scale(SCALE, SCALE);
-  const x = 4, y = 8;
-  R(x, y, 14, 52, '#3a3028'); R(x+1, y+1, 12, 50, '#2a2218');
-  R(x+2, y+2, 10, 22, '#2e2620'); R(x+2, y+26, 10, 24, '#2e2620');
-  R(x+10, y+30, 2, 2, '#c49b2a'); R(x+10, y+30, 1, 1, '#dab84a');
-  R(x-1, y-1, 16, 1, PAL.beam); R(x-1, y-1, 1, 54, PAL.beam); R(x+14, y-1, 1, 54, PAL.beam);
+  const x = 4, y = 6;
+  R(x, y, 14, 28, '#3a3028'); R(x+1, y+1, 12, 26, '#2a2218');
+  R(x+2, y+2, 10, 10, '#2e2620'); R(x+2, y+14, 10, 12, '#2e2620');
+  R(x+10, y+15, 2, 2, '#c49b2a'); R(x+10, y+15, 1, 1, '#dab84a');
+  R(x-1, y-1, 16, 1, PAL.beam); R(x-1, y-1, 1, 30, PAL.beam); R(x+14, y-1, 1, 30, PAL.beam);
   ctx.restore();
 }
 
 function drawNeonSign() {
   ctx.save(); ctx.scale(SCALE, SCALE);
-  const nx = 55, ny = 20;
+  const nx = 55, ny = 10;
   const { nightFactor } = getTimeOfDay();
   // Glow radius and intensity increase at night
   const glowMult = 1 + nightFactor * 1.5;
@@ -2064,30 +2448,28 @@ function drawNeonSign() {
 
 function drawWhiteboard() {
   ctx.save(); ctx.scale(SCALE, SCALE);
-  const x = 218, y = 10, w = 44, h = 36;
+  const x = 218, y = 6, w = 44, h = 20;
   // Board body
   R(x, y, w, h, PAL.wb);
   R(x, y, w, 1, PAL.wbFrame); R(x, y+h-1, w, 1, PAL.wbFrame);
   R(x, y, 1, h, PAL.wbFrame); R(x+w-1, y, 1, h, PAL.wbFrame);
   // "DAYS WITHOUT INCIDENT: 0" header
   ctx.fillStyle = '#444'; ctx.font = '3px "Press Start 2P"';
-  ctx.fillText('DAYS WITHOUT', x+3, y+7);
-  ctx.fillText('INCIDENT:', x+3, y+12);
-  ctx.fillStyle = '#e04040'; ctx.font = '6px "Press Start 2P"'; ctx.fillText('0', x+32, y+12);
+  ctx.fillText('DAYS WITHOUT', x+3, y+5);
+  ctx.fillText('INCIDENT:', x+3, y+9);
+  ctx.fillStyle = '#e04040'; ctx.font = '6px "Press Start 2P"'; ctx.fillText('0', x+32, y+9);
   // Crossed-out "3"
-  ctx.fillStyle = '#aaa'; ctx.font = '4px "Press Start 2P"'; ctx.fillText('3', x+28, y+7);
-  R(x+27, y+5, 6, 1, '#e04040');
+  ctx.fillStyle = '#aaa'; ctx.font = '4px "Press Start 2P"'; ctx.fillText('3', x+28, y+5);
+  R(x+27, y+3, 6, 1, '#e04040');
   // Sprint items
   ctx.fillStyle = '#666'; ctx.font = '2px "Press Start 2P"';
-  ctx.fillText('TODO:', x+3, y+20);
+  ctx.fillText('TODO:', x+3, y+14);
   ctx.fillStyle = '#888';
-  ctx.fillText('fix auth', x+14, y+20);
-  ctx.fillText('deploy v2', x+3, y+24);
-  ctx.fillText('write tests', x+3, y+28);
+  ctx.fillText('fix auth', x+14, y+14);
+  ctx.fillText('deploy v2', x+3, y+17);
   // Checkbox marks
-  R(x+2, y+18, 2, 2, '#40c040'); // checked
-  R(x+2, y+22, 2, 2, '#ddd'); // unchecked
-  R(x+2, y+26, 2, 2, '#ddd'); // unchecked
+  R(x+2, y+12, 2, 2, '#40c040'); // checked
+  R(x+2, y+15, 2, 2, '#ddd'); // unchecked
   // Marker tray
   R(x+8, y+h, 26, 1, '#666');
   R(x+9, y+h, 2, 1, '#e04040'); R(x+12, y+h, 2, 1, '#4040e0');
@@ -2169,202 +2551,9 @@ function drawMonitor(d, state, monitorText) {
   ctx.restore();
 }
 
-function drawCharacter(d, colorIdx, state) {
-  ctx.save(); ctx.scale(SCALE, SCALE);
-  const c = CHARS[colorIdx % CHARS.length];
-  const x = d.x * TILE, y = (d.y + 1) * TILE;
-  const sleeping = state === 'sleeping';
-  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
-  const celeb = state === 'merged';
-  const slumped = state === 'exited' || sleeping;
-  const walk = state === 'walking';
-  const bob = sitting ? 0 : (Math.sin(frame * 0.15) > 0 ? 0 : 1);
-  const oy = sitting ? (celeb ? -3 : slumped ? -1 : -2) : bob;
+// (Old hand-drawn drawCharacter removed — using sprite-based drawCharacterPixel)
 
-  if (!sitting) { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(x+3, y+14+bob, 10, 2); }
-  ctx.fillStyle = c.pants;
-  if (sitting) R(x+4, y+11+oy, 8, 2, c.pants);
-  else {
-    const lo = walk ? (Math.sin(frame*0.3) > 0 ? 1 : -1) : 0;
-    R(x+5, y+11+oy, 2, 4, c.pants); R(x+9, y+11+oy+lo, 2, 4, c.pants);
-    R(x+4, y+15+oy, 3, 1, '#222'); R(x+9, y+15+oy+lo, 3, 1, '#222');
-  }
-  R(x+4, y+6+oy, 8, 5, c.shirt); R(x+4, y+6+oy, 8, 1, c.shirtD); R(x+4, y+10+oy, 8, 1, c.shirtD);
-  R(x+7, y+7+oy, 1, 3, c.shirtD);
-  R(x+5, y+1+oy, 6, 5, c.skin); R(x+5, y+5+oy, 6, 1, c.skinD);
-  R(x+4, y+3+oy, 1, 2, c.skinD); R(x+11, y+3+oy, 1, 2, c.skinD);
-  R(x+5, y+oy, 6, 2, c.hair); R(x+4, y+oy+1, 1, 1, c.hair); R(x+11, y+oy+1, 1, 1, c.hair);
-  R(x+4, y+3+oy, 1, 3, c.shirt); R(x+11, y+3+oy, 1, 3, c.shirt);
-
-  if (state === 'coding') {
-    R(x+3, y+2+oy, 1, 3, '#333'); R(x+12, y+2+oy, 1, 3, '#333');
-    R(x+3, y+3+oy, 1, 2, '#555'); R(x+12, y+3+oy, 1, 2, '#555');
-    R(x+4, y+oy, 8, 1, '#444');
-  }
-
-  if (sleeping) {
-    const zf = frame % 90;
-    ctx.fillStyle = '#aaddff'; ctx.font = '3px "Press Start 2P"';
-    if (zf < 30) ctx.fillText('z', x+13, y+oy);
-    else if (zf < 60) ctx.fillText('zZ', x+12, y+oy-2);
-    else ctx.fillText('zZz', x+11, y+oy-4);
-  }
-
-  if (state === 'coding') {
-    const ab = frame % 6 < 3 ? 0 : 1;
-    R(x+2, y+7+oy, 2, 3, c.shirt); R(x+12, y+7+oy+ab, 2, 3, c.shirt);
-    R(x+2, y+10+oy, 2, 1, c.skin); R(x+12, y+10+oy+ab, 2, 1, c.skin);
-  } else if (celeb) {
-    R(x+2, y+1+oy, 2, 4, c.shirt); R(x+12, y+1+oy, 2, 4, c.shirt);
-    R(x+2, y+oy, 2, 1, c.skin); R(x+12, y+oy, 2, 1, c.skin);
-  } else if (slumped) {
-    R(x+2, y+8+oy, 2, 4, c.shirt); R(x+12, y+8+oy, 2, 4, c.shirt);
-  } else {
-    R(x+2, y+6+oy, 2, 4, c.shirt); R(x+12, y+6+oy, 2, 4, c.shirt);
-  }
-
-  const blink = frame % 60 < 3;
-  if (slumped) { R(x+6, y+4+oy, 2, 1, '#222'); R(x+9, y+4+oy, 2, 1, '#222'); }
-  else if (!blink) {
-    R(x+6, y+3+oy, 2, 2, '#fff'); R(x+9, y+3+oy, 2, 2, '#fff');
-    const px = state === 'coding' ? 0 : (Math.sin(frame*0.02) > 0 ? 0 : 1);
-    R(x+6+px, y+3+oy, 1, 1, '#111'); R(x+9+px, y+3+oy, 1, 1, '#111');
-    R(x+6, y+3+oy, 1, 1, '#ddf'); R(x+9, y+3+oy, 1, 1, '#ddf');
-  }
-  ctx.restore();
-}
-
-function drawCharacterSV(d, colorIdx, state, agentType) {
-  ctx.save(); ctx.scale(SCALE, SCALE);
-  const ch = CHARS_SV[colorIdx % CHARS_SV.length];
-  const x = d.x * TILE;
-  const y = (d.y + 1) * TILE;
-  const isCodex = (agentType || '').includes('codex');
-  // Hoodie palette by agent type (orange=Claude, green=Codex)
-  const hM = isCodex ? '#3fbf3f' : '#e87030';
-  const hL = isCodex ? '#5fdf5f' : '#ff9050';
-  const hD = isCodex ? '#2a8a2a' : '#c05020';
-  const hX = isCodex ? '#1e6e1e' : '#a03818';
-  const f = Math.floor(frame / 8) % 4;
-  const sleeping = state === 'sleeping';
-  const sitting = ['coding','reading','waiting','merged','exited','pr_closed','sleeping'].includes(state);
-  const celeb = state === 'merged';
-  const slumped = state === 'exited' || sleeping;
-  const walk = state === 'walking';
-  const coding = state === 'coding';
-  const bob = sitting ? 0 : [0, -1, 0, -1][f];
-  const oy = sitting ? (celeb ? -6 : slumped ? -2 : -4) : bob;
-  // Shadow for standing/walking
-  if (!sitting) { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(x+2, y+19, 12, 2); }
-  // --- LEGS ---
-  if (sitting) {
-    R(x+4, y+13+oy, 3, 2, '#3050a0'); R(x+9, y+13+oy, 3, 2, '#3050a0');
-    R(x+4, y+14+oy, 3, 1, '#283e80'); R(x+9, y+14+oy, 3, 1, '#283e80');
-  } else if (walk) {
-    const wc = [[0,0,0,0],[-1,-1,1,0],[0,0,0,0],[1,0,-1,-1]][f];
-    R(x+4+wc[0], y+14+oy, 3, 4, '#3050a0'); R(x+4+wc[0], y+14+oy, 3, 1, '#283e80');
-    R(x+9+wc[2], y+14+oy, 3, 4, '#3050a0'); R(x+9+wc[2], y+14+oy, 3, 1, '#283e80');
-    R(x+3+wc[0], y+18+oy+wc[1], 5, 1, '#333'); R(x+8+wc[2], y+18+oy+wc[3], 5, 1, '#333');
-  } else {
-    R(x+4, y+14+oy, 3, 4, '#3050a0'); R(x+4, y+14+oy, 3, 1, '#283e80');
-    R(x+9, y+14+oy, 3, 4, '#3050a0'); R(x+9, y+14+oy, 3, 1, '#283e80');
-    R(x+3, y+18+oy, 5, 1, '#333'); R(x+8, y+18+oy, 5, 1, '#333');
-  }
-  // --- TORSO (Hoodie) ---
-  R(x+3, y+7+oy, 10, 6, hM);
-  R(x+3, y+7+oy, 10, 1, hL);
-  R(x+3, y+12+oy, 10, 1, hD);
-  R(x+4, y+8+oy, 1, 4, hL);
-  R(x+12, y+8+oy, 1, 4, hD);
-  R(x+5, y+7+oy, 6, 1, hD);
-  R(x+7, y+8+oy, 1, 4, hD); R(x+8, y+8+oy, 1, 4, hX);
-  R(x+6, y+8+oy, 1, 2, hX); R(x+9, y+8+oy, 1, 2, hX);
-  if (isCodex) { R(x+10, y+9+oy, 2, 2, '#f0c040'); R(x+10, y+9+oy, 1, 1, '#d4a020'); }
-  else { R(x+10, y+9+oy, 1, 1, '#f0c040'); R(x+9, y+10+oy, 3, 1, '#f0c040'); R(x+10, y+11+oy, 1, 1, '#f0c040'); }
-  // --- HEAD (with lean-in bob for coding) ---
-  const hob = coding ? (Math.floor(frame / 24) % 4 === 1 ? 1 : 0) : 0;
-  const hy = oy + hob;
-  R(x+4, y+2+hy, 8, 5, ch.skin);
-  R(x+4, y+2+hy, 8, 1, ch.skinH);
-  R(x+4, y+6+hy, 8, 1, ch.skinD);
-  R(x+3, y+3+hy, 1, 2, ch.skin); R(x+3, y+3+hy, 1, 1, ch.skinH);
-  R(x+12, y+3+hy, 1, 2, ch.skinD);
-  // --- EYES (2px tall) ---
-  const blink = frame % 80 < 3;
-  if (slumped) {
-    R(x+5, y+4+hy, 2, 1, '#222'); R(x+9, y+4+hy, 2, 1, '#222');
-  } else if (!blink) {
-    R(x+5, y+3+hy, 2, 2, '#fff'); R(x+9, y+3+hy, 2, 2, '#fff');
-    // Coding: eyes glance between monitor areas; others: slow drift
-    const px = coding ? (Math.floor(frame / 30) % 3 === 2 ? 1 : 0) : (Math.sin(frame * 0.02) > 0 ? 0 : 1);
-    R(x+5+px, y+3+hy, 1, 2, '#111'); R(x+9+px, y+3+hy, 1, 2, '#111');
-    R(x+5, y+3+hy, 1, 1, '#ddf'); R(x+9, y+3+hy, 1, 1, '#ddf');
-    if (celeb) { R(x+5, y+2+hy, 2, 1, ch.hair); R(x+9, y+2+hy, 2, 1, ch.hair); }
-  }
-  if (celeb) R(x+7, y+5+hy, 2, 1, '#c06060');
-  else if (slumped) R(x+7, y+5+hy, 2, 1, '#888');
-  else if (coding) R(x+7, y+5+hy, 1, 1, ch.skinD);
-  // --- HAIR (per hairStyle) ---
-  const hs = ch.hairStyle;
-  R(x+4, y+1+hy, 8, 2, ch.hair); R(x+4, y+1+hy, 8, 1, ch.hairH);
-  R(x+3, y+2+hy, 1, 1, ch.hair); R(x+12, y+2+hy, 1, 1, ch.hair);
-  if (hs === 0) {
-    R(x+5, y+hy, 2, 1, ch.hair); R(x+8, y+hy, 2, 1, ch.hair);
-    R(x+6, y+hy-1, 1, 1, ch.hairH); R(x+9, y+hy-1, 1, 1, ch.hairH); R(x+11, y+hy, 1, 1, ch.hair);
-  } else if (hs === 1) {
-    R(x+12, y+1+hy, 2, 1, ch.hair); R(x+13, y+2+hy, 2, 2, ch.hair); R(x+13, y+2+hy, 1, 1, ch.hairH);
-  } else if (hs === 2) {
-    R(x+3, y+hy, 10, 2, '#cc3333'); R(x+3, y+hy, 10, 1, '#ee5555'); R(x+2, y+1+hy, 12, 1, '#aa2222');
-  } else if (hs === 3) {
-    R(x+3, y+hy, 10, 2, ch.hair);
-    R(x+2, y+2+hy, 2, 3, '#555'); R(x+2, y+2+hy, 2, 1, '#777');
-    R(x+12, y+2+hy, 2, 3, '#555'); R(x+12, y+2+hy, 2, 1, '#777');
-    R(x+3, y+hy, 10, 1, '#666');
-  } else if (hs === 4) {
-    R(x+4, y+hy, 8, 1, '#4a4a8a'); R(x+3, y+1+hy, 10, 1, '#3a3a7a');
-    R(x+5, y+hy-1, 6, 1, '#5a5a9a'); R(x+7, y+hy-2, 2, 1, '#4a4a8a');
-  } else {
-    R(x+4, y+hy, 8, 2, ch.hair); R(x+4, y+hy, 8, 1, ch.hairH);
-  }
-  // --- ARMS ---
-  if (coding) {
-    const ab = f % 2;
-    // Left arm + hand (bounces on even frames)
-    R(x+1, y+8+oy, 2, 4, hM); R(x+1, y+8+oy, 2, 1, hL); R(x+1, y+12+oy+(1-ab), 2, 1, ch.skin);
-    // Right arm + hand (bounces on odd frames)
-    R(x+13, y+8+oy, 2, 4, hM); R(x+13, y+8+oy, 2, 1, hL); R(x+13, y+12+oy+ab, 2, 1, ch.skin);
-  } else if (celeb) {
-    R(x+1, y+2+oy, 2, 5, hM); R(x+1, y+2+oy, 2, 1, hL); R(x+1, y+1+oy, 2, 1, ch.skin);
-    R(x+13, y+2+oy, 2, 5, hM); R(x+13, y+2+oy, 2, 1, hL); R(x+13, y+1+oy, 2, 1, ch.skin);
-  } else if (slumped) {
-    R(x+1, y+8+oy, 2, 6, hM); R(x+13, y+8+oy, 2, 6, hM);
-  } else if (walk) {
-    const as = [1, 0, -1, 0][f];
-    R(x+1, y+8+oy, 2, 4+as, hM); R(x+1, y+8+oy, 2, 1, hL); R(x+1, y+12+oy+as, 2, 1, ch.skin);
-    R(x+13, y+8+oy, 2, 4-as, hM); R(x+13, y+8+oy, 2, 1, hL); R(x+13, y+12+oy-as, 2, 1, ch.skin);
-  } else if (state === 'reading' || state === 'waiting') {
-    R(x+1, y+8+oy, 2, 4, hM); R(x+1, y+8+oy, 2, 1, hL);
-    R(x+13, y+7+oy, 2, 2, hM); R(x+13, y+5+oy, 2, 2, hM); R(x+12, y+5+oy, 1, 1, ch.skin);
-  } else {
-    R(x+1, y+8+oy, 2, 4, hM); R(x+1, y+8+oy, 2, 1, hL);
-    R(x+13, y+8+oy, 2, 4, hM); R(x+13, y+8+oy, 2, 1, hL);
-  }
-  // Coding headset
-  if (coding && hs !== 3) {
-    R(x+3, y+2+hy, 1, 3, '#555'); R(x+3, y+2+hy, 1, 1, '#777');
-    R(x+12, y+2+hy, 1, 3, '#555'); R(x+12, y+2+hy, 1, 1, '#777');
-    R(x+4, y+hy, 8, 1, '#444');
-  }
-  // Sleeping ZZZ
-  if (sleeping) {
-    const zf = frame % 90;
-    ctx.fillStyle = '#aaddff'; ctx.font = '3px "Press Start 2P"';
-    if (zf < 30) ctx.fillText('z', x+14, y+oy+2);
-    else if (zf < 60) ctx.fillText('zZ', x+13, y+oy);
-    else ctx.fillText('zZz', x+12, y+oy-2);
-  }
-  ctx.restore();
-}
+// (Old hand-drawn drawCharacterSV removed — using sprite-based drawCharacterPixel above)
 
 function drawKeyboardGlowSV(d, idx) {
   ctx.save(); ctx.scale(SCALE, SCALE);
@@ -2510,13 +2699,11 @@ function drawTokenBar(d, pct) {
 }
 
 function drawPlant(tx, ty) {
-  ctx.save(); ctx.scale(SCALE, SCALE);
-  const x = tx * TILE + 4, y = ty * TILE;
-  R(x+2, y+10, 8, 6, PAL.plantPot); R(x+1, y+10, 10, 2, PAL.plantPotDark); R(x+3, y+10, 6, 1, PAL.plantPot);
-  R(x+4, y+4, 4, 6, PAL.plant); R(x+2, y+2, 8, 4, PAL.plant);
-  R(x, y+4, 3, 3, PAL.plant); R(x+9, y+3, 3, 4, PAL.plant);
-  R(x+3, y+2, 2, 1, PAL.plantLight); R(x+7, y+3, 2, 1, PAL.plantLight); R(x+1, y+4, 1, 1, PAL.plantLight);
-  ctx.restore();
+  drawPixelSprite(PLANT_SPRITE, tx, ty);
+}
+
+function drawBookshelf(tx, ty) {
+  drawPixelSprite(BOOKSHELF_SPRITE, tx, ty);
 }
 
 function drawServerRack(px, py) {
@@ -2533,7 +2720,7 @@ function drawServerRack(px, py) {
 function drawDivider(col) {
   const x = (2 + col * 5 - 1) * S + S/2;
   ctx.strokeStyle = PAL.divider; ctx.lineWidth = 4; ctx.setLineDash([8, 8]);
-  ctx.beginPath(); ctx.moveTo(x, 4 * S); ctx.lineTo(x, ROWS * S - S); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x, 2 * S); ctx.lineTo(x, ROWS * S - S); ctx.stroke(); ctx.setLineDash([]);
 }
 
 function drawLampGlow(tx, ty) {
@@ -2560,12 +2747,12 @@ function drawTumbleweed() {
 // ============================================================
 
 function drawFloorSV() {
-  // Floor starts at row 4 (rows 0-3 are wall)
+  // Floor starts at row 2 (rows 0-1 are wall)
   // Wood plank palette — 4 alternating plank colors for variety
   const plankColors = [PAL.svFloor1, PAL.svFloor2, PAL.svFloor3, PAL.svFloor4];
   // Each plank band is 3 rows tall; assign a color per band with pseudo-random offset
-  for (let r = 4; r < ROWS; r++) {
-    const band = Math.floor((r - 4) / 3);
+  for (let r = 2; r < ROWS; r++) {
+    const band = Math.floor((r - 2) / 3);
     for (let c = 0; c < COLS; c++) {
       // Slight per-tile color variation within a band
       const noise = Math.sin(c * 7 + r * 13) * 0.5 + 0.5;
@@ -2575,10 +2762,10 @@ function drawFloorSV() {
   }
   ctx.save(); ctx.scale(SCALE, SCALE);
   const W = COLS * TILE, H = ROWS * TILE;
-  const WALL_H = TILE * 4;
+  const WALL_H = TILE * 2;
   // Wood grain — subtle darker horizontal lines within planks
   ctx.fillStyle = 'rgba(100,60,20,0.08)';
-  for (let r = 4; r < ROWS; r++) {
+  for (let r = 2; r < ROWS; r++) {
     const ry = r * TILE;
     // 2-3 grain lines per tile row
     for (let g = 0; g < 3; g++) {
@@ -2594,15 +2781,15 @@ function drawFloorSV() {
   }
   // Plank seams — thin dark horizontal lines between plank bands (every 3 rows)
   ctx.fillStyle = 'rgba(80,50,20,0.25)';
-  for (let r = 4; r < ROWS; r++) {
-    if ((r - 4) % 3 === 0 && r > 4) {
+  for (let r = 2; r < ROWS; r++) {
+    if ((r - 2) % 3 === 0 && r > 2) {
       const sy = r * TILE;
       ctx.fillRect(0, sy, W, 1);
     }
   }
   // Wood knots — occasional small darker ovals
   ctx.fillStyle = 'rgba(90,55,20,0.15)';
-  const knots = [[45, 84], [130, 117], [210, 150], [75, 145], [260, 100], [170, 160]];
+  const knots = [[45, 52], [130, 85], [210, 130], [75, 145], [260, 68], [170, 160]];
   for (const [kx, ky] of knots) {
     if (ky >= WALL_H) {
       ctx.beginPath();
@@ -2611,7 +2798,7 @@ function drawFloorSV() {
     }
   }
   // Per-row depth gradient — darker at edges, lighter center (floor rows only)
-  for (let r = 4; r < ROWS; r++) {
+  for (let r = 2; r < ROWS; r++) {
     const ry = r * TILE;
     const grad = ctx.createLinearGradient(0, ry, W, ry);
     const edgeA = (0.04 + r * 0.003).toFixed(3);
@@ -2635,26 +2822,24 @@ function drawFloorSV() {
   // Coffee stains — subtle on wood
   ctx.fillStyle = 'rgba(80,50,20,0.07)';
   ctx.fillRect(85, 125, 6, 5);
-  ctx.fillRect(195, 137, 5, 4);
+  ctx.fillRect(195, 105, 5, 4);
   ctx.fillRect(145, 160, 4, 3);
   // Wood polish highlights — subtle specular
   ctx.fillStyle = 'rgba(255,255,240,0.05)';
-  ctx.fillRect(50, 112, 20, 15);
-  ctx.fillRect(150, 82, 15, 12);
+  ctx.fillRect(50, 80, 20, 15);
+  ctx.fillRect(150, 50, 15, 12);
   ctx.fillRect(240, 120, 18, 10);
   ctx.fillRect(100, 140, 12, 8);
-  ctx.fillRect(200, 92, 16, 10);
+  ctx.fillRect(200, 60, 16, 10);
   ctx.restore();
 }
 
 function drawWallsSV() {
-  const WALL_H = TILE * 4; // 4-row wall (64px)
-  // Base wall tiles for rows 0-3
+  const WALL_H = TILE * 2; // 2-row wall (32px)
+  // Base wall tiles for rows 0-1
   for (let c = 0; c < COLS; c++) {
     tileRect(c, 0, 1, 1, PAL.wall);
     tileRect(c, 1, 1, 1, PAL.wall);
-    tileRect(c, 2, 1, 1, PAL.wall);
-    tileRect(c, 3, 1, 1, PAL.wall);
   }
   ctx.save(); ctx.scale(SCALE, SCALE);
   const W = COLS * TILE;
@@ -2707,15 +2892,14 @@ function drawWallsSV() {
   ctx.fillRect(4, 2, W - 8, 1); // top highlight
   ctx.fillStyle = '#444';
   ctx.fillRect(4, 4, W - 8, 1); // shadow below duct
-  // Vertical pipe drops — extend down through taller wall
+  // Vertical pipe drops
   [30, 100, 190, 280].forEach(function(px) {
     ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(px, 4, 2, 14);
+    ctx.fillRect(px, 4, 2, 6);
     ctx.fillStyle = '#666';
-    ctx.fillRect(px, 4, 1, 14);
+    ctx.fillRect(px, 4, 1, 6);
     ctx.fillStyle = '#777';
-    ctx.fillRect(px - 1, 7, 4, 1); // pipe bracket upper
-    ctx.fillRect(px - 1, 14, 4, 1); // pipe bracket lower
+    ctx.fillRect(px - 1, 7, 4, 1); // pipe bracket
   });
   // Baseboard
   ctx.fillStyle = '#3a3028'; ctx.fillRect(0, WALL_H - 2, W, 2);
@@ -2742,7 +2926,7 @@ function drawWallsSV() {
     ctx.fillRect(lx - 4, ly + 2, 38, 8);
   }
   // EXIT sign above door area
-  const exX = 6, exY = 10;
+  const exX = 6, exY = 6;
   R(exX, exY, 14, 6, '#1a4a1a');
   R(exX + 1, exY + 1, 12, 4, '#2a6a2a');
   ctx.fillStyle = '#4aff4a';
@@ -2752,7 +2936,7 @@ function drawWallsSV() {
     R(exX - 2, exY + 6, 18, 4, 'rgba(74,255,74,' + (wallNF * 0.08).toFixed(3) + ')');
   }
   // Fire extinguisher on wall
-  const feX = 104, feY = 38;
+  const feX = 104, feY = 16;
   R(feX + 1, feY - 2, 3, 1, '#555'); // mounting bracket
   R(feX + 1, feY - 1, 3, 1, '#666');
   R(feX, feY, 5, 8, '#cc2222'); // body
@@ -2763,7 +2947,7 @@ function drawWallsSV() {
   R(feX, feY + 6, 5, 1, '#aa1818'); // bottom shadow
   R(feX + 1, feY + 3, 3, 2, '#fff'); // label
   // Wall clock — analog face synced to real time
-  const clkX = 192, clkY = 16;
+  const clkX = 192, clkY = 8;
   R(clkX, clkY, 8, 8, '#ddd'); // clock body
   R(clkX + 1, clkY + 1, 6, 6, '#f8f8f0'); // face
   R(clkX, clkY, 8, 1, '#999'); R(clkX, clkY + 7, 8, 1, '#999');
@@ -2782,7 +2966,7 @@ function drawWallsSV() {
   var md = hourDirs[minSlot];
   R(clkX + 3 + md[0] * 2, clkY + 3 + md[1] * 2, 1, 1, '#666');
   // Easter egg: "Series A" funding check pinned to wall
-  const chkX = 112, chkY = 20;
+  const chkX = 112, chkY = 8;
   R(chkX, chkY, 18, 8, '#f8f0e0'); // check paper
   R(chkX, chkY, 18, 1, '#ddd');
   R(chkX + 8, chkY, 1, 1, '#cc2222'); // pin
@@ -2792,7 +2976,7 @@ function drawWallsSV() {
   ctx.fillStyle = '#2a8a2a';
   ctx.fillText('$0.00', chkX + 3, chkY + 7);
   // Easter egg: tiny Octocat silhouette
-  const ocX = 48, ocY = 46;
+  const ocX = 48, ocY = 22;
   R(ocX, ocY, 4, 3, '#333'); // body
   R(ocX + 1, ocY - 1, 2, 1, '#333'); // head
   R(ocX, ocY - 1, 1, 1, '#333'); R(ocX + 3, ocY - 1, 1, 1, '#333'); // ears
@@ -2801,7 +2985,7 @@ function drawWallsSV() {
   // --- SV wall decorations ---
 
   // Guitar hanging on wall
-  const gX = 96, gY = 18;
+  const gX = 96, gY = 7;
   R(gX + 1, gY - 1, 2, 1, '#666'); // wall hook
   R(gX, gY, 4, 2, '#5a3a1a'); // headstock
   R(gX, gY, 1, 1, '#aaa'); R(gX + 3, gY + 1, 1, 1, '#aaa'); // tuning pegs
@@ -2813,7 +2997,7 @@ function drawWallsSV() {
   R(gX - 1, gY + 11, 6, 1, '#a07030'); // body shadow
 
   // Dart board
-  const dbX = 60, dbY = 40;
+  const dbX = 60, dbY = 20;
   R(dbX + 1, dbY, 6, 1, '#1a5a1a'); // top edge
   R(dbX, dbY + 1, 8, 6, '#1a5a1a'); // outer ring
   R(dbX + 1, dbY + 7, 6, 1, '#1a5a1a'); // bottom edge
@@ -2827,7 +3011,7 @@ function drawWallsSV() {
   R(dbX + 7, dbY, 1, 1, '#ff4444'); R(dbX + 7, dbY + 2, 1, 1, '#ff4444'); // dart flights
 
   // Ping pong paddle + ball mounted on wall
-  const ppX = 74, ppY = 40;
+  const ppX = 74, ppY = 20;
   R(ppX, ppY, 5, 6, '#cc3333'); // paddle face
   R(ppX, ppY, 5, 1, '#dd4444'); // paddle highlight
   R(ppX + 1, ppY + 1, 3, 4, '#ee4444'); // paddle center
@@ -3056,138 +3240,54 @@ function drawChairSV(d, idx) {
   ctx.restore();
 }
 
-function drawPropsSV() {
+function drawPropsPixel() {
   ctx.save(); ctx.scale(SCALE, SCALE);
 
-  // 1. Pizza boxes — stacked near bottom-left corner
-  const pzX = 22, pzY = TILE * (ROWS - 2) + 4;
-  for (let i = 0; i < 3; i++) {
-    R(pzX, pzY - i * 3, 12, 3, PAL.svPizzaBox);
-    R(pzX, pzY - i * 3, 12, 1, PAL.svPizzaBoxDark);
-    R(pzX + 1, pzY - i * 3 + 1, 10, 1, '#c89838'); // lid line
-  }
-  // Top box slightly open
-  R(pzX + 1, pzY - 8, 10, 1, '#d8a848');
-
-  // 2. Floor cable runs — ethernet/power cables across walkways (SV garage vibe)
-  ctx.fillStyle = '#2a2a3a';
-  // Horizontal cable run between desk rows
-  for (let cx = 3 * TILE; cx < 17 * TILE; cx += 2) {
-    const wobble = Math.sin(cx * 0.3) * 0.8;
-    R(cx, 7 * TILE + 6 + Math.round(wobble), 2, 1, '#2a2a3a');
-  }
-  // Cable tie-downs (small squares along cable)
-  [5, 9, 13].forEach(col => {
-    R(col * TILE, 7 * TILE + 6, 2, 2, '#444');
-  });
-
-  // 3. Whiteboard markers — on floor near whiteboard
-  const mkX = 17 * TILE + 2, mkY = 4 * TILE + 10;
+  // Whiteboard markers — near whiteboard
+  const mkX = 17 * TILE + 2, mkY = 2 * TILE + 10;
   [['#e04040', 0], ['#4040e0', 3], ['#40a040', 6]].forEach(([color, offset]) => {
     R(mkX + offset, mkY, 6, 2, color);
-    R(mkX + offset, mkY, 1, 2, '#ddd'); // cap
+    R(mkX + offset, mkY, 1, 2, '#ddd');
   });
 
-  // 4. Laptop stickers on wall — YC, GitHub octocat, etc (colored squares = stickers)
-  const stX = 8 * TILE, stY = 24;
-  [['#f06529', 'YC'], ['#333', '◆'], ['#6e5494', '⚡']].forEach(([bg, _label], i) => {
-    R(stX + i * 8, stY, 6, 6, bg);
-    R(stX + i * 8 + 1, stY + 1, 4, 4, bg);
-    // Slight highlight
-    R(stX + i * 8, stY, 6, 1, 'rgba(255,255,255,0.15)');
-  });
-
-  // 3. Sticky notes — colored squares on wall near whiteboard
-  const stickyX = 270, stickyY = 36;
+  // Sticky notes on wall near whiteboard
+  const stickyX = 270, stickyY = 18;
   PAL.svSticky.forEach((color, i) => {
     const sx = stickyX + (i % 2) * 6;
     const sy = stickyY + Math.floor(i / 2) * 6;
     R(sx, sy, 5, 5, color);
-    // Tiny scribble lines
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.fillRect(sx + 1, sy + 1, 3, 1);
     ctx.fillRect(sx + 1, sy + 3, 2, 1);
   });
 
-  // 4. "MOVE FAST" poster on wall
-  const postX = 200, postY = 22;
-  R(postX, postY, 16, 10, PAL.svPoster);
+  // "SHIP IT" poster on wall
+  const postX = 55, postY = 8;
+  R(postX, postY, 16, 10, '#e8e0d0');
   R(postX, postY, 16, 1, '#ccc');
-  ctx.fillStyle = PAL.svPosterText;
+  ctx.fillStyle = '#222';
   ctx.font = '2px "Press Start 2P"';
-  ctx.fillText('MOVE', postX + 2, postY + 5);
-  ctx.fillText('FAST', postX + 3, postY + 8);
+  ctx.fillText('SHIP', postX + 3, postY + 5);
+  ctx.fillText('IT!', postX + 4, postY + 8);
 
-  // 5. Skateboard — leaning against wall near door
-  const skX = 22, skY = TILE * 4 - 1;
-  R(skX, skY, 10, 2, PAL.svSkateDeck);
-  R(skX + 1, skY + 2, 2, 1, PAL.svSkateTruck);
-  R(skX + 7, skY + 2, 2, 1, PAL.svSkateTruck);
-  R(skX, skY + 3, 2, 1, PAL.svSkateWheel);
-  R(skX + 8, skY + 3, 2, 1, PAL.svSkateWheel);
-
-  // 6. Cardboard boxes — stacked near entrance
-  const bxX = 28, bxY = TILE * 4 + 6;
-  R(bxX, bxY, 10, 8, PAL.svCardboard);
-  R(bxX, bxY, 10, 1, PAL.svCardboardDark);
-  R(bxX + 1, bxY + 3, 8, 1, PAL.svCardboardDark); // tape
-  // Second box on top, slightly offset
-  R(bxX + 2, bxY - 6, 8, 6, PAL.svCardboard);
-  R(bxX + 2, bxY - 6, 8, 1, PAL.svCardboardDark);
-  R(bxX + 3, bxY - 3, 6, 1, PAL.svCardboardDark);
-  // Arrow marking
-  ctx.fillStyle = '#666';
-  ctx.fillRect(bxX + 4, bxY + 4, 2, 3);
-  ctx.fillRect(bxX + 3, bxY + 4, 4, 1);
-
-  // 7. Bean bag — bottom-right corner area
-  const bbX = (COLS - 2) * TILE + 2, bbY = (ROWS - 2) * TILE + 2;
-  R(bbX + 1, bbY + 2, 10, 6, PAL.svBeanBag);
-  R(bbX, bbY + 4, 12, 4, PAL.svBeanBag);
-  R(bbX + 2, bbY + 1, 8, 2, PAL.svBeanBag);
-  R(bbX + 2, bbY + 2, 6, 1, PAL.svBeanBagDark);
-  R(bbX + 1, bbY + 6, 10, 2, PAL.svBeanBagDark);
-  // Highlight
-  R(bbX + 3, bbY + 2, 3, 1, '#dd5577');
-
-  // 8. Mini fridge — near server rack
-  const frX = (COLS - 1) * TILE - 14, frY = 6 * TILE + 2;
-  R(frX, frY, 8, 12, PAL.svFridge);
-  R(frX, frY, 8, 1, PAL.svFridgeDark);
-  R(frX, frY + 11, 8, 1, PAL.svFridgeDark);
-  R(frX + 7, frY + 3, 1, 4, PAL.svFridgeHandle);
-  // Magnetic sticker
-  R(frX + 2, frY + 2, 3, 3, '#ff5566');
-  R(frX + 2, frY + 6, 3, 3, '#55aaff');
+  // Framed certificate on wall
+  const certX = 200, certY = 8;
+  R(certX, certY, 16, 12, '#f8f0e0');
+  R(certX, certY, 16, 1, '#8B6914'); R(certX, certY + 11, 16, 1, '#8B6914');
+  R(certX, certY, 1, 12, '#8B6914'); R(certX + 15, certY, 1, 12, '#8B6914');
+  ctx.fillStyle = '#888';
+  ctx.font = '2px "Press Start 2P"';
+  ctx.fillText('BEST', certX + 3, certY + 5);
+  ctx.fillText('CODE', certX + 3, certY + 8);
+  R(certX + 6, certY + 9, 4, 2, '#f0c040'); // gold seal
 
   ctx.restore();
 }
 
-function drawLightingSV() {
+function drawLightingPixel() {
   const { nightFactor, warmFactor, hour } = getTimeOfDay();
-  // Neon sign extended glow on nearby walls/floor — larger radius, stronger at night
-  const neonCX = (55 + 19) * SCALE;
-  const neonCY = 22 * SCALE;
-  const neonAlpha1 = (0.09 + nightFactor * 0.10).toFixed(3);
-  const neonAlpha2 = (0.04 + nightFactor * 0.06).toFixed(3);
-  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 16, neonCX, neonCY + 180, 320);
-  neonGrad.addColorStop(0, 'rgba(255,45,123,' + neonAlpha1 + ')');
-  neonGrad.addColorStop(0.4, 'rgba(0,229,255,' + neonAlpha2 + ')');
-  neonGrad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = neonGrad;
-  ctx.fillRect(neonCX - 320, neonCY - 40, 640, 420);
-  // Neon color bleed onto nearby wall tiles (cyan/pink tint)
-  ctx.save(); ctx.scale(SCALE, SCALE);
-  const wallBleedAlpha = (0.04 + nightFactor * 0.06).toFixed(3);
-  ctx.fillStyle = 'rgba(255,45,123,' + wallBleedAlpha + ')';
-  ctx.fillRect(50, 0, 18, TILE * 4);
-  ctx.fillStyle = 'rgba(0,229,255,' + wallBleedAlpha + ')';
-  ctx.fillRect(68, 0, 30, TILE * 4);
-  ctx.fillStyle = 'rgba(255,45,123,' + (parseFloat(wallBleedAlpha) * 0.5).toFixed(3) + ')';
-  ctx.fillRect(85, 0, 15, TILE * 4);
-  ctx.restore();
 
-  // Fluorescent ceiling light glow pools on floor — brighter at night, with flicker
+  // Fluorescent ceiling light glow pools on floor
   const ceilAlpha = (0.04 + nightFactor * 0.08).toFixed(3);
   for (let i = 0; i < 4; i++) {
     const lx = (30 + i * 70 + 15) * SCALE;
@@ -3226,12 +3326,11 @@ function drawLightingSV() {
     });
   }
 
-  // Daytime: window light beam — warm yellow trapezoid on floor
+  // Daytime: window light beam
   if (nightFactor < 0.5) {
     const beamAlpha = (0.03 * (1 - nightFactor)).toFixed(3);
     ctx.save(); ctx.scale(SCALE, SCALE);
-    // Window is at x=120, y=8, w=64 — light falls onto floor below
-    const wx = 130, wy = TILE * 4 + 4;
+    const wx = 130, wy = TILE * 2 + 4;
     const beamGrad = ctx.createLinearGradient(wx, wy, wx, wy + TILE * 4);
     beamGrad.addColorStop(0, 'rgba(255,240,180,' + beamAlpha + ')');
     beamGrad.addColorStop(1, 'rgba(255,240,180,0)');
@@ -3258,22 +3357,6 @@ function drawParticles() {
       if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
       ctx.fillStyle = 'rgba(200,200,220,' + p.alpha.toFixed(2) + ')';
       ctx.fillRect(p.x | 0, p.y | 0, p.size, p.size);
-    } else if (p.type === 'sparkle') {
-      p.life++;
-      if (p.life >= p.maxLife) {
-        // Respawn at random position near neon sign
-        p.x = 55 + Math.random() * 38;
-        p.y = 18 + Math.random() * 14;
-        p.life = 0;
-        p.maxLife = 40 + Math.random() * 40;
-      }
-      // Fade in then out
-      const t = p.life / p.maxLife;
-      p.alpha = t < 0.3 ? t / 0.3 : (1 - t) / 0.7;
-      if (p.alpha > 0.02) {
-        ctx.fillStyle = 'rgba(255,220,255,' + (p.alpha * 0.6).toFixed(2) + ')';
-        ctx.fillRect(p.x | 0, p.y | 0, 1, 1);
-      }
     }
   }
   ctx.restore();
@@ -3419,11 +3502,11 @@ function render() {
   ctx.clearRect(0, 0, 1280, 768);
 
   drawFloorSV(); drawWallsSV(); drawGarageFrame(); drawWindow(); drawDoor();
-  drawNeonSign(); drawWhiteboard();
-  drawLightingSV();
+  drawWhiteboard();
+  drawLightingPixel();
   drawLampGlow(5, 0); drawLampGlow(15, 0);
   drawDivider(2); drawDivider(3);
-  drawPropsSV();
+  drawPropsPixel();
   drawUsageBars();
 
   // Update walking transitions
@@ -3453,8 +3536,8 @@ function render() {
 
     if (isWalkingIn || isWalkingOut) return;
 
-    if (a.dead) { drawTombstone(d); drawCharacterSV(d, a.ci, 'exited', a.agentType); }
-    else drawCharacterSV(d, a.ci, a.state, a.agentType);
+    if (a.dead) { drawTombstone(d); drawCharacterPixel(d, a.ci, 'exited'); }
+    else drawCharacterPixel(d, a.ci, a.state);
 
     drawTokenBar(d, a.tokens);
     // Headphone stand on desk edge for coding agents
@@ -3483,7 +3566,7 @@ function render() {
     const now = Date.now();
     if (now < t.startTime) return;
     const pos = positionAlongPath(t.path, t.progress);
-    drawCharacterSV(pos, t.colorIdx, 'walking', t.agentType);
+    drawCharacterPixel(pos, t.colorIdx, 'walking', DIR_RIGHT);
   });
 
   // Draw walking-out agents at interpolated positions
@@ -3494,7 +3577,7 @@ function render() {
       : positionAlongPath(w.path, w.progress);
     if (!pos) return;
     const drawState = now < w.startTime ? w.exitState : 'walking';
-    drawCharacterSV(pos, w.colorIdx, drawState, w.agentType);
+    drawCharacterPixel(pos, w.colorIdx, drawState, drawState === 'walking' ? DIR_LEFT : undefined);
   });
 
   // Click glow feedback
@@ -3509,7 +3592,7 @@ function render() {
 
   drawTumbleweed();
   drawPlant(0, 2); drawPlant(0, 9); drawPlant(COLS - 1, 4);
-  drawServerRack((COLS - 1) * TILE - 4, 6 * TILE);
+  drawBookshelf(COLS - 1, 6); drawBookshelf(COLS - 1, 8);
   drawParticles();
 
   // Day/night overlay — applied last, over entire scene

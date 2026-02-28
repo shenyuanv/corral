@@ -267,6 +267,7 @@
     <button id="cleanButton" type="button" onclick="cleanCompleted()">🧹 Clean</button>
     <button id="completedToggle" type="button" onclick="toggleCompleted()">✅ Show completed</button>
     <button type="button" onclick="switchToSV()" title="Switch to SV view">📺 SV Mode</button>
+    <button type="button" onclick="switchToPixel()" title="Switch to Pixel Office">🎮 Pixel</button>
   </div>
   <div id="usage-panel" aria-live="polite">
     <div id="usage-header">
@@ -749,6 +750,11 @@ function toggleCompleted() {
 function switchToSV() {
   try { localStorage.setItem('corral-ui-mode', 'sv'); } catch(e) {}
   window.location.href = '/sv';
+}
+
+function switchToPixel() {
+  try { localStorage.setItem('corral-ui-mode', 'pixel'); } catch(e) {}
+  window.location.href = '/pixel';
 }
 
 function setCleanButtonState(isCleaning) {
