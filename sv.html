@@ -315,6 +315,8 @@
   .ql-body { flex: 1; min-width: 0; }
   .ql-head { display: flex; align-items: baseline; gap: 4px; }
   .ql-name { color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ql-link { color: #88aaff; text-decoration: none; cursor: pointer; }
+  .ql-link:hover { color: #aaccff; text-decoration: underline; }
   .ql-status { white-space: nowrap; font-size: 6px; }
   .ql-time { flex-shrink: 0; color: #555; font-size: 6px; margin-left: auto; }
   .ql-title { color: #666; font-size: 6px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1420,7 +1422,15 @@ function renderTimeline() {
     const name = repoName && issueId ? repoName + '#' + issueId : (repoName || escapeHtml((item.id || '').substring(0, 12)));
     const title = item.issueTitle || item.issue_title || '';
 
-    return { state, eventTime, name, title, item };
+    // Build link URL: PR if available, otherwise issue
+    const prUrl = item.prUrl || '';
+    const prNum = getPrNumber(item);
+    let url = '';
+    if (prUrl) url = prUrl;
+    else if (repoName && prNum) url = 'https://github.com/' + repoName + '/pull/' + prNum;
+    else if (repoName && issueId) url = 'https://github.com/' + repoName + '/issues/' + issueId;
+
+    return { state, eventTime, name, title, item, url };
   });
 
   // Sort by most recent event first
@@ -1435,11 +1445,15 @@ function renderTimeline() {
       ? `<div class="ql-title">${escapeHtml(ev.title)}</div>`
       : '';
 
+    const nameHtml = ev.url
+      ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="ql-name ql-link">${escapeHtml(ev.name)}</a>`
+      : `<span class="ql-name">${escapeHtml(ev.name)}</span>`;
+
     return `<div class="ql-entry">
       <span class="ql-icon">${icon}</span>
       <div class="ql-body">
         <div class="ql-head">
-          <span class="ql-name">${escapeHtml(ev.name)}</span>
+          ${nameHtml}
           <span class="ql-status" style="color:${color}">${label}</span>
           <span class="ql-time">${timeAgo}</span>
         </div>
