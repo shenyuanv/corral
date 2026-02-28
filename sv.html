@@ -2933,7 +2933,7 @@ function buildCanvasAgents() {
 function drawUsageBars() {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const W = COLS * TILE; // 320 unscaled
-  const bgY = 0, bgH = 11;
+  const bgY = ROWS * TILE - 12, bgH = 11;
   // Semi-transparent background strip
   ctx.fillStyle = 'rgba(10,10,30,0.75)';
   ctx.fillRect(0, bgY, W, bgH);
@@ -2941,7 +2941,7 @@ function drawUsageBars() {
   ctx.fillStyle = 'rgba(255,255,255,0.08)';
   ctx.fillRect(0, bgY + bgH, W, 1);
 
-  const barY = 4, barH = 5, barW = 88;
+  const barY = bgY + 3, barH = 5, barW = 88;
   const entries = [
     { key: 'claude', label: 'CLAUDE', iconColor: '#f0c040', x: 4 },
     { key: 'codex', label: 'CODEX', iconColor: '#3adf7a', x: 160 },
