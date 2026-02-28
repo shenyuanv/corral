@@ -1298,7 +1298,7 @@ function drawChair(d) {
   ctx.restore();
 }
 
-function drawMonitor(d, state) {
+function drawMonitor(d, state, monitorText) {
   ctx.save(); ctx.scale(SCALE, SCALE);
   const x = d.x * TILE + 3, y = d.y * TILE;
   R(x, y, 10, 7, PAL.monitorBezel); R(x+1, y, 8, 1, PAL.monitor);
@@ -1326,6 +1326,22 @@ function drawMonitor(d, state) {
   } else {
     R(x+3,y+3,1,1,'#4ae04a'); R(x+4,y+4,1,1,'#4ae04a');
     R(x+5,y+3,1,1,'#4ae04a'); R(x+6,y+2,1,1,'#4ae04a'); R(x+7,y+1,1,1,'#2a8a2a');
+  }
+  // Scrolling issue title text on monitor screen
+  if (monitorText) {
+    ctx.restore(); // exit SCALE transform for text rendering
+    const sx = (x + 1) * SCALE, sy = (y + 1) * SCALE, sw = 8 * SCALE, sh = 5 * SCALE;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
+    ctx.fillStyle = state === 'ci_failed' ? '#ff6666' : (state === 'coding' ? '#4ae04a' : '#8888ff');
+    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.textBaseline = 'middle';
+    const textWidth = ctx.measureText(monitorText).width;
+    const totalScroll = textWidth + sw + 4;
+    const scroll = (frame * 0.6) % totalScroll;
+    ctx.fillText(monitorText, sx + sw - scroll, sy + sh / 2);
+    ctx.restore();
+    ctx.save(); ctx.scale(SCALE, SCALE); // re-enter SCALE for remaining drawing
   }
   R(x+3, y+7, 4, 1, '#333'); R(x+2, y+8, 6, 1, '#2a2a2a');
   if (state === 'coding' || state === 'ci_failed') {
@@ -1548,6 +1564,13 @@ function buildCanvasAgents() {
       tokens: Math.min(100, Math.max(0, getTokens(agent) / 2000 * 100)),
       dead: state === 'dead' || state === 'exited',
       label: getRepoName(agent) + (getIssueId(agent) ? '#' + getIssueId(agent) : ''),
+      monitorText: (function() {
+        const title = (agent.issueTitle || '').toString().trim();
+        const repo = getRepoName(agent);
+        const id = getIssueId(agent);
+        const prefix = repo && id ? repo + '#' + id : (repo || '');
+        return title && prefix ? prefix + ' — ' + title : (title || prefix || '');
+      })(),
       failing: isCiFailing(agent),
       coffees: coffeeCount(agent),
     };
@@ -1572,7 +1595,7 @@ function render() {
     const screenState = a.failing ? 'ci_failed' :
       a.state === 'coding' ? 'coding' :
       a.state === 'merged' ? 'merged' : 'pr_open';
-    drawMonitor(d, screenState);
+    drawMonitor(d, screenState, a.monitorText);
 
     if (a.dead) drawTombstone(d);
     else drawCharacter(d, a.ci, a.state);
