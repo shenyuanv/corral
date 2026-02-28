@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Corral 🤠 — SV Mode</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-<link href="https://unpkg.com/nes.css@2.3.0/css/nes.min.css" rel="stylesheet" />
+<link href="https://unpkg.com/snes.css@1.0.1/dist/snes.min.css" rel="stylesheet" />
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -421,41 +421,107 @@
   /* No-data message */
   .no-data { color: #555; font-size: 7px; text-align: center; padding: 12px; }
 
-  /* === NES.CSS DARK THEME OVERRIDES === */
-  .nes-container.is-dark {
+  /* === SNES.CSS DARK THEME OVERRIDES === */
+  .snes-container {
     background: #1a1a2e;
     padding: 8px 10px;
     margin-bottom: 0;
     position: relative;
+    border-image-outset: 3px;
+    border-width: 6px;
   }
-  .nes-container.is-dark.with-title > .title {
-    background-color: #1a1a2e;
+  .snes-container::before {
+    background-color: rgba(0,0,0,0.3);
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-container::after {
+    background-color: rgba(100,100,160,0.25);
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-container > .snes-container-title {
     color: #f0c040;
     font-size: 9px;
     text-shadow: 0 0 8px #f0c04022;
+    letter-spacing: 0;
+    word-spacing: normal;
+    margin-bottom: 8px;
   }
-  .nes-container.is-dark::after {
-    box-shadow: inset -4px -4px #2a2a4a;
+  .snes-container > .snes-container-title::after {
+    background-color: #f0c040;
+    height: 3px;
+    bottom: -4px;
   }
-  .nes-container.is-dark::before {
-    box-shadow: inset -4px -4px #3a3a5c;
+  /* Custom badges (SNES.css has no badge component) */
+  .snes-badge { white-space: nowrap; display: inline-block; }
+  .snes-badge span {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 6px;
+    padding: 2px 6px;
+    border: 2px solid;
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
-  .nes-badge { white-space: nowrap; }
-  .nes-badge span { font-size: 6px; padding: 2px 6px; }
-  .nes-progress {
+  .snes-badge .is-success { border-color: #4bb244; color: #4bb244; background: rgba(75,178,68,0.15); }
+  .snes-badge .is-primary { border-color: #4eb6d9; color: #4eb6d9; background: rgba(78,182,217,0.15); }
+  .snes-badge .is-warning { border-color: #f2c019; color: #f2c019; background: rgba(242,192,25,0.15); }
+  .snes-badge .is-error { border-color: #ff6f00; color: #ff6f00; background: rgba(255,111,0,0.15); }
+  /* SNES-styled progress bars (RPG stat bars) */
+  .snes-progress {
+    -webkit-appearance: none;
+    appearance: none;
     height: 8px;
-    border-color: #2a2a4a;
+    width: 100%;
+    border: 2px solid #2a2a4a;
     background: #0f0f1a;
+    display: block;
   }
-  .nes-btn {
+  .snes-progress::-webkit-progress-bar { background: #0f0f1a; }
+  .snes-progress::-webkit-progress-value { transition: width 0.3s ease; }
+  .snes-progress.is-success::-webkit-progress-value { background: linear-gradient(90deg, #1a4a1a, #4bb244); }
+  .snes-progress.is-primary::-webkit-progress-value { background: linear-gradient(90deg, #1a2a5a, #4eb6d9); }
+  .snes-progress.is-warning::-webkit-progress-value { background: linear-gradient(90deg, #5a4a10, #f2c019); }
+  .snes-progress.is-error::-webkit-progress-value { background: linear-gradient(90deg, #5a1a1a, #ff6f00); }
+  .snes-progress::-moz-progress-bar { transition: width 0.3s ease; }
+  .snes-progress.is-success::-moz-progress-bar { background: linear-gradient(90deg, #1a4a1a, #4bb244); }
+  .snes-progress.is-primary::-moz-progress-bar { background: linear-gradient(90deg, #1a2a5a, #4eb6d9); }
+  .snes-progress.is-warning::-moz-progress-bar { background: linear-gradient(90deg, #5a4a10, #f2c019); }
+  .snes-progress.is-error::-moz-progress-bar { background: linear-gradient(90deg, #5a1a1a, #ff6f00); }
+  /* SNES button overrides for compact dark UI */
+  .snes-button {
     font-family: 'Press Start 2P', cursive;
     font-size: 8px;
     padding: 4px 10px;
+    border-image-outset: 3px;
+    border-width: 6px;
+    line-height: 1;
+    color: #fff;
   }
-  .nes-btn.is-primary { color: #fff; }
-  .nes-icon { display: inline-block; vertical-align: middle; }
-  .sidebar .nes-container {
-    border-image-repeat: stretch;
+  .snes-button::before {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-button::after {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  /* SNES blockquote overrides for notification balloons */
+  .snes-blockquote.notif-balloon {
+    text-align: left;
+    border-image-outset: 3px;
+    border-width: 6px;
+    padding: 8px 10px;
+    margin-bottom: 0;
+  }
+  .snes-blockquote.notif-balloon::before {
+    height: 9px;
+    width: calc(100% + 9px);
+  }
+  .snes-blockquote.notif-balloon::after {
+    height: 9px;
+    width: calc(100% + 9px);
   }
 
   /* Mobile menu button — hidden on desktop */
@@ -541,16 +607,16 @@
     }
     .ac-detail { font-size: 9px; line-height: 2.2; }
 
-    /* NES.css mobile overrides */
-    .nes-container.is-dark.with-title {
+    /* SNES.css mobile overrides */
+    .snes-container {
       padding: 8px 10px;
     }
-    .nes-container.is-dark.with-title > .title {
+    .snes-container > .snes-container-title {
       font-size: 8px;
     }
-    .nes-badge span { font-size: 5px; }
-    .nes-btn { font-size: 7px; padding: 3px 6px; }
-    .nes-progress { height: 6px; }
+    .snes-badge span { font-size: 5px; }
+    .snes-button { font-size: 7px; padding: 3px 6px; }
+    .snes-progress { height: 6px; }
 
     /* Sidebar sections: more padding */
     .sb-section { padding: 10px 12px; }
@@ -614,7 +680,7 @@
     .top-title { font-size: 9px; }
     .top-title .ver { font-size: 6px; }
     .top-stats { font-size: 6px; gap: 6px 10px; }
-    .nes-btn { font-size: 6px; padding: 2px 4px; }
+    .snes-button { font-size: 6px; padding: 2px 4px; }
 
     .sb-header { font-size: 9px; }
     .agent-card { padding: 8px 10px !important; }
@@ -656,10 +722,10 @@
   </div>
   <div class="top-controls">
     <div class="conn-dot connecting" id="connDot" title="Connecting"></div>
-    <button class="nes-btn" id="soundToggleBtn" onclick="toggleSound()" title="Sound off (S)">🔇</button>
-    <button class="nes-btn is-primary" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
-    <button class="nes-btn" id="cleanBtn" onclick="cleanAgents()">🧹</button>
-    <button class="nes-btn mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
+    <button class="snes-button" id="soundToggleBtn" onclick="toggleSound()" title="Sound off (S)">🔇</button>
+    <button class="snes-button has-ocean-color" id="toggleViewBtn" onclick="switchToClassic()" title="Switch to Classic view">📺 Classic</button>
+    <button class="snes-button has-ember-color" id="cleanBtn" onclick="cleanAgents()">🧹</button>
+    <button class="snes-button mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" title="Toggle sidebar">☰</button>
   </div>
 </div>
 
@@ -674,8 +740,8 @@
 
     <!-- Usage / Inventory -->
     <div class="sb-section">
-      <section class="nes-container is-dark with-title">
-        <p class="title">⚔️ INVENTORY <span class="count" id="usageUpdated" style="font-size:7px;color:#666">—</span></p>
+      <section class="snes-container">
+        <p class="snes-container-title has-ember-underline">⚔️ INVENTORY <span class="count" id="usageUpdated" style="font-size:7px;color:#666">—</span></p>
         <div id="usageCards">
           <div class="no-data">Loading usage data...</div>
         </div>
@@ -684,8 +750,8 @@
 
     <!-- Timeline / Quest Log -->
     <div class="sb-section">
-      <section class="nes-container is-dark with-title">
-        <p class="title">📜 QUEST LOG <span class="count" id="timelineRange" style="font-size:7px;color:#666">—</span></p>
+      <section class="snes-container">
+        <p class="snes-container-title has-sunshine-underline">📜 QUEST LOG <span class="count" id="timelineRange" style="font-size:7px;color:#666">—</span></p>
 
         <div id="timelineRows" class="ql-feed">
           <div class="no-data">No quests yet...</div>
@@ -695,8 +761,8 @@
 
     <!-- Agents / Party -->
     <div class="sb-section">
-      <section class="nes-container is-dark with-title">
-        <p class="title">⚡ PARTY <span class="count" id="agentCount" style="font-size:7px;color:#666">—</span></p>
+      <section class="snes-container">
+        <p class="snes-container-title has-nature-underline">⚡ PARTY <span class="count" id="agentCount" style="font-size:7px;color:#666">—</span></p>
         <div id="notificationArea"></div>
         <div id="agentCards">
           <div class="no-data">Waiting for agent data...</div>
@@ -711,7 +777,7 @@
       <canvas id="office" width="640" height="384"></canvas>
       <div class="scanlines"></div>
     </div>
-    <div class="status-bar nes-container is-dark is-rounded" style="padding:0 14px;margin:0;border-radius:0">
+    <div class="status-bar" style="padding:0 14px;margin:0">
       <span class="sb-log" id="statusLog">▸ Connecting to server...</span>
       <span>POLL 5s │ <span id="agentCountBar">0</span> agents │ <span id="clock"></span></span>
     </div>
@@ -763,7 +829,7 @@ function showNotification(emoji, message, colorClass) {
   }
 
   const balloon = document.createElement('div');
-  balloon.className = 'nes-balloon from-left is-dark notif-balloon';
+  balloon.className = 'snes-blockquote has-phantom-bg notif-balloon';
   balloon.innerHTML = '<span class="' + colorClass + '">' + emoji + ' ' + escapeHtml(message) + '</span>';
   area.appendChild(balloon);
 
@@ -1143,8 +1209,8 @@ function renderAgentCards() {
     const failing = isCiFailing(agent);
     const tokenPct = Math.min(100, Math.max(0, tokens / 2000));
     const agentType = resolveAgentType(agent);
-    const typeIcon = agentType.includes('codex') ? '<i class="nes-icon coin is-small"></i>' :
-                     agentType.includes('claude') ? '<i class="nes-icon star is-small"></i>' : '';
+    const typeIcon = agentType.includes('codex') ? '🪙' :
+                     agentType.includes('claude') ? '⭐' : '';
 
     const titleLabel = repo && issueId ? repo + '#' + escapeHtml(String(issueId)) : (repo || name);
 
@@ -1156,13 +1222,13 @@ function renderAgentCards() {
     if (tokens) detailLine += ` · ${tokensLabel} tok`;
 
     return `
-      <section class="nes-container is-dark with-title agent-card ${cardClass}" style="margin-bottom:8px;padding:6px 8px">
-        <p class="title" style="font-size:8px">${typeIcon} ${escapeHtml(titleLabel)}</p>
+      <section class="snes-container agent-card ${cardClass}" style="margin-bottom:8px;padding:6px 8px">
+        <p class="snes-container-title" style="font-size:8px">${typeIcon} ${escapeHtml(titleLabel)}</p>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <span class="nes-badge"><span class="${badgeClass}">${escapeHtml(stateLabel(state).toUpperCase())}</span></span>
+          <span class="snes-badge"><span class="${badgeClass}">${escapeHtml(stateLabel(state).toUpperCase())}</span></span>
         </div>
         <div class="ac-detail" style="margin-bottom:4px">${detailLine}</div>
-        ${tokens ? `<progress class="nes-progress ${progressClass}" value="${Math.round(tokenPct)}" max="100" style="height:8px"></progress>` : ''}
+        ${tokens ? `<progress class="snes-progress ${progressClass}" value="${Math.round(tokenPct)}" max="100" style="height:8px"></progress>` : ''}
       </section>
     `;
   }).join('');
@@ -1202,9 +1268,9 @@ function renderUsageCards() {
         : 'Reset time unknown';
       return `
         <div class="usage-card exhausted">
-          <div class="uc-title"><span>${name}</span><span class="nes-badge"><span class="is-error">EXHAUSTED</span></span></div>
+          <div class="uc-title"><span>${name}</span><span class="snes-badge"><span class="is-error">EXHAUSTED</span></span></div>
           <div class="uc-row" style="color:#f5b3b3">💀 HP: 0/100</div>
-          <progress class="nes-progress is-error" value="100" max="100" style="height:8px"></progress>
+          <progress class="snes-progress is-error" value="100" max="100" style="height:8px"></progress>
           <div class="uc-note">${escapeHtml(resetLabel)}</div>
         </div>`;
     }
@@ -1237,12 +1303,12 @@ function renderUsageCards() {
 
       return `
         <div class="uc-row"><span>${label}</span><span>${hearts} ${escapeHtml(valStr)}</span></div>
-        <progress class="nes-progress ${progressClass}" value="${fillWidth}" max="100" style="height:8px"></progress>`;
+        <progress class="snes-progress ${progressClass}" value="${fillWidth}" max="100" style="height:8px"></progress>`;
     }).join('');
 
     return `
       <div class="usage-card" style="border:none;background:transparent">
-        <div class="uc-title"><span>${name}</span><span class="nes-badge"><span class="${badgeClass}">${level.toUpperCase()}</span></span></div>
+        <div class="uc-title"><span>${name}</span><span class="snes-badge"><span class="${badgeClass}">${level.toUpperCase()}</span></span></div>
         ${metricsHtml || '<div class="uc-note">No metrics</div>'}
         ${resetNote ? '<div class="uc-note">' + escapeHtml(resetNote) + '</div>' : ''}
       </div>`;
