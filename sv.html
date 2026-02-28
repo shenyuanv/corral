@@ -1660,11 +1660,11 @@ const particles = [];
       size: 1 + (Math.random() > 0.7 ? 1 : 0),
     });
   }
-  // Neon sparkles — 4 slots near the LASSO sign (nx=55, ny=10)
+  // Neon sparkles — 4 slots near the HACK sign (nx=55, ny=10)
   for (let i = 0; i < 4; i++) {
     particles.push({
       type: 'sparkle',
-      x: 55 + Math.random() * 48,
+      x: 55 + Math.random() * 38,
       y: 8 + Math.random() * 14,
       life: 0,
       maxLife: 40 + Math.random() * 40,
@@ -1992,18 +1992,17 @@ function drawNeonSign() {
   // Glow radius and intensity increase at night
   const glowMult = 1 + nightFactor * 1.5;
   const maxR = Math.round(8 * glowMult);
-  for (let r = maxR; r > 0; r -= 2) R(nx-r, ny-r, 56+r*2, 10+r*2, 'rgba(255,45,123,' + (0.008 * glowMult * (maxR-r) / maxR * 8).toFixed(4) + ')');
-  const L = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[1,5],[2,5],[3,5]];
-  const A = [[5,1],[5,2],[5,3],[5,4],[5,5],[6,0],[7,0],[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[6,3],[7,3]];
-  const S1 = [[10,0],[11,0],[12,0],[13,0],[10,1],[10,2],[11,2],[12,2],[13,2],[13,3],[13,4],[10,5],[11,5],[12,5],[13,5],[10,4]];
-  const S2 = S1.map(([x,y]) => [x+5, y]);
-  const O = [[20,0],[21,0],[22,0],[20,1],[23,1],[20,2],[23,2],[20,3],[23,3],[20,4],[23,4],[21,5],[22,5]];
-  [L, A, S1, S2, O].forEach(letter => { letter.forEach(([lx, ly]) => R(nx+lx*2, ny+ly, 2, 1, PAL.neonPink)); });
-  R(nx, ny+7, 48, 1, PAL.neonCyan);
-  for (let i = 0; i < 48; i += 3) R(nx+i, ny+7, 1, 1, '#005a6a');
+  for (let r = maxR; r > 0; r -= 2) R(nx-r, ny-r, 46+r*2, 10+r*2, 'rgba(255,45,123,' + (0.008 * glowMult * (maxR-r) / maxR * 8).toFixed(4) + ')');
+  const H = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[1,2],[2,2]];
+  const A = [[6,0],[7,0],[5,1],[5,2],[5,3],[5,4],[5,5],[8,1],[8,2],[8,3],[8,4],[8,5],[6,3],[7,3]];
+  const C = [[11,0],[12,0],[13,0],[10,1],[10,2],[10,3],[10,4],[11,5],[12,5],[13,5]];
+  const K = [[15,0],[15,1],[15,2],[15,3],[15,4],[15,5],[18,0],[17,1],[16,2],[16,3],[17,4],[18,5]];
+  [H, A, C, K].forEach(letter => { letter.forEach(([lx, ly]) => R(nx+lx*2, ny+ly, 2, 1, PAL.neonPink)); });
+  R(nx, ny+7, 38, 1, PAL.neonCyan);
+  for (let i = 0; i < 38; i += 3) R(nx+i, ny+7, 1, 1, '#005a6a');
   // Stronger underglow at night
   const underGlowAlpha = (0.12 + nightFactor * 0.15).toFixed(3);
-  R(nx-4, ny+8, 56, 4, 'rgba(255,45,123,' + underGlowAlpha + ')');
+  R(nx-4, ny+8, 46, 4, 'rgba(255,45,123,' + underGlowAlpha + ')');
   ctx.restore();
 }
 
@@ -2658,6 +2657,45 @@ function drawWallsSV() {
   R(ocX + 1, ocY - 1, 2, 1, '#333'); // head
   R(ocX, ocY - 1, 1, 1, '#333'); R(ocX + 3, ocY - 1, 1, 1, '#333'); // ears
   R(ocX + 1, ocY + 3, 1, 1, '#333'); R(ocX + 2, ocY + 3, 1, 1, '#333'); // legs
+
+  // --- SV wall decorations ---
+
+  // Guitar hanging on wall
+  const gX = 96, gY = 7;
+  R(gX + 1, gY - 1, 2, 1, '#666'); // wall hook
+  R(gX, gY, 4, 2, '#5a3a1a'); // headstock
+  R(gX, gY, 1, 1, '#aaa'); R(gX + 3, gY + 1, 1, 1, '#aaa'); // tuning pegs
+  R(gX + 1, gY + 2, 2, 5, '#8B5A2B'); // neck
+  R(gX + 1, gY + 3, 2, 1, '#bbb'); R(gX + 1, gY + 5, 2, 1, '#bbb'); // frets
+  R(gX - 1, gY + 7, 6, 5, '#C68642'); // body
+  R(gX, gY + 7, 4, 1, '#daa060'); // body highlight
+  R(gX + 1, gY + 9, 2, 2, '#3a2010'); // sound hole
+  R(gX - 1, gY + 11, 6, 1, '#a07030'); // body shadow
+
+  // Dart board
+  const dbX = 60, dbY = 20;
+  R(dbX + 1, dbY, 6, 1, '#1a5a1a'); // top edge
+  R(dbX, dbY + 1, 8, 6, '#1a5a1a'); // outer ring
+  R(dbX + 1, dbY + 7, 6, 1, '#1a5a1a'); // bottom edge
+  R(dbX + 2, dbY + 1, 4, 1, '#cc2222'); // inner top
+  R(dbX + 1, dbY + 2, 6, 4, '#cc2222'); // inner ring
+  R(dbX + 2, dbY + 6, 4, 1, '#cc2222'); // inner bottom
+  R(dbX + 2, dbY + 2, 4, 4, '#eee'); // white ring
+  R(dbX + 3, dbY + 3, 2, 2, '#cc2222'); // bullseye
+  R(dbX + 5, dbY + 2, 1, 1, '#ffcc00'); // dart tip
+  R(dbX + 6, dbY + 1, 2, 1, '#888'); // dart shaft
+  R(dbX + 7, dbY, 1, 1, '#ff4444'); R(dbX + 7, dbY + 2, 1, 1, '#ff4444'); // dart flights
+
+  // Ping pong paddle + ball mounted on wall
+  const ppX = 74, ppY = 20;
+  R(ppX, ppY, 5, 6, '#cc3333'); // paddle face
+  R(ppX, ppY, 5, 1, '#dd4444'); // paddle highlight
+  R(ppX + 1, ppY + 1, 3, 4, '#ee4444'); // paddle center
+  R(ppX + 2, ppY + 6, 1, 3, '#8B4513'); // handle
+  R(ppX + 1, ppY + 6, 3, 1, '#7a3a0a'); // handle collar
+  R(ppX + 7, ppY + 1, 2, 2, '#fff'); // ball
+  R(ppX + 7, ppY + 1, 1, 1, '#ff8800'); // ball stripe
+
   ctx.restore();
 }
 
@@ -2981,25 +3019,25 @@ function drawPropsSV() {
 function drawLightingSV() {
   const { nightFactor, warmFactor, hour } = getTimeOfDay();
   // Neon sign extended glow on nearby walls/floor — larger radius, stronger at night
-  const neonCX = (55 + 24) * SCALE;
+  const neonCX = (55 + 19) * SCALE;
   const neonCY = 12 * SCALE;
   const neonAlpha1 = (0.09 + nightFactor * 0.10).toFixed(3);
   const neonAlpha2 = (0.04 + nightFactor * 0.06).toFixed(3);
-  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 16, neonCX, neonCY + 180, 360);
+  const neonGrad = ctx.createRadialGradient(neonCX, neonCY, 16, neonCX, neonCY + 180, 320);
   neonGrad.addColorStop(0, 'rgba(255,45,123,' + neonAlpha1 + ')');
   neonGrad.addColorStop(0.4, 'rgba(0,229,255,' + neonAlpha2 + ')');
   neonGrad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = neonGrad;
-  ctx.fillRect(neonCX - 360, neonCY - 40, 720, 480);
+  ctx.fillRect(neonCX - 320, neonCY - 40, 640, 420);
   // Neon color bleed onto nearby wall tiles (cyan/pink tint)
   ctx.save(); ctx.scale(SCALE, SCALE);
   const wallBleedAlpha = (0.04 + nightFactor * 0.06).toFixed(3);
   ctx.fillStyle = 'rgba(255,45,123,' + wallBleedAlpha + ')';
-  ctx.fillRect(50, 0, 20, TILE * 2);
+  ctx.fillRect(50, 0, 18, TILE * 2);
   ctx.fillStyle = 'rgba(0,229,255,' + wallBleedAlpha + ')';
-  ctx.fillRect(70, 0, 40, TILE * 2);
+  ctx.fillRect(68, 0, 30, TILE * 2);
   ctx.fillStyle = 'rgba(255,45,123,' + (parseFloat(wallBleedAlpha) * 0.5).toFixed(3) + ')';
-  ctx.fillRect(90, 0, 20, TILE * 2);
+  ctx.fillRect(85, 0, 15, TILE * 2);
   ctx.restore();
 
   // Fluorescent ceiling light glow pools on floor — brighter at night, with flicker
@@ -3077,7 +3115,7 @@ function drawParticles() {
       p.life++;
       if (p.life >= p.maxLife) {
         // Respawn at random position near neon sign
-        p.x = 55 + Math.random() * 48;
+        p.x = 55 + Math.random() * 38;
         p.y = 8 + Math.random() * 14;
         p.life = 0;
         p.maxLife = 40 + Math.random() * 40;
