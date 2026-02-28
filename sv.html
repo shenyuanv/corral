@@ -388,7 +388,8 @@
       min-height: 100vh;
     }
 
-    .mobile-menu-btn { display: inline-block; }
+    .mobile-menu-btn { display: none; }
+    .mobile-overlay { display: none !important; }
 
     /* Top bar: wrap stats to next line */
     .top-bar {
@@ -416,27 +417,19 @@
       min-height: calc(100vh - 70px);
     }
 
-    /* Sidebar: collapsible overlay on mobile */
+    /* Sidebar: stacked below canvas on mobile */
     .sidebar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 85vw;
-      max-width: 360px;
+      position: static;
+      width: 100%;
+      max-width: none;
       min-width: 0;
-      height: 100vh;
-      z-index: 50;
-      transform: translateX(-100%);
-      transition: transform 0.25s ease;
-      border-right: 3px solid #f0c040;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .sidebar.mobile-open {
-      transform: translateX(0);
-    }
-    .mobile-overlay.visible {
-      display: block;
+      height: auto;
+      z-index: auto;
+      transform: none;
+      transition: none;
+      border-right: none;
+      border-top: 2px solid #f0c040;
+      overflow-y: visible;
     }
 
     /* Hide desktop resize handle on mobile */
@@ -514,10 +507,6 @@
     .top-title .ver { font-size: 6px; }
     .top-stats { font-size: 6px; gap: 6px 10px; }
     .top-btn { font-size: 7px; padding: 2px 5px; }
-
-    .sidebar {
-      width: 90vw;
-    }
 
     .sb-header { font-size: 9px; }
     .agent-card { padding: 10px 12px; }
