@@ -795,6 +795,7 @@
 let agents = [];
 let historyData = [];
 let usageData = null;
+let canvasUsage = { claude: null, codex: null };
 let connectionState = 'connecting';
 let polling = false;
 const startTime = Date.now();
@@ -1234,8 +1235,39 @@ function renderAgentCards() {
   }).join('');
 }
 
+// --- Canvas usage bars ---
+function updateCanvasUsage() {
+  canvasUsage = { claude: null, codex: null };
+  if (!usageData || !Array.isArray(usageData.providers)) return;
+  usageData.providers.forEach(provider => {
+    const id = (provider.id || provider.name || '').toLowerCase();
+    const isExhausted = provider.quotaStatus && provider.quotaStatus.exhausted;
+    if (isExhausted) {
+      const key = id.includes('codex') ? 'codex' : 'claude';
+      canvasUsage[key] = { pct: 0, exhausted: true, name: provider.name || id };
+      return;
+    }
+    if (provider.status === 'error' || provider.status === 'unavailable') {
+      const key = id.includes('codex') ? 'codex' : 'claude';
+      canvasUsage[key] = { pct: null, exhausted: false, error: true, name: provider.name || id };
+      return;
+    }
+    const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
+    const percents = metrics.map(m => {
+      if (m.utilization !== null && m.utilization !== undefined) return Number(m.utilization) / 100;
+      if (m.used == null || m.limit == null || m.limit === 0) return null;
+      return Math.min(1, Math.max(0, m.used / m.limit));
+    }).filter(p => p !== null);
+    const highest = percents.length ? Math.max(...percents) : null;
+    const remaining = highest !== null ? Math.round((1 - highest) * 100) : null;
+    const key = id.includes('codex') ? 'codex' : 'claude';
+    canvasUsage[key] = { pct: remaining, exhausted: false, name: provider.name || id };
+  });
+}
+
 // --- Usage panel ---
 function renderUsageCards() {
+  updateCanvasUsage();
   const container = document.getElementById('usageCards');
   const updatedEl = document.getElementById('usageUpdated');
   if (!container) return;
@@ -2898,6 +2930,110 @@ function buildCanvasAgents() {
   });
 }
 
+function drawUsageBars() {
+  ctx.save(); ctx.scale(SCALE, SCALE);
+  const W = COLS * TILE; // 320 unscaled
+  const bgY = 0, bgH = 11;
+  // Semi-transparent background strip
+  ctx.fillStyle = 'rgba(10,10,30,0.75)';
+  ctx.fillRect(0, bgY, W, bgH);
+  // Bottom border
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(0, bgY + bgH, W, 1);
+
+  const barY = 4, barH = 5, barW = 88;
+  const entries = [
+    { key: 'claude', label: 'CLAUDE', iconColor: '#f0c040', x: 4 },
+    { key: 'codex', label: 'CODEX', iconColor: '#3adf7a', x: 160 },
+  ];
+
+  entries.forEach(e => {
+    const data = canvasUsage[e.key];
+    const labelX = e.x + 8;
+    const barX = e.x + 42;
+
+    // Icon: star for Claude, coin for Codex
+    if (e.key === 'claude') {
+      // Small star icon
+      ctx.fillStyle = e.iconColor;
+      ctx.fillRect(e.x + 2, barY - 1, 1, 3);
+      ctx.fillRect(e.x, barY, 5, 1);
+      ctx.fillRect(e.x + 1, barY + 1, 3, 1);
+      ctx.fillRect(e.x + 1, barY - 2, 3, 1);
+    } else {
+      // Small coin icon
+      ctx.fillStyle = e.iconColor;
+      ctx.fillRect(e.x + 1, barY - 1, 3, 3);
+      ctx.fillRect(e.x, barY, 5, 1);
+      ctx.fillStyle = '#2a8a5a';
+      ctx.fillRect(e.x + 2, barY, 1, 1);
+    }
+
+    // Label
+    ctx.font = '3px "Press Start 2P"';
+    ctx.fillStyle = '#c0c0d0';
+    ctx.fillText(e.label, labelX, barY + 3);
+
+    // Bar background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(barX, barY, barW, barH);
+    // Bar border
+    ctx.fillStyle = '#3a3a5e';
+    ctx.fillRect(barX, barY, barW, 1);
+    ctx.fillRect(barX, barY + barH - 1, barW, 1);
+    ctx.fillRect(barX, barY, 1, barH);
+    ctx.fillRect(barX + barW - 1, barY, 1, barH);
+
+    if (!data) {
+      // Loading state
+      ctx.fillStyle = '#555';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      ctx.fillStyle = '#888';
+      ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('...', barX + barW / 2 - 5, barY + 4);
+    } else if (data.error) {
+      // Error state
+      ctx.fillStyle = '#444';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      ctx.fillStyle = '#ff5c5c';
+      ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('ERR', barX + barW / 2 - 6, barY + 4);
+    } else if (data.exhausted) {
+      // Exhausted: full red, flashing label
+      ctx.fillStyle = '#ff5c5c';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      // Flashing EXHAUSTED text
+      if (Math.floor(frame / 30) % 2 === 0) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '3px "Press Start 2P"';
+        ctx.fillText('EXHAUSTED', barX + 4, barY + 4);
+      }
+      ctx.fillStyle = '#ff5c5c';
+      ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('0%', barX + barW + 3, barY + 4);
+    } else if (data.pct !== null) {
+      // Normal bar
+      const pct = Math.max(0, Math.min(100, data.pct));
+      const fillW = Math.floor((barW - 2) * pct / 100);
+      const fillColor = pct > 50 ? '#3adf7a' : pct >= 20 ? '#f0c040' : '#ff5c5c';
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(barX + 1, barY + 1, fillW, barH - 2);
+      // Percentage text
+      ctx.fillStyle = '#c0c0d0';
+      ctx.font = '3px "Press Start 2P"';
+      ctx.fillText(pct + '%', barX + barW + 3, barY + 4);
+    } else {
+      // Unknown: gray
+      ctx.fillStyle = '#444';
+      ctx.fillRect(barX + 1, barY + 1, barW - 2, barH - 2);
+      ctx.fillStyle = '#888';
+      ctx.font = '3px "Press Start 2P"';
+      ctx.fillText('...', barX + barW / 2 - 5, barY + 4);
+    }
+  });
+  ctx.restore();
+}
+
 function render() {
   frame++;
   ctx.clearRect(0, 0, 640, 384);
@@ -2908,6 +3044,7 @@ function render() {
   drawLampGlow(5, 0); drawLampGlow(15, 0);
   drawDivider(2); drawDivider(3);
   drawPropsSV();
+  drawUsageBars();
 
   DESKS.forEach((d, idx) => { drawDeskSV(d, idx); drawChairSV(d, idx); });
 
