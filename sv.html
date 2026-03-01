@@ -242,56 +242,6 @@
   .fill-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
   .fill-gold { background: linear-gradient(90deg, #5a4a10, #f0c040); }
 
-  /* Usage section */
-  .usage-card {
-    background: #0f0f1a;
-    border: 1px solid #2a2a3f;
-    padding: 8px;
-    margin-bottom: 6px;
-    border-radius: 2px;
-  }
-  .usage-card.warn { border-color: #d1a128; }
-  .usage-card.alert { border-color: #c13c3c; }
-  .usage-card.exhausted { border-color: #c13c3c; background: #1a0a0a; }
-  .uc-title {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-    font-size: 8px;
-  }
-  .uc-pill {
-    font-size: 6px;
-    padding: 1px 5px;
-    border: 1px solid #2a2a3f;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .pill-ok { border-color: #2f9a3d; color: #bfe6c7; }
-  .pill-warn { border-color: #d1a128; color: #f3e2a2; }
-  .pill-alert { border-color: #c13c3c; color: #f5b3b3; }
-  .pill-est { border-color: #666; color: #aaa; }
-  .pill-exhausted { border-color: #c13c3c; color: #f5b3b3; background: #3a1010; }
-  .uc-row {
-    display: flex;
-    justify-content: space-between;
-    color: #999;
-    font-size: 7px;
-    margin-bottom: 3px;
-  }
-  .uc-bar {
-    height: 5px;
-    background: #1b1b2b;
-    border: 1px solid #222;
-    margin-top: 2px;
-    overflow: hidden;
-  }
-  .uc-fill { height: 100%; }
-  .uf-green { background: linear-gradient(90deg, #1a4a1a, #2f9a3d); }
-  .uf-yellow { background: linear-gradient(90deg, #5a4a10, #d1a128); }
-  .uf-red { background: linear-gradient(90deg, #5a1a1a, #e76e55); }
-  .uc-note { color: #555; font-size: 6px; margin-top: 4px; }
-
   /* Quest Log feed */
   .ql-feed {
     max-height: 200px;
@@ -603,10 +553,9 @@
       flex-direction: column;
     }
 
-    /* Sidebar section order: PARTY → QUEST LOG → INVENTORY */
-    .sidebar > .sb-section:nth-child(2) { order: 3; } /* INVENTORY → last */
-    .sidebar > .sb-section:nth-child(3) { order: 2; } /* QUEST LOG → middle */
-    .sidebar > .sb-section:nth-child(4) { order: 1; } /* PARTY → first */
+    /* Sidebar section order: PARTY first, QUEST LOG second */
+    .sidebar > .sb-section:nth-child(2) { order: 2; } /* QUEST LOG → second */
+    .sidebar > .sb-section:nth-child(3) { order: 1; } /* PARTY → first */
 
     /* Hide desktop resize handle on mobile */
     .resize-handle { display: none; }
@@ -667,11 +616,6 @@
       white-space: normal;
       word-break: break-word;
     }
-
-    /* Usage cards: slightly larger text */
-    .usage-card { padding: 10px; }
-    .uc-title { font-size: 9px; }
-    .uc-row { font-size: 8px; }
 
     /* Quest Log feed: slightly larger on mobile */
     .ql-feed { max-height: 240px; }
@@ -742,16 +686,6 @@
   <!-- SIDEBAR -->
   <div class="sidebar" id="sidebar">
     <div class="resize-handle" id="resizeHandle"></div>
-
-    <!-- Usage / Inventory -->
-    <div class="sb-section">
-      <section class="snes-container">
-        <p class="snes-container-title has-ember-underline">⚔️ INVENTORY <span class="count" id="usageUpdated" style="font-size:7px;color:#666">—</span></p>
-        <div id="usageCards">
-          <div class="no-data">Loading usage data...</div>
-        </div>
-      </section>
-    </div>
 
     <!-- Timeline / Quest Log -->
     <div class="sb-section">
@@ -1272,88 +1206,6 @@ function updateCanvasUsage() {
   });
 }
 
-// --- Usage panel ---
-function renderUsageCards() {
-  updateCanvasUsage();
-  const container = document.getElementById('usageCards');
-  const updatedEl = document.getElementById('usageUpdated');
-  if (!container) return;
-
-  if (!usageData || (!Array.isArray(usageData.providers) && !Array.isArray(usageData.usage))) {
-    container.innerHTML = '<div class="no-data">Usage unavailable</div>';
-    if (updatedEl) updatedEl.textContent = '—';
-    return;
-  }
-
-  const providers = Array.isArray(usageData.providers) ? usageData.providers : usageData.usage;
-  if (!providers || providers.length === 0) {
-    container.innerHTML = '<div class="no-data">' + escapeHtml(usageData.error || 'No usage data') + '</div>';
-    return;
-  }
-
-  if (updatedEl && usageData.fetchedAt) {
-    const d = new Date(usageData.fetchedAt);
-    const ago = Math.round((Date.now() - d.getTime()) / 60000);
-    updatedEl.textContent = ago <= 1 ? 'just now' : ago + 'm ago';
-  }
-
-  container.innerHTML = providers.map(provider => {
-    const name = escapeHtml(provider.name || provider.id || 'Usage');
-    const isExhausted = provider.quotaStatus && provider.quotaStatus.exhausted;
-
-    if (isExhausted) {
-      const resetLabel = provider.quotaStatus.resetAt
-        ? 'Resets ' + new Date(provider.quotaStatus.resetAt).toLocaleString()
-        : 'Reset time unknown';
-      return `
-        <div class="usage-card exhausted">
-          <div class="uc-title"><span>${name}</span><span class="snes-badge"><span class="is-error">EXHAUSTED</span></span></div>
-          <div class="uc-row" style="color:#f5b3b3">💀 HP: 0/100</div>
-          <progress class="snes-progress is-error" value="100" max="100" style="height:8px"></progress>
-          <div class="uc-note">${escapeHtml(resetLabel)}</div>
-        </div>`;
-    }
-
-    const metrics = Array.isArray(provider.metrics) ? provider.metrics : [];
-    const percents = metrics.map(m => {
-      if (m.utilization !== null && m.utilization !== undefined) return Number(m.utilization) / 100;
-      if (m.used == null || m.limit == null || m.limit === 0) return null;
-      return Math.min(1, Math.max(0, m.used / m.limit));
-    }).filter(p => p !== null);
-    const highest = percents.length ? Math.max(...percents) : null;
-    const level = highest === null ? 'unknown' : highest >= 0.95 ? 'alert' : highest >= 0.8 ? 'warn' : 'ok';
-    const badgeClass = level === 'alert' ? 'is-error' : level === 'warn' ? 'is-warning' : 'is-success';
-    const resetNote = provider.resetAt ? 'Resets ' + new Date(provider.resetAt).toLocaleString() : '';
-
-    const metricsHtml = metrics.map(m => {
-      const label = escapeHtml(m.label || m.id || 'Metric');
-      let pct = null;
-      if (m.utilization !== null && m.utilization !== undefined) pct = Number(m.utilization) / 100;
-      else if (m.used != null && m.limit != null && m.limit > 0) pct = Math.min(1, m.used / m.limit);
-      const fillWidth = pct === null ? 0 : Math.round(pct * 100);
-      const progressClass = pct === null ? 'is-success' : pct >= 0.95 ? 'is-error' : pct >= 0.8 ? 'is-warning' : 'is-success';
-      const remaining = pct !== null ? Math.max(0, Math.round((1 - pct) * 100)) : 100;
-      const hearts = remaining >= 75 ? '❤️❤️❤️' : remaining >= 50 ? '❤️❤️🖤' : remaining >= 25 ? '❤️🖤🖤' : '🖤🖤🖤';
-
-      let valStr = '—';
-      if (m.unit === '%' && m.limit === 100 && m.used != null) valStr = 'HP: ' + (100 - m.used) + '/100';
-      else if (m.limit != null) valStr = 'HP: ' + (m.limit - (m.used || 0)) + '/' + m.limit + (m.unit ? ' ' + m.unit : '');
-      else if (m.used != null) valStr = m.used + (m.unit ? ' ' + m.unit : '');
-
-      return `
-        <div class="uc-row"><span>${label}</span><span>${hearts} ${escapeHtml(valStr)}</span></div>
-        <progress class="snes-progress ${progressClass}" value="${fillWidth}" max="100" style="height:8px"></progress>`;
-    }).join('');
-
-    return `
-      <div class="usage-card" style="border:none;background:transparent">
-        <div class="uc-title"><span>${name}</span><span class="snes-badge"><span class="${badgeClass}">${level.toUpperCase()}</span></span></div>
-        ${metricsHtml || '<div class="uc-note">No metrics</div>'}
-        ${resetNote ? '<div class="uc-note">' + escapeHtml(resetNote) + '</div>' : ''}
-      </div>`;
-  }).join('');
-}
-
 // --- Timeline (Quest Log event feed) ---
 function questIcon(state) {
   switch (state) {
@@ -1531,10 +1383,10 @@ async function refreshUsage() {
     const resp = await fetch('/api/usage');
     if (!resp.ok) throw new Error('Usage fetch failed');
     usageData = await resp.json();
-    renderUsageCards();
+    updateCanvasUsage();
   } catch(err) {
     usageData = { error: err.message, providers: [] };
-    renderUsageCards();
+    updateCanvasUsage();
   }
 }
 
