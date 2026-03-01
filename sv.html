@@ -1423,6 +1423,7 @@ function renderTimeline() {
     if (!eventTime) eventTime = getCreatedAt(item) || now;
 
     const repoName = getRepoName(item);
+    const fullRepo = item.repo || item.repository || '';
     const issueId = getIssueId(item);
     const name = repoName && issueId ? repoName + '#' + issueId : (repoName || escapeHtml((item.id || '').substring(0, 12)));
     const title = item.issueTitle || item.issue_title || '';
@@ -1432,8 +1433,8 @@ function renderTimeline() {
     const prNum = getPrNumber(item);
     let url = '';
     if (prUrl) url = prUrl;
-    else if (repoName && prNum) url = 'https://github.com/' + repoName + '/pull/' + prNum;
-    else if (repoName && issueId) url = 'https://github.com/' + repoName + '/issues/' + issueId;
+    else if (fullRepo && prNum) url = 'https://github.com/' + fullRepo + '/pull/' + prNum;
+    else if (fullRepo && issueId) url = 'https://github.com/' + fullRepo + '/issues/' + issueId;
 
     return { state, eventTime, name, title, item, url };
   });
